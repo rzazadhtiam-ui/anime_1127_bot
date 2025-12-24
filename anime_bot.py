@@ -12,11 +12,16 @@ bot = telebot.TeleBot(TOKEN)
 OWNER_ID = 6433381392
 CHANNEL_ID = "@asta_tiam_cannel"
 
+
 # =======================
-# اتصال به MongoDB
-MONGO_URI = "mongodb://tiam_anime_db:tiam_jinx_1127@ac-rhwwcti-shard-00-00.poyrvt8.mongodb.net:27017,ac-rhwwcti-shard-00-01.poyrvt8.mongodb.net:27017,ac-rhwwcti-shard-00-02.poyrvt8.mongodb.net:27017/?replicaSet=atlas-vrgbjn-shard-0&ssl=true&authSource=admin"
+# اتصال با URI جدید SRV
+MONGO_URI = "mongodb+srv://tiam_anime_db:tiam_jinx_1127@cluster0.poyrvt8.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
 client = MongoClient(MONGO_URI)
+
+# انتخاب دیتابیس
 db = client["anime_bot_db"]
+
+# کالکشن‌ها
 admins_col = db["admins"]
 videos_col = db["videos"]
 pending_col = db["pending_videos"]
