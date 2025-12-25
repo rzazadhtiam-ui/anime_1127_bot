@@ -1,3 +1,4 @@
+python3 -m pip install --upgrade pip
 pymongo==4.5.1
 dnspython==2.3.0
 certifi==2025.9.0
