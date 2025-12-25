@@ -1,26 +1,20 @@
 import telebot
 from telebot import types
-import os
-import time
+from telebot.util import escape_markdown
 from hashlib import md5
 from pymongo import MongoClient
 from flask import Flask
 import threading
+
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, parse_mode=None)
 
 OWNER_ID = 6433381392
-CHANNEL_ID = "@asta_tiam_cannel"
-
 
 # =======================
-# اتصال با URI جدید SRV
-from pymongo import MongoClient
-
 MONGO_URI = "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
-
-client = MongoClient(MONGO_URI, tls=True)
+client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
 db = client["anime_bot_db"]
 
 admins_col = db["admins"]
@@ -40,7 +34,9 @@ def save_admins_list(admins):
     admins_col.update_one({"_id": "admins"}, {"$set": {"list": admins}}, upsert=True)
 
 def save_video(file_id, title):
-    videos_col.insert_one({"file_id": file_id, "title": title})
+    if not videos_col.find_one({"file_id": file_id}):
+        videos_col.insert_one({"file_id": file_id, "title": title})
+        print("Video saved:", file_id, title)
 
 def add_pending(pending_id, file_id, title, from_id):
     pending_col.insert_one({
@@ -56,7 +52,6 @@ def remove_pending(pending_id):
 def get_pending(pending_id):
     return pending_col.find_one({"_id": pending_id})
 
-# =======================
 admins = get_admins()
 
 # =======================
@@ -65,7 +60,7 @@ def handle_video(message):
     file_id = None
     title = message.caption or "ویدئو بدون عنوان"
     user_id = message.from_user.id
-    user_mention = f"[{message.from_user.first_name}](tg://user?id={user_id})"
+    user_mention = f"[{escape_markdown(message.from_user.first_name, version=2)}](tg://user?id={user_id})"
 
     if message.video:
         file_id = message.video.file_id
@@ -75,9 +70,9 @@ def handle_video(message):
     if not file_id:
         return
 
-    # مالک مستقیم ذخیره می‌کند
+    # مالک مستقیم ذخیره می‌کند (بدون ارسال به کانال)
     if user_id == OWNER_ID:
-        save_and_send(file_id, title)
+        save_video(file_id, title)
         bot.reply_to(message, f"ویدئو ذخیره شد ✅\n🎬 {title}")
         return
 
@@ -86,25 +81,19 @@ def handle_video(message):
     add_pending(pending_id, file_id, title, user_id)
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("✅ تایید", callback_data=f"approve:{pending_id}"))
-    markup.add(types.InlineKeyboardButton("❌ رد", callback_data=f"reject:{pending_id}"))
+    markup.row(
+        types.InlineKeyboardButton("✅ تایید", callback_data=f"approve:{pending_id}"),
+        types.InlineKeyboardButton("❌ رد", callback_data=f"reject:{pending_id}")
+    )
 
     bot.send_message(
         OWNER_ID,
-        f"{user_mention} یک ویدئو ارسال کرده:\n🎬 {title}",
-        parse_mode="Markdown",
+        f"{user_mention} یک ویدئو ارسال کرده:\n🎬 {escape_markdown(title, version=2)}",
+        parse_mode="MarkdownV2",
         reply_markup=markup
     )
 
     bot.reply_to(message, "ویدئو شما در انتظار تایید مالک است ⏳")
-
-# =======================
-def save_and_send(file_id, title):
-    save_video(file_id, title)
-    try:
-        bot.send_video(CHANNEL_ID, file_id, caption=title)
-    except:
-        pass
 
 # =======================
 @bot.callback_query_handler(func=lambda call: call.data.startswith(("approve:", "reject:")))
@@ -121,7 +110,8 @@ def handle_approval(call):
     title = video_info["title"]
 
     if action == "approve":
-        save_and_send(file_id, title)
+        # فقط ذخیره می‌کنه، ارسال به کانال حذف شد
+        save_video(file_id, title)
         bot.send_message(from_id, f"ویدئو شما تایید و ذخیره شد ✅\n🎬 {title}")
         bot.answer_callback_query(call.id, f"ویدئو تایید شد ✅", show_alert=True)
     else:
@@ -135,58 +125,24 @@ def handle_approval(call):
 def start(message):
     bot.send_message(message.chat.id, "ربات آماده است 🤖\nویدئو را در پی‌وی ارسال کنید.")
 
-@bot.message_handler(commands=["help"])
-def help(message):
-    bot.send_message(message.chat.id, "سلام به ربات anime1127 Bot خوش اومدی\n توی این ربات ویدیو و اهنگ قراره گذاشته بشه\n\n برای دیدن ویدیو \n@anime_1127_bot\n رو بنویس \n\n برای دیدن اهنک ها \n@anime_1127_bot music\n رو بنویس")
+# =======================
+# Inline Query handler
+@bot.inline_handler(lambda query: True)
+def inline_query(query):
+    from telebot.types import InlineQueryResultArticle, InputTextMessageContent
+    results = []
+    videos = videos_col.find().sort("_id", -1).limit(5)
+    for idx, v in enumerate(videos):
+        results.append(
+            InlineQueryResultArticle(
+                id=str(idx),
+                title=v["title"],
+                input_message_content=InputTextMessageContent(f"🎬 {v['title']}\nFile ID: {v['file_id']}"),
+            )
+        )
+    bot.answer_inline_query(query.id, results)
 
 # =======================
-@bot.message_handler(commands=["addadmin", "deladmin"])
-def manage_admins(message):
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "شما مالک نیستید ❌")
-        return
-
-    parts = message.text.split()
-    if len(parts) != 2:
-        bot.reply_to(message, "فرمت صحیح: /addadmin id یا /deladmin id")
-        return
-
-    try:
-        target = int(parts[1])
-    except:
-        bot.reply_to(message, "ایدی نامعتبر ❌")
-        return
-
-    if message.text.startswith("/addadmin"):
-        if target not in admins:
-            admins.append(target)
-            save_admins_list(admins)
-            bot.send_message(
-                message.chat.id,
-                f"کاربر [{target}](tg://user?id={target}) ادمین شد ✅",
-                parse_mode="Markdown"
-            )
-        else:
-            bot.reply_to(message, "قبلاً ادمین بوده")
-    else:
-        if target in admins:
-            admins.remove(target)
-            save_admins_list(admins)
-            bot.send_message(
-                message.chat.id,
-                f"کاربر [{target}](tg://user?id={target}) حذف شد ❌",
-                parse_mode="Markdown"
-            )
-        else:
-            bot.reply_to(message, "ادمین نیست")
-
-
-
-
-
-
-
-
 app = Flask(__name__)
 
 @app.route("/")
