@@ -15,7 +15,7 @@ CHANNEL_ID = "@asta_tiam_cannel"
 
 # =======================
 # اتصال با URI جدید SRV
-MONGO_URI = "mongodb+srv://tiam_anime_db:tiam_jinx_1127@cluster0.poyrvt8.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
+MONGO_URI = "mongodb://self_login:tiam_jinx@ac-nbipb9g-shard-00-00.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-01.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-02.v2vzh9e.mongodb.net:27017/?replicaSet=atlas-qppgrd-shard-0&ssl=true&authSource=admin"
 client = MongoClient(MONGO_URI)
 
 # انتخاب دیتابیس
