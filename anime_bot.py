@@ -15,7 +15,7 @@ TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 
 OWNER_ID = 6433381392
-CHANNEL_ID = "@asta_tiam_cannel"  # کانال ربات
+CHANNEL_ID = "@asta_tiam_cannel"
 
 # =======================
 MONGO_URI = "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
@@ -40,16 +40,22 @@ def get_admins():
         admins_col.insert_one({"_id": "admins", "list": []})
         return []
 
-def save_admins_list(admins):
-    admins_col.update_one({"_id": "admins"}, {"$set": {"list": admins}}, upsert=True)
-
 admins = get_admins()
 
 # =======================
+def is_duplicate(file_id, caption, kind):
+    """چک می‌کنه که فایل یا آهنگ با همین caption و file_id تکراری نباشه"""
+    col = videos_col if kind == "video" else music_col
+    return col.find_one({"file_id": file_id, "caption": caption}) is not None
+
 def send_to_channel_and_save(file_id, title, caption=None, kind="video", tags=None, artist=None):
-    """ویدئو یا آهنگ رو به چنل می‌فرسته و بعد file_id واقعی چنل رو ذخیره می‌کنه"""
     tags = tags or []
-    caption = caption or title  # اگر کپشن نبود، title استفاده شود
+    caption = caption or title
+
+    if is_duplicate(file_id, caption, kind):
+        print(f"{kind.capitalize()} تکراری است و ذخیره نشد: {title}")
+        return
+
     try:
         if kind == "video":
             sent_msg = bot.send_video(CHANNEL_ID, file_id, caption=caption)
@@ -81,7 +87,6 @@ def handle_media(message):
     caption = message.caption or "بدون توضیح"
     user_id = message.from_user.id
 
-    # تعیین نوع فایل
     kind = None
     if message.video or (message.document and message.document.mime_type.startswith("video/")):
         kind = "video"
@@ -93,7 +98,7 @@ def handle_media(message):
     if not file_id:
         return
 
-    # مالک و ادمین مستقیم ذخیره می‌کنن
+    # مالک و ادمین مستقیم ذخیره می‌کنند
     if user_id == OWNER_ID or user_id in admins:
         send_to_channel_and_save(file_id, title, caption=caption, kind=kind)
         bot.reply_to(message, f"{kind.capitalize()} ذخیره شد ✅\n🎬 {caption}")
@@ -101,6 +106,10 @@ def handle_media(message):
 
     # کاربران عادی → تایید مالک لازم
     pending_id = md5(file_id.encode()).hexdigest()[:10]
+    if pending_col.find_one({"_id": pending_id}):
+        bot.reply_to(message, "این فایل قبلاً ارسال شده و در انتظار تایید است ⏳")
+        return
+
     pending_col.insert_one({
         "_id": pending_id,
         "file_id": file_id,
@@ -201,7 +210,6 @@ def send_time(message):
     bot.send_message(message.chat.id, f"🕒 زمان جهانی: {now.strftime('%H:%M')}")
 
 # =======================
-# برنامه زمان‌بندی شده هر دقیقه
 scheduler = BackgroundScheduler(timezone=pytz.UTC)
 time_message_id = None
 
