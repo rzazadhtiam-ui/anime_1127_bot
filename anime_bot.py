@@ -4,6 +4,9 @@ from hashlib import md5
 from pymongo import MongoClient
 from flask import Flask
 import threading
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import pytz
 
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
@@ -21,7 +24,6 @@ videos_col = db["videos"]
 pending_col = db["pending_videos"]
 
 # =======================
-# تابع Escape MarkdownV2
 def escape_markdown(text):
     escape_chars = r'\_*[]()~`>#+-=|{}.!'
     return ''.join(['\\' + c if c in escape_chars else c for c in text])
@@ -115,7 +117,6 @@ def handle_approval(call):
     title = video_info["title"]
 
     if action == "approve":
-        # فقط ذخیره می‌کنه
         save_video(file_id, title)
         bot.send_message(from_id, f"ویدئو شما تایید و ذخیره شد ✅\n🎬 {title}")
         bot.answer_callback_query(call.id, f"ویدئو تایید شد ✅", show_alert=True)
@@ -131,23 +132,45 @@ def start(message):
     bot.send_message(message.chat.id, "ربات آماده است 🤖\nویدئو را در پی‌وی ارسال کنید.")
 
 # =======================
-# Inline Query handler
 @bot.inline_handler(lambda query: True)
 def inline_query(query):
-    from telebot.types import InlineQueryResultArticle, InputTextMessageContent
+    from telebot.types import InlineQueryResultCachedVideo
     results = []
-    videos = videos_col.find().sort("_id", -1).limit(5)
+    videos = videos_col.find().sort("_id", -1).limit(10)
     for idx, v in enumerate(videos):
+        title = v["title"]
+        file_id = v["file_id"]
         results.append(
-            InlineQueryResultArticle(
+            InlineQueryResultCachedVideo(
                 id=str(idx),
-                title=v["title"],
-                input_message_content=InputTextMessageContent(
-                    f"🎬 {v['title']}\nFile ID: {v['file_id']}"
-                ),
+                video_file_id=file_id,
+                title=title,
+                description=f"#ویدئو",  # تگ ویدئو
             )
         )
     bot.answer_inline_query(query.id, results)
+
+# =======================
+# دستور ساعت
+@bot.message_handler(commands=["time"])
+def send_time(message):
+    tz = pytz.timezone("UTC")
+    now = datetime.now(tz)
+    bot.send_message(message.chat.id, f"🕒 زمان جهانی: {now.strftime('%H:%M')}")
+
+# =======================
+# برنامه زمان‌بندی شده هر دقیقه
+scheduler = BackgroundScheduler(timezone=pytz.UTC)
+def send_time_all():
+    now = datetime.now(pytz.UTC)
+    text = f"🕒 زمان جهانی: {now.strftime('%H:%M')}"
+    try:
+        bot.send_message(OWNER_ID, text)
+    except Exception as e:
+        print("Error sending time:", e)
+
+scheduler.add_job(send_time_all, 'interval', minutes=1)
+scheduler.start()
 
 # =======================
 app = Flask(__name__)
