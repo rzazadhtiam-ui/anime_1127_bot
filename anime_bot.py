@@ -1,198 +1,216 @@
-import os
-import threading
-from hashlib import md5
-from datetime import datetime
-import pytz
+# ==============================
+# Telegram Media Archive Bot
+# Owner-only approval system
+# Inline Mode Enabled
+# ==============================
 
 import telebot
 from telebot import types
 from pymongo import MongoClient
-from flask import Flask
-from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import pytz
+import uuid
 
-# =======================
+# ========= CONFIG =========
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
-bot = telebot.TeleBot(TOKEN, parse_mode=None)
+OWNER_ID = 7851824627, 7851824627, 8277911482   # آیدی عددی خودت
+CHANNEL_ID = @archiv_bot_t # چنل آرشیو
 
-OWNER_ID = 6433381392
-CHANNEL_ID = "@asta_tiam_cannel"
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-# =======================
-MONGO_URI = "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
-db = client["anime_bot_db"]
+# ========= DATABASE =========
+mongo = MongoClient("mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority")
+db = mongo["media_bot"]
 
 videos_col = db["videos"]
-music_col = db["music"]
-pending_col = db["pending_videos"]
-admins_col = db["admins"]
+audios_col = db["audios"]
+voices_col = db["voices"]
+requests_col = db["requests"]
 
-# =======================
-def get_admins():
-    data = admins_col.find_one({"_id": "admins"})
-    if data:
-        return data.get("list", [])
-    admins_col.insert_one({"_id": "admins", "list": []})
-    return []
+# ===========================
+# UTILS
+# ===========================
 
-admins = get_admins()
+def is_owner(user_id):
+    return user_id == OWNER_ID
 
-# =======================
-def is_duplicate(kind, unique_id):
-    col = videos_col if kind == "video" else music_col
-    return col.find_one({"unique_id": unique_id}) is not None
+def now_tehran():
+    return datetime.now(pytz.timezone("Asia/Tehran"))
 
-# =======================
-def send_to_channel_and_save(file_id, caption, kind, artist=None, unique_id=None):
-    if unique_id and is_duplicate(kind, unique_id):
-        return
+# ===========================
+# REQUEST SYSTEM
+# ===========================
 
-    if kind == "video":
-        msg = bot.send_video(CHANNEL_ID, file_id, caption=caption)
-        videos_col.insert_one({
-            "file_id": msg.video.file_id,
-            "caption": caption,
-            "unique_id": unique_id
-        })
+def send_request_to_owner(message, media_type, file_id, caption):
+    req_id = str(uuid.uuid4())
 
-    elif kind == "music":
-        msg = bot.send_audio(
-            CHANNEL_ID,
-            file_id,
-            caption=caption,
-            performer=artist
-        )
-        music_col.insert_one({
-            "file_id": msg.audio.file_id,
-            "caption": caption,
-            "artist": artist,
-            "unique_id": unique_id
-        })
-
-# =======================
-@bot.message_handler(content_types=["video", "audio", "document"])
-def handle_media(message):
-    user_id = message.from_user.id
-    caption = message.caption or " "
-    kind = None
-    file_id = None
-    unique_id = None
-    artist = None
-
-    if message.video:
-        kind = "video"
-        file_id = message.video.file_id
-        unique_id = message.video.file_unique_id
-
-    elif message.audio:
-        kind = "music"
-        file_id = message.audio.file_id
-        unique_id = message.audio.file_unique_id
-        artist = (
-            message.audio.performer
-            or message.audio.title
-            or "Unknown Artist"
-        )
-
-    elif message.document and message.document.mime_type.startswith("video/"):
-        kind = "video"
-        file_id = message.document.file_id
-        unique_id = message.document.file_unique_id
-
-    if not file_id:
-        return
-
-    if user_id == OWNER_ID or user_id in admins:
-        send_to_channel_and_save(
-            file_id,
-            caption,
-            kind,
-            artist=artist,
-            unique_id=unique_id
-        )
-        bot.reply_to(message, "✅ ذخیره شد")
-        return
-
-    pending_id = md5(unique_id.encode()).hexdigest()[:12]
-
-    if pending_col.find_one({"_id": pending_id}):
-        bot.reply_to(message, "⏳ این فایل قبلاً ارسال شده")
-        return
-
-    pending_col.insert_one({
-        "_id": pending_id,
+    requests_col.insert_one({
+        "req_id": req_id,
+        "user_id": message.from_user.id,
+        "username": message.from_user.username,
+        "media_type": media_type,
         "file_id": file_id,
-        "caption": caption,
-        "kind": kind,
-        "artist": artist,
-        "unique_id": unique_id,
-        "from_id": user_id
+        "caption": caption
     })
 
     kb = types.InlineKeyboardMarkup()
     kb.add(
-        types.InlineKeyboardButton("✅ تایید", callback_data=f"ok:{pending_id}"),
-        types.InlineKeyboardButton("❌ رد", callback_data=f"no:{pending_id}")
+        types.InlineKeyboardButton("✅ قبول", callback_data=f"approve:{req_id}"),
+        types.InlineKeyboardButton("❌ رد", callback_data=f"reject:{req_id}")
     )
 
-    bot.send_message(
-        OWNER_ID,
-        f"فایل جدید:\n\n{caption}",
-        reply_markup=kb
+    text = (
+        f"📥 <b>درخواست جدید</b>\n\n"
+        f"👤 کاربر: @{message.from_user.username or message.from_user.id}\n"
+        f"📦 نوع: {media_type}\n\n"
+        f"📝 کپشن:\n{caption or '—'}"
     )
 
-# =======================
-@bot.callback_query_handler(func=lambda c: c.data.startswith(("ok:", "no:")))
-def approve(call):
-    action, pid = call.data.split(":")
-    data = pending_col.find_one({"_id": pid})
-    if not data:
+    if media_type == "video":
+        bot.send_video(OWNER_ID, file_id, caption=text, reply_markup=kb)
+    elif media_type == "audio":
+        bot.send_audio(OWNER_ID, file_id, caption=text, reply_markup=kb)
+    elif media_type == "voice":
+        bot.send_voice(OWNER_ID, file_id, caption=text, reply_markup=kb)
+
+# ===========================
+# MEDIA HANDLER
+# ===========================
+
+@bot.message_handler(content_types=["video", "audio", "voice"])
+def handle_media(message):
+    if is_owner(message.from_user.id):
         return
 
-    if action == "ok":
-        send_to_channel_and_save(
-            data["file_id"],
-            data["caption"],
-            data["kind"],
-            artist=data.get("artist"),
-            unique_id=data.get("unique_id")
+    caption = message.caption or ""
+
+    if message.video:
+        send_request_to_owner(
+            message,
+            "video",
+            message.video.file_id,
+            caption
         )
-        bot.send_message(data["from_id"], "✅ تایید شد")
 
-    else:
-        bot.send_message(data["from_id"], "❌ رد شد")
+    elif message.audio:
+        send_request_to_owner(
+            message,
+            "audio",
+            message.audio.file_id,
+            caption
+        )
 
-    pending_col.delete_one({"_id": pid})
-    bot.answer_callback_query(call.id)
+    elif message.voice:
+        send_request_to_owner(
+            message,
+            "voice",
+            message.voice.file_id,
+            caption
+        )
 
-# =======================
+    bot.reply_to(
+        message,
+        "📨 درخواست شما ارسال شد.\nپس از بررسی، نتیجه اعلام می‌شود."
+    )
+
+# ===========================
+# APPROVE / REJECT
+# ===========================
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith(("approve", "reject")))
+def callback_handler(call):
+    if not is_owner(call.from_user.id):
+        return
+
+    action, req_id = call.data.split(":")
+    req = requests_col.find_one({"req_id": req_id})
+
+    if not req:
+        bot.answer_callback_query(call.id, "درخواست پیدا نشد")
+        return
+
+    user_id = req["user_id"]
+    media_type = req["media_type"]
+    caption = req["caption"]
+    file_id = req["file_id"]
+
+    if action == "reject":
+        bot.send_message(user_id, "❌ درخواست شما رد شد.")
+        requests_col.delete_one({"req_id": req_id})
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
+        return
+
+    # ===== APPROVE =====
+    if media_type == "video":
+        msg = bot.send_video(CHANNEL_ID, file_id, caption=caption)
+        videos_col.insert_one({
+            "file_id": msg.video.file_id,
+            "caption": caption,
+            "date": now_tehran()
+        })
+
+    elif media_type == "audio":
+        msg = bot.send_audio(CHANNEL_ID, file_id, caption=caption)
+        audios_col.insert_one({
+            "file_id": msg.audio.file_id,
+            "caption": caption,
+            "title": msg.audio.title,
+            "artist": msg.audio.performer,
+            "date": now_tehran()
+        })
+
+    elif media_type == "voice":
+        msg = bot.send_voice(CHANNEL_ID, file_id, caption=caption)
+        voices_col.insert_one({
+            "file_id": msg.voice.file_id,
+            "caption": caption,
+            "date": now_tehran()
+        })
+
+    bot.send_message(user_id, "✅ فایل شما تأیید و منتشر شد.")
+    requests_col.delete_one({"req_id": req_id})
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
+
+# ===========================
+# INLINE MODE
+# ===========================
+
 @bot.inline_handler(lambda q: True)
-def inline_query(query):
-    from telebot.types import InlineQueryResultCachedVideo, InlineQueryResultCachedAudio
+def inline_handler(query):
     results = []
-    q = query.query.lower().strip()
+    text = query.query.lower()
 
-    if q.startswith("music"):
-        items = list(music_col.find().limit(20))
-        for i, m in enumerate(items):
+    if "audio" in text:
+        for i, a in enumerate(audios_col.find().limit(20)):
             results.append(
-                InlineQueryResultCachedAudio(
-                    id=f"m{i}",
-                    audio_file_id=m["file_id"],
-                    title=m.get("caption", "Music"),
-                    performer=m.get("artist", "Unknown"),
-                    caption=m.get("caption", " ")
+                types.InlineQueryResultCachedAudio(
+                    id=str(i),
+                    audio_file_id=a["file_id"],
+                    title=a.get("title") or "Audio",
+                    performer=a.get("artist") or "Unknown",
+                    caption=a.get("caption", "")
                 )
             )
-    else:
-        items = list(videos_col.find().limit(20))
-        for i, v in enumerate(items):
+
+    elif "voice" in text:
+        for i, v in enumerate(voices_col.find().limit(20)):
             results.append(
-                InlineQueryResultCachedVideo(
-                    id=f"v{i}",
+                types.InlineQueryResultCachedVoice(
+                    id=str(i),
+                    voice_file_id=v["file_id"],
+                    caption=v.get("caption", "")
+                )
+            )
+
+    else:
+        for i, v in enumerate(videos_col.find().limit(20)):
+            results.append(
+                types.InlineQueryResultCachedVideo(
+                    id=str(i),
                     video_file_id=v["file_id"],
                     title="Video",
-                    description=v.get("caption", " "),
+                    description=v.get("caption", ""),
+                    caption=v.get("caption", ""),
                     supports_streaming=True
                 )
             )
@@ -204,31 +222,18 @@ def inline_query(query):
         is_personal=True
     )
 
-# =======================
-@bot.message_handler(commands=["start"])
-def start(message):
-    bot.send_message(message.chat.id, "🤖 ربات آماده است")
+# ===========================
+# GLOBAL CLOCK (SLEEP PREVENT)
+# ===========================
 
-# =======================
-scheduler = BackgroundScheduler(timezone=pytz.UTC)
+@bot.message_handler(commands=["clock"])
+def ghost_clock(message):
+    msg = bot.send_message(message.chat.id, "🌍")
+    bot.delete_message(message.chat.id, msg.message_id)
 
-def send_time():
-    now = datetime.now(pytz.UTC).strftime("%H:%M")
-    bot.send_message(OWNER_ID, f"🕒 {now}")
+# ===========================
+# START
+# ===========================
 
-scheduler.add_job(send_time, "interval", minutes=1)
-scheduler.start()
-
-# =======================
-app = Flask(__name__)
-@app.route("/")
-def home():
-    return "OK"
-
-def run_web():
-    app.run("0.0.0.0", int(os.environ.get("PORT", 5000)))
-
-# =======================
-if __name__ == "__main__":
-    threading.Thread(target=run_web).start()
-    bot.infinity_polling()
+print("🤖 Bot is running...")
+bot.infinity_polling(skip_pending=True)
