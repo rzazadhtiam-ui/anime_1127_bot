@@ -2,24 +2,36 @@
 # Telegram Media Archive Bot
 # Owner-only approval system
 # Inline Mode Enabled
+# Render + Flask Keep Alive
 # ==============================
+
+import threading
+import uuid
+from datetime import datetime
 
 import telebot
 from telebot import types
 from pymongo import MongoClient
-from datetime import datetime
 import pytz
-import uuid
+from flask import Flask
 
 # ========= CONFIG =========
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
-OWNER_ID = 7851824627, 7851824627, 8277911482   # آیدی عددی خودت
-CHANNEL_ID = @archiv_bot_t # چنل آرشیو
+
+OWNER_IDS = [
+    7851824627,
+    8277911482,
+    6433381392
+]
+
+CHANNEL_ID = "@archiv_bot_t"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 # ========= DATABASE =========
-mongo = MongoClient("mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority")
+mongo = MongoClient(
+    "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
+)
 db = mongo["media_bot"]
 
 videos_col = db["videos"]
@@ -31,8 +43,8 @@ requests_col = db["requests"]
 # UTILS
 # ===========================
 
-def is_owner(user_id):
-    return user_id == OWNER_ID
+def is_owner(user_id: int) -> bool:
+    return user_id in OWNER_IDS
 
 def now_tehran():
     return datetime.now(pytz.timezone("Asia/Tehran"))
@@ -59,19 +71,26 @@ def send_request_to_owner(message, media_type, file_id, caption):
         types.InlineKeyboardButton("❌ رد", callback_data=f"reject:{req_id}")
     )
 
+    user_display = (
+        f"@{message.from_user.username}"
+        if message.from_user.username
+        else str(message.from_user.id)
+    )
+
     text = (
         f"📥 <b>درخواست جدید</b>\n\n"
-        f"👤 کاربر: @{message.from_user.username or message.from_user.id}\n"
+        f"👤 کاربر: {user_display}\n"
         f"📦 نوع: {media_type}\n\n"
         f"📝 کپشن:\n{caption or '—'}"
     )
 
-    if media_type == "video":
-        bot.send_video(OWNER_ID, file_id, caption=text, reply_markup=kb)
-    elif media_type == "audio":
-        bot.send_audio(OWNER_ID, file_id, caption=text, reply_markup=kb)
-    elif media_type == "voice":
-        bot.send_voice(OWNER_ID, file_id, caption=text, reply_markup=kb)
+    for owner in OWNER_IDS:
+        if media_type == "video":
+            bot.send_video(owner, file_id, caption=text, reply_markup=kb)
+        elif media_type == "audio":
+            bot.send_audio(owner, file_id, caption=text, reply_markup=kb)
+        elif media_type == "voice":
+            bot.send_voice(owner, file_id, caption=text, reply_markup=kb)
 
 # ===========================
 # MEDIA HANDLER
@@ -85,28 +104,13 @@ def handle_media(message):
     caption = message.caption or ""
 
     if message.video:
-        send_request_to_owner(
-            message,
-            "video",
-            message.video.file_id,
-            caption
-        )
+        send_request_to_owner(message, "video", message.video.file_id, caption)
 
     elif message.audio:
-        send_request_to_owner(
-            message,
-            "audio",
-            message.audio.file_id,
-            caption
-        )
+        send_request_to_owner(message, "audio", message.audio.file_id, caption)
 
     elif message.voice:
-        send_request_to_owner(
-            message,
-            "voice",
-            message.voice.file_id,
-            caption
-        )
+        send_request_to_owner(message, "voice", message.voice.file_id, caption)
 
     bot.reply_to(
         message,
@@ -215,25 +219,34 @@ def inline_handler(query):
                 )
             )
 
-    bot.answer_inline_query(
-        query.id,
-        results,
-        cache_time=0,
-        is_personal=True
-    )
+    bot.answer_inline_query(query.id, results, cache_time=0, is_personal=True)
 
 # ===========================
-# GLOBAL CLOCK (SLEEP PREVENT)
+# GHOST CLOCK (NO VISIBLE TIME)
 # ===========================
 
 @bot.message_handler(commands=["clock"])
 def ghost_clock(message):
-    msg = bot.send_message(message.chat.id, "🌍")
-    bot.delete_message(message.chat.id, msg.message_id)
+    m = bot.send_message(message.chat.id, "🌍")
+    bot.delete_message(message.chat.id, m.message_id)
+
+# ===========================
+# FLASK KEEP ALIVE (RENDER)
+# ===========================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is alive ✅"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
 
 # ===========================
 # START
 # ===========================
 
 print("🤖 Bot is running...")
+threading.Thread(target=run_web).start()
 bot.infinity_polling(skip_pending=True)
