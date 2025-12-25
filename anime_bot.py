@@ -4,7 +4,8 @@ import os
 import time
 from hashlib import md5
 from pymongo import MongoClient
-
+from flask import Flask
+import threading
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
 bot = telebot.TeleBot(TOKEN)
@@ -179,5 +180,23 @@ def manage_admins(message):
         else:
             bot.reply_to(message, "ادمین نیست")
 
+
+
+
+
+
+
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running ✅"
+
+def run_web():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
 # =======================
-bot.infinity_polling()
+if __name__ == "__main__":
+    threading.Thread(target=run_web).start()
+    bot.infinity_polling()
