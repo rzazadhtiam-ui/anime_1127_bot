@@ -18,7 +18,7 @@ CHANNEL_ID = "@asta_tiam_cannel"
 # اتصال با URI جدید SRV
 from pymongo import MongoClient
 
-MONGO_URI = "mongodb+srv://self_login:tiam_jinx@cluster0.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
+MONGO_URI = "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
 
 client = MongoClient(MONGO_URI, tls=True)
 db = client["anime_bot_db"]
