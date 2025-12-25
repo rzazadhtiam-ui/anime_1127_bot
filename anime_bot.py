@@ -1,6 +1,5 @@
 import telebot
 from telebot import types
-from telebot.util import escape_markdown
 from hashlib import md5
 from pymongo import MongoClient
 from flask import Flask
@@ -20,6 +19,12 @@ db = client["anime_bot_db"]
 admins_col = db["admins"]
 videos_col = db["videos"]
 pending_col = db["pending_videos"]
+
+# =======================
+# تابع Escape MarkdownV2
+def escape_markdown(text):
+    escape_chars = r'\_*[]()~`>#+-=|{}.!'
+    return ''.join(['\\' + c if c in escape_chars else c for c in text])
 
 # =======================
 def get_admins():
@@ -60,7 +65,7 @@ def handle_video(message):
     file_id = None
     title = message.caption or "ویدئو بدون عنوان"
     user_id = message.from_user.id
-    user_mention = f"[{escape_markdown(message.from_user.first_name, version=2)}](tg://user?id={user_id})"
+    user_mention = f"[{escape_markdown(message.from_user.first_name)}](tg://user?id={user_id})"
 
     if message.video:
         file_id = message.video.file_id
@@ -70,7 +75,7 @@ def handle_video(message):
     if not file_id:
         return
 
-    # مالک مستقیم ذخیره می‌کند (بدون ارسال به کانال)
+    # مالک مستقیم ذخیره می‌کند
     if user_id == OWNER_ID:
         save_video(file_id, title)
         bot.reply_to(message, f"ویدئو ذخیره شد ✅\n🎬 {title}")
@@ -88,7 +93,7 @@ def handle_video(message):
 
     bot.send_message(
         OWNER_ID,
-        f"{user_mention} یک ویدئو ارسال کرده:\n🎬 {escape_markdown(title, version=2)}",
+        f"{user_mention} یک ویدئو ارسال کرده:\n🎬 {escape_markdown(title)}",
         parse_mode="MarkdownV2",
         reply_markup=markup
     )
@@ -110,7 +115,7 @@ def handle_approval(call):
     title = video_info["title"]
 
     if action == "approve":
-        # فقط ذخیره می‌کنه، ارسال به کانال حذف شد
+        # فقط ذخیره می‌کنه
         save_video(file_id, title)
         bot.send_message(from_id, f"ویدئو شما تایید و ذخیره شد ✅\n🎬 {title}")
         bot.answer_callback_query(call.id, f"ویدئو تایید شد ✅", show_alert=True)
@@ -137,7 +142,9 @@ def inline_query(query):
             InlineQueryResultArticle(
                 id=str(idx),
                 title=v["title"],
-                input_message_content=InputTextMessageContent(f"🎬 {v['title']}\nFile ID: {v['file_id']}"),
+                input_message_content=InputTextMessageContent(
+                    f"🎬 {v['title']}\nFile ID: {v['file_id']}"
+                ),
             )
         )
     bot.answer_inline_query(query.id, results)
