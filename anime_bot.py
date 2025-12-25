@@ -1,20 +1,21 @@
-import telebot
-from telebot import types
-from hashlib import md5
-from pymongo import MongoClient
-from flask import Flask
+import os
 import threading
-from apscheduler.schedulers.background import BackgroundScheduler
+from hashlib import md5
 from datetime import datetime
 import pytz
-import os
+
+import telebot
+from telebot import types
+from pymongo import MongoClient
+from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 
 OWNER_ID = 6433381392
-CHANNEL_ID = "@asta_tiam_cannel"
+CHANNEL_ID = "@asta_tiam_cannel"  # کانال ربات
 
 # =======================
 MONGO_URI = "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
@@ -22,7 +23,7 @@ client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
 db = client["anime_bot_db"]
 
 videos_col = db["videos"]
-musics_col = db["musics"]
+music_col = db["music"]
 pending_col = db["pending_videos"]
 admins_col = db["admins"]
 
@@ -45,27 +46,29 @@ def save_admins_list(admins):
 admins = get_admins()
 
 # =======================
-def save_video(file_id, title, tags):
-    if not videos_col.find_one({"file_id": file_id}):
-        videos_col.insert_one({"file_id": file_id, "title": title, "tags": tags})
-        print("Video saved:", file_id, title)
-
-def save_music(file_id, title, singer):
-    if not musics_col.find_one({"file_id": file_id}):
-        musics_col.insert_one({"file_id": file_id, "title": title, "singer": singer})
-        print("Music saved:", file_id, title)
-
-def send_to_channel_and_save(file_id, title, tags=None, is_music=False, singer=None):
-    """ارسال ویدئو یا آهنگ به کانال و ذخیره واقعی file_id"""
+def send_to_channel_and_save(file_id, title, kind="video", tags=None, artist=None):
+    """ویدئو یا آهنگ رو به چنل می‌فرسته و بعد file_id واقعی چنل رو ذخیره می‌کنه"""
+    tags = tags or []
     try:
-        if is_music:
-            sent_msg = bot.send_audio(CHANNEL_ID, file_id, caption=f"{title} - {singer}")
-            save_music(sent_msg.audio.file_id, title, singer)
-        else:
+        if kind == "video":
             sent_msg = bot.send_video(CHANNEL_ID, file_id, caption=title)
-            save_video(sent_msg.video.file_id, title, tags or [])
+            channel_file_id = sent_msg.video.file_id
+            videos_col.insert_one({
+                "file_id": channel_file_id,
+                "title": title,
+                "tags": tags
+            })
+        elif kind == "music":
+            sent_msg = bot.send_audio(CHANNEL_ID, file_id, caption=title)
+            channel_file_id = sent_msg.audio.file_id
+            music_col.insert_one({
+                "file_id": channel_file_id,
+                "title": title,
+                "tags": tags,
+                "artist": artist
+            })
     except Exception as e:
-        print("Error sending media to channel:", e)
+        print("Error sending to channel:", e)
 
 # =======================
 @bot.message_handler(content_types=['video', 'document', 'audio'])
@@ -73,36 +76,33 @@ def handle_media(message):
     file_id = None
     title = message.caption or "بدون عنوان"
     user_id = message.from_user.id
-    user_mention = f"[{escape_markdown(message.from_user.first_name)}](tg://user?id={user_id})"
 
-    # فایل ویدئو یا آهنگ
-    is_music = False
-    singer = None
-    if message.audio:
+    # تعیین نوع فایل
+    kind = None
+    if message.video or (message.document and message.document.mime_type.startswith("video/")):
+        kind = "video"
+        file_id = message.video.file_id if message.video else message.document.file_id
+    elif message.audio:
+        kind = "music"
         file_id = message.audio.file_id
-        is_music = True
-        singer = "ناشناس"  # می‌تونی از caption استخراج کنی اگر گذاشت
-    elif message.video:
-        file_id = message.video.file_id
-    elif message.document and message.document.mime_type.startswith("video/"):
-        file_id = message.document.file_id
-    else:
+
+    if not file_id:
         return
 
-    if user_id == OWNER_ID:
-        send_to_channel_and_save(file_id, title, is_music=is_music, singer=singer)
-        bot.reply_to(message, f"{'آهنگ' if is_music else 'ویدئو'} ذخیره شد ✅\n🎬 {title}")
+    # مالک و ادمین مستقیم ذخیره می‌کنن
+    if user_id == OWNER_ID or user_id in admins:
+        send_to_channel_and_save(file_id, title, kind=kind)
+        bot.reply_to(message, f"{kind.capitalize()} ذخیره شد ✅\n🎬 {title}")
         return
 
-    # کاربران دیگر → تایید مالک
+    # کاربران عادی → تایید مالک لازم
     pending_id = md5(file_id.encode()).hexdigest()[:10]
     pending_col.insert_one({
         "_id": pending_id,
         "file_id": file_id,
         "title": title,
         "from_id": user_id,
-        "is_music": is_music,
-        "singer": singer
+        "kind": kind
     })
 
     markup = types.InlineKeyboardMarkup()
@@ -113,12 +113,12 @@ def handle_media(message):
 
     bot.send_message(
         OWNER_ID,
-        f"{user_mention} یک {'آهنگ' if is_music else 'ویدئو'} ارسال کرده:\n🎬 {escape_markdown(title)}",
+        f"یک {kind} از [{escape_markdown(message.from_user.first_name)}](tg://user?id={user_id}) ارسال شد:\n🎬 {escape_markdown(title)}",
         parse_mode="MarkdownV2",
         reply_markup=markup
     )
 
-    bot.reply_to(message, f"{'آهنگ' if is_music else 'ویدئو'} شما در انتظار تایید مالک است ⏳")
+    bot.reply_to(message, f"{kind.capitalize()} شما دریافت شد و در انتظار تایید مالک است ⏳")
 
 # =======================
 @bot.callback_query_handler(func=lambda call: call.data.startswith(("approve:", "reject:")))
@@ -127,22 +127,21 @@ def handle_approval(call):
     media_info = pending_col.find_one({"_id": pending_id})
 
     if not media_info:
-        bot.answer_callback_query(call.id, "فایل پیدا نشد ❌", show_alert=True)
+        bot.answer_callback_query(call.id, "پیدا نشد ❌", show_alert=True)
         return
 
     from_id = media_info["from_id"]
     file_id = media_info["file_id"]
     title = media_info["title"]
-    is_music = media_info.get("is_music", False)
-    singer = media_info.get("singer", None)
+    kind = media_info["kind"]
 
     if action == "approve":
-        send_to_channel_and_save(file_id, title, is_music=is_music, singer=singer)
-        bot.send_message(from_id, f"{'آهنگ' if is_music else 'ویدئو'} شما تایید و ذخیره شد ✅\n🎬 {title}")
-        bot.answer_callback_query(call.id, "تایید شد ✅", show_alert=True)
+        send_to_channel_and_save(file_id, title, kind=kind)
+        bot.send_message(from_id, f"{kind.capitalize()} شما تایید و ذخیره شد ✅\n🎬 {title}")
+        bot.answer_callback_query(call.id, f"{kind.capitalize()} تایید شد ✅", show_alert=True)
     else:
-        bot.send_message(from_id, f"{'آهنگ' if is_music else 'ویدئو'} شما رد شد ❌\n🎬 {title}")
-        bot.answer_callback_query(call.id, "رد شد ❌", show_alert=True)
+        bot.send_message(from_id, f"{kind.capitalize()} شما رد شد ❌\n🎬 {title}")
+        bot.answer_callback_query(call.id, f"{kind.capitalize()} رد شد ❌", show_alert=True)
 
     pending_col.delete_one({"_id": pending_id})
 
@@ -152,34 +151,38 @@ def start(message):
     bot.send_message(message.chat.id, "ربات آماده است 🤖\nویدئو یا آهنگ را در پی‌وی ارسال کنید.")
 
 # =======================
-# Inline Query
 @bot.inline_handler(lambda query: True)
 def inline_query(query):
     from telebot.types import InlineQueryResultCachedVideo, InlineQueryResultCachedAudio
-    text = query.query.lower()
     results = []
 
-    if text == "music":
-        musics = musics_col.find().sort("_id", -1).limit(10)
-        for idx, m in enumerate(musics):
+    q = query.query.lower()
+    if q.startswith("music"):
+        items = music_col.find().sort("_id", -1).limit(10)
+        for idx, m in enumerate(items):
+            artist = m.get("artist", "ناشناخته")
+            tags = m.get("tags", [])
+            desc = f"خواننده: {artist}" if artist else tags[0] if tags else "بدون تگ"
             results.append(
                 InlineQueryResultCachedAudio(
                     id=str(idx),
                     audio_file_id=m["file_id"],
                     title=m["title"],
-                    performer=m.get("singer", "ناشناس"),
+                    performer=artist,
+                    caption=desc
                 )
             )
     else:
-        videos = videos_col.find().sort("_id", -1).limit(10)
-        for idx, v in enumerate(videos):
-            tag = v.get("tags", ["ویدئو"])[0]  # حداقل یکی از تگ‌ها
+        items = videos_col.find().sort("_id", -1).limit(10)
+        for idx, v in enumerate(items):
+            tags = v.get("tags", [])
+            desc = tags[0] if tags else "بدون تگ"
             results.append(
                 InlineQueryResultCachedVideo(
                     id=str(idx),
                     video_file_id=v["file_id"],
                     title=v["title"],
-                    description=tag,
+                    description=desc
                 )
             )
 
@@ -191,55 +194,27 @@ def inline_query(query):
 def send_time(message):
     tz = pytz.timezone("UTC")
     now = datetime.now(tz)
-    sent_msg = bot.send_message(message.chat.id, f"🕒 زمان جهانی: {now.strftime('%H:%M')}")
-    # حذف خودکار بعد 60 ثانیه
-    threading.Timer(60, lambda: bot.delete_message(message.chat.id, sent_msg.message_id)).start()
+    bot.send_message(message.chat.id, f"🕒 زمان جهانی: {now.strftime('%H:%M')}")
 
 # =======================
 # برنامه زمان‌بندی شده هر دقیقه
 scheduler = BackgroundScheduler(timezone=pytz.UTC)
+time_message_id = None
+
 def send_time_all():
+    global time_message_id
     now = datetime.now(pytz.UTC)
     text = f"🕒 زمان جهانی: {now.strftime('%H:%M')}"
     try:
-        sent_msg = bot.send_message(OWNER_ID, text)
-        threading.Timer(60, lambda: bot.delete_message(OWNER_ID, sent_msg.message_id)).start()
+        if time_message_id:
+            bot.delete_message(OWNER_ID, time_message_id)
+        msg = bot.send_message(OWNER_ID, text)
+        time_message_id = msg.message_id
     except Exception as e:
         print("Error sending time:", e)
 
 scheduler.add_job(send_time_all, 'interval', minutes=1)
 scheduler.start()
-
-# =======================
-# مدیریت ادمین‌ها
-@bot.message_handler(commands=["addadmin"])
-def add_admin(message):
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "شما دسترسی ندارید ❌")
-        return
-    try:
-        user_id = int(message.text.split()[1])
-        admins.append(user_id)
-        save_admins_list(admins)
-        bot.reply_to(message, f"ادمین اضافه شد ✅: {user_id}")
-    except:
-        bot.reply_to(message, "استفاده: /addadmin <user_id>")
-
-@bot.message_handler(commands=["removeadmin"])
-def remove_admin(message):
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "شما دسترسی ندارید ❌")
-        return
-    try:
-        user_id = int(message.text.split()[1])
-        if user_id in admins:
-            admins.remove(user_id)
-            save_admins_list(admins)
-            bot.reply_to(message, f"ادمین حذف شد ✅: {user_id}")
-        else:
-            bot.reply_to(message, "این کاربر ادمین نیست")
-    except:
-        bot.reply_to(message, "استفاده: /removeadmin <user_id>")
 
 # =======================
 app = Flask(__name__)
