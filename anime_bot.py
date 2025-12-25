@@ -1,252 +1,197 @@
-# ==============================
-# Telegram Media Archive Bot
-# Owner-only approval system
-# Inline Mode Enabled
-# Render + Flask Keep Alive
-# ==============================
-
-import threading
-import uuid
-from datetime import datetime
-
 import telebot
 from telebot import types
 from pymongo import MongoClient
-import pytz
 from flask import Flask
+import threading
+import time
 
-# ========= CONFIG =========
+# =======================
+# تنظیمات اصلی
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
+bot = telebot.TeleBot(TOKEN, threaded=True, skip_pending=True)
 
-OWNER_IDS = [
-    7851824627,
-    8277911482,
-    6433381392
-]
+OWNER_ID = 6433381392
+ALLOWED_USERS = [6433381392, 7851824627]
+CHANNEL_USERNAME = "anime_1127"
 
-CHANNEL_ID = "@archiv_bot_t"
+# =======================
+# اتصال MongoDB
+MONGO_URI = "mongodb://self_login:tiam_jinx@ac-nbipb9g-shard-00-00.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-01.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-02.v2vzh9e.mongodb.net:27017/?replicaSet=atlas-qppgrd-shard-0&ssl=true&authSource=admin"
 
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
-
-# ========= DATABASE =========
-mongo = MongoClient(
-    "mongodb+srv://self_login:tiam_jinx@self.v2vzh9e.mongodb.net/anime_bot_db?retryWrites=true&w=majority"
-)
-db = mongo["media_bot"]
+mongo = MongoClient(MONGO_URI)
+db = mongo["telegram_bot"]
 
 videos_col = db["videos"]
-audios_col = db["audios"]
-voices_col = db["voices"]
-requests_col = db["requests"]
+admins_col = db["admins"]
 
-# ===========================
-# UTILS
-# ===========================
+# =======================
+def is_admin(user_id):
+    return admins_col.find_one({"user_id": user_id}) or user_id == OWNER_ID
 
-def is_owner(user_id: int) -> bool:
-    return user_id in OWNER_IDS
+# =======================
+# ذخیره ویدئو
+@bot.message_handler(content_types=['video', 'document'])
+def handle_video(message):
+    user_id = message.from_user.id
 
-def now_tehran():
-    return datetime.now(pytz.timezone("Asia/Tehran"))
+    is_from_channel = (
+        message.forward_from_chat and
+        message.forward_from_chat.username == CHANNEL_USERNAME
+    )
 
-# ===========================
-# REQUEST SYSTEM
-# ===========================
+    if not (user_id in ALLOWED_USERS or is_from_channel):
+        return
 
-def send_request_to_owner(message, media_type, file_id, caption):
-    req_id = str(uuid.uuid4())
+    file_id = None
+    if message.video:
+        file_id = message.video.file_id
+    elif message.document and message.document.mime_type.startswith("video/"):
+        file_id = message.document.file_id
 
-    requests_col.insert_one({
-        "req_id": req_id,
-        "user_id": message.from_user.id,
-        "username": message.from_user.username,
-        "media_type": media_type,
+    if not file_id:
+        return
+
+    if videos_col.find_one({"file_id": file_id}):
+        return
+
+    caption = message.caption or "ویدئو بدون متن"
+
+    videos_col.insert_one({
         "file_id": file_id,
         "caption": caption
     })
 
-    kb = types.InlineKeyboardMarkup()
-    kb.add(
-        types.InlineKeyboardButton("✅ قبول", callback_data=f"approve:{req_id}"),
-        types.InlineKeyboardButton("❌ رد", callback_data=f"reject:{req_id}")
+    bot.send_video(
+        OWNER_ID,
+        file_id,
+        caption=caption,
+        disable_notification=True
     )
 
-    user_display = (
-        f"@{message.from_user.username}"
-        if message.from_user.username
-        else str(message.from_user.id)
-    )
-
-    text = (
-        f"📥 <b>درخواست جدید</b>\n\n"
-        f"👤 کاربر: {user_display}\n"
-        f"📦 نوع: {media_type}\n\n"
-        f"📝 کپشن:\n{caption or '—'}"
-    )
-
-    for owner in OWNER_IDS:
-        if media_type == "video":
-            bot.send_video(owner, file_id, caption=text, reply_markup=kb)
-        elif media_type == "audio":
-            bot.send_audio(owner, file_id, caption=text, reply_markup=kb)
-        elif media_type == "voice":
-            bot.send_voice(owner, file_id, caption=text, reply_markup=kb)
-
-# ===========================
-# MEDIA HANDLER
-# ===========================
-
-@bot.message_handler(content_types=["video", "audio", "voice"])
-def handle_media(message):
-    if is_owner(message.from_user.id):
+# =======================
+# مدیریت ادمین‌ها
+@bot.message_handler(commands=["addadmin"])
+def add_admin(message):
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک کل")
         return
 
-    caption = message.caption or ""
+    try:
+        uid = int(message.text.split()[1])
+        if not admins_col.find_one({"user_id": uid}):
+            admins_col.insert_one({"user_id": uid})
+            bot.reply_to(message, "ادمین اضافه شد ✅")
+        else:
+            bot.reply_to(message, "قبلاً ادمینه")
+    except:
+        bot.reply_to(message, "فرمت اشتباه")
 
-    if message.video:
-        send_request_to_owner(message, "video", message.video.file_id, caption)
-
-    elif message.audio:
-        send_request_to_owner(message, "audio", message.audio.file_id, caption)
-
-    elif message.voice:
-        send_request_to_owner(message, "voice", message.voice.file_id, caption)
-
-    bot.reply_to(
-        message,
-        "📨 درخواست شما ارسال شد.\nپس از بررسی، نتیجه اعلام می‌شود."
-    )
-
-# ===========================
-# APPROVE / REJECT
-# ===========================
-
-@bot.callback_query_handler(func=lambda c: c.data.startswith(("approve", "reject")))
-def callback_handler(call):
-    if not is_owner(call.from_user.id):
+@bot.message_handler(commands=["removeadmin"])
+def remove_admin(message):
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک کل")
         return
 
-    action, req_id = call.data.split(":")
-    req = requests_col.find_one({"req_id": req_id})
+    try:
+        uid = int(message.text.split()[1])
+        admins_col.delete_one({"user_id": uid})
+        bot.reply_to(message, "ادمین حذف شد ❌")
+    except:
+        bot.reply_to(message, "فرمت اشتباه")
 
-    if not req:
-        bot.answer_callback_query(call.id, "درخواست پیدا نشد")
+# =======================
+# دستور /add با ریپلای
+@bot.message_handler(commands=["add"])
+def add_video_cmd(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ فقط ادمین")
         return
 
-    user_id = req["user_id"]
-    media_type = req["media_type"]
-    caption = req["caption"]
-    file_id = req["file_id"]
-
-    if action == "reject":
-        bot.send_message(user_id, "❌ درخواست شما رد شد.")
-        requests_col.delete_one({"req_id": req_id})
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
+    if not message.reply_to_message:
+        bot.reply_to(message, "روی ویدئو ریپلای کن")
         return
 
-    # ===== APPROVE =====
-    if media_type == "video":
-        msg = bot.send_video(CHANNEL_ID, file_id, caption=caption)
-        videos_col.insert_one({
-            "file_id": msg.video.file_id,
-            "caption": caption,
-            "date": now_tehran()
-        })
+    reply = message.reply_to_message
 
-    elif media_type == "audio":
-        msg = bot.send_audio(CHANNEL_ID, file_id, caption=caption)
-        audios_col.insert_one({
-            "file_id": msg.audio.file_id,
-            "caption": caption,
-            "title": msg.audio.title,
-            "artist": msg.audio.performer,
-            "date": now_tehran()
-        })
+    file_id = None
+    if reply.video:
+        file_id = reply.video.file_id
+    elif reply.document and reply.document.mime_type.startswith("video/"):
+        file_id = reply.document.file_id
 
-    elif media_type == "voice":
-        msg = bot.send_voice(CHANNEL_ID, file_id, caption=caption)
-        voices_col.insert_one({
-            "file_id": msg.voice.file_id,
-            "caption": caption,
-            "date": now_tehran()
-        })
+    if not file_id:
+        bot.reply_to(message, "ویدئو نیست")
+        return
 
-    bot.send_message(user_id, "✅ فایل شما تأیید و منتشر شد.")
-    requests_col.delete_one({"req_id": req_id})
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
+    if videos_col.find_one({"file_id": file_id}):
+        bot.reply_to(message, "قبلاً ذخیره شده")
+        return
 
-# ===========================
-# INLINE MODE
-# ===========================
+    caption = reply.caption or "ویدئو بدون متن"
 
-@bot.inline_handler(lambda q: True)
-def inline_handler(query):
+    videos_col.insert_one({
+        "file_id": file_id,
+        "caption": caption
+    })
+
+    bot.reply_to(message, "ذخیره شد ✅")
+    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
+
+# =======================
+# Inline Mode
+@bot.inline_handler(func=lambda q: True)
+def inline_query(inline_query):
     results = []
-    text = query.query.lower()
-
-    if "audio" in text:
-        for i, a in enumerate(audios_col.find().limit(20)):
-            results.append(
-                types.InlineQueryResultCachedAudio(
-                    id=str(i),
-                    audio_file_id=a["file_id"],
-                    title=a.get("title") or "Audio",
-                    performer=a.get("artist") or "Unknown",
-                    caption=a.get("caption", "")
-                )
+    for idx, video in enumerate(videos_col.find()):
+        results.append(
+            types.InlineQueryResultCachedVideo(
+                id=str(idx),
+                video_file_id=video["file_id"],
+                title=video["caption"][:30],
+                description=video["caption"],
+                caption=video["caption"]
             )
+        )
 
-    elif "voice" in text:
-        for i, v in enumerate(voices_col.find().limit(20)):
-            results.append(
-                types.InlineQueryResultCachedVoice(
-                    id=str(i),
-                    voice_file_id=v["file_id"],
-                    caption=v.get("caption", "")
-                )
-            )
+    bot.answer_inline_query(inline_query.id, results, cache_time=0)
 
-    else:
-        for i, v in enumerate(videos_col.find().limit(20)):
-            results.append(
-                types.InlineQueryResultCachedVideo(
-                    id=str(i),
-                    video_file_id=v["file_id"],
-                    title="Video",
-                    description=v.get("caption", ""),
-                    caption=v.get("caption", ""),
-                    supports_streaming=True
-                )
-            )
+# =======================
+# CLOCK — پیام هر دقیقه و حذف فوری
+clock_running = False
 
-    bot.answer_inline_query(query.id, results, cache_time=0, is_personal=True)
-
-# ===========================
-# GHOST CLOCK (NO VISIBLE TIME)
-# ===========================
+def clock_loop(chat_id):
+    global clock_running
+    while clock_running:
+        msg = bot.send_message(chat_id, "⏰")
+        bot.delete_message(chat_id, msg.message_id)
+        time.sleep(60)
 
 @bot.message_handler(commands=["clock"])
-def ghost_clock(message):
-    m = bot.send_message(message.chat.id, "🌍")
-    bot.delete_message(message.chat.id, m.message_id)
+def clock_cmd(message):
+    global clock_running
+    if clock_running:
+        bot.reply_to(message, "⏰ قبلاً فعاله")
+        return
 
-# ===========================
-# FLASK KEEP ALIVE (RENDER)
-# ===========================
+    clock_running = True
+    threading.Thread(
+        target=clock_loop,
+        args=(message.chat.id,),
+        daemon=True
+    ).start()
 
+# =======================
+# Flask سایت الکی برای Render
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot is alive ✅"
+    return "Bot is alive."
 
 def run_web():
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=8080)
 
-# ===========================
-# START
-# ===========================
+threading.Thread(target=run_web, daemon=True).start()
 
-print("🤖 Bot is running...")
-threading.Thread(target=run_web).start()
-bot.infinity_polling(skip_pending=True)
+# =======================
+bot.infinity_polling(timeout=60, long_polling_timeout=60)
