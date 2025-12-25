@@ -1,5 +1,4 @@
-
-pymongo==4.5.1
+pymongo
 dnspython
 certifi
 pyTelegramBotAPI
