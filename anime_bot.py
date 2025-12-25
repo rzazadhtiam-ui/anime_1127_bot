@@ -46,24 +46,27 @@ def save_admins_list(admins):
 admins = get_admins()
 
 # =======================
-def send_to_channel_and_save(file_id, title, kind="video", tags=None, artist=None):
+def send_to_channel_and_save(file_id, title, caption=None, kind="video", tags=None, artist=None):
     """ویدئو یا آهنگ رو به چنل می‌فرسته و بعد file_id واقعی چنل رو ذخیره می‌کنه"""
     tags = tags or []
+    caption = caption or title  # اگر کپشن نبود، title استفاده شود
     try:
         if kind == "video":
-            sent_msg = bot.send_video(CHANNEL_ID, file_id, caption=title)
+            sent_msg = bot.send_video(CHANNEL_ID, file_id, caption=caption)
             channel_file_id = sent_msg.video.file_id
             videos_col.insert_one({
                 "file_id": channel_file_id,
                 "title": title,
+                "caption": caption,
                 "tags": tags
             })
         elif kind == "music":
-            sent_msg = bot.send_audio(CHANNEL_ID, file_id, caption=title)
+            sent_msg = bot.send_audio(CHANNEL_ID, file_id, caption=caption)
             channel_file_id = sent_msg.audio.file_id
             music_col.insert_one({
                 "file_id": channel_file_id,
                 "title": title,
+                "caption": caption,
                 "tags": tags,
                 "artist": artist
             })
@@ -74,7 +77,8 @@ def send_to_channel_and_save(file_id, title, kind="video", tags=None, artist=Non
 @bot.message_handler(content_types=['video', 'document', 'audio'])
 def handle_media(message):
     file_id = None
-    title = message.caption or "بدون عنوان"
+    title = "بدون عنوان"
+    caption = message.caption or "بدون توضیح"
     user_id = message.from_user.id
 
     # تعیین نوع فایل
@@ -91,8 +95,8 @@ def handle_media(message):
 
     # مالک و ادمین مستقیم ذخیره می‌کنن
     if user_id == OWNER_ID or user_id in admins:
-        send_to_channel_and_save(file_id, title, kind=kind)
-        bot.reply_to(message, f"{kind.capitalize()} ذخیره شد ✅\n🎬 {title}")
+        send_to_channel_and_save(file_id, title, caption=caption, kind=kind)
+        bot.reply_to(message, f"{kind.capitalize()} ذخیره شد ✅\n🎬 {caption}")
         return
 
     # کاربران عادی → تایید مالک لازم
@@ -101,6 +105,7 @@ def handle_media(message):
         "_id": pending_id,
         "file_id": file_id,
         "title": title,
+        "caption": caption,
         "from_id": user_id,
         "kind": kind
     })
@@ -113,7 +118,7 @@ def handle_media(message):
 
     bot.send_message(
         OWNER_ID,
-        f"یک {kind} از [{escape_markdown(message.from_user.first_name)}](tg://user?id={user_id}) ارسال شد:\n🎬 {escape_markdown(title)}",
+        f"یک {kind} از [{escape_markdown(message.from_user.first_name)}](tg://user?id={user_id}) ارسال شد:\n🎬 {escape_markdown(caption)}",
         parse_mode="MarkdownV2",
         reply_markup=markup
     )
@@ -133,14 +138,15 @@ def handle_approval(call):
     from_id = media_info["from_id"]
     file_id = media_info["file_id"]
     title = media_info["title"]
+    caption = media_info.get("caption", title)
     kind = media_info["kind"]
 
     if action == "approve":
-        send_to_channel_and_save(file_id, title, kind=kind)
-        bot.send_message(from_id, f"{kind.capitalize()} شما تایید و ذخیره شد ✅\n🎬 {title}")
+        send_to_channel_and_save(file_id, title, caption=caption, kind=kind)
+        bot.send_message(from_id, f"{kind.capitalize()} شما تایید و ذخیره شد ✅\n🎬 {caption}")
         bot.answer_callback_query(call.id, f"{kind.capitalize()} تایید شد ✅", show_alert=True)
     else:
-        bot.send_message(from_id, f"{kind.capitalize()} شما رد شد ❌\n🎬 {title}")
+        bot.send_message(from_id, f"{kind.capitalize()} شما رد شد ❌\n🎬 {caption}")
         bot.answer_callback_query(call.id, f"{kind.capitalize()} رد شد ❌", show_alert=True)
 
     pending_col.delete_one({"_id": pending_id})
@@ -161,28 +167,26 @@ def inline_query(query):
         items = music_col.find().sort("_id", -1).limit(10)
         for idx, m in enumerate(items):
             artist = m.get("artist", "ناشناخته")
-            tags = m.get("tags", [])
-            desc = f"خواننده: {artist}" if artist else tags[0] if tags else "بدون تگ"
+            caption = m.get("caption", "بدون توضیح")
             results.append(
                 InlineQueryResultCachedAudio(
                     id=str(idx),
                     audio_file_id=m["file_id"],
                     title=m["title"],
                     performer=artist,
-                    caption=desc
+                    caption=caption
                 )
             )
     else:
         items = videos_col.find().sort("_id", -1).limit(10)
         for idx, v in enumerate(items):
-            tags = v.get("tags", [])
-            desc = tags[0] if tags else "بدون تگ"
+            caption = v.get("caption", "بدون توضیح")
             results.append(
                 InlineQueryResultCachedVideo(
                     id=str(idx),
                     video_file_id=v["file_id"],
                     title=v["title"],
-                    description=desc
+                    description=caption
                 )
             )
 
