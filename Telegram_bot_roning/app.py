@@ -108,8 +108,7 @@ import sklearn, xgboost, lightgbm
     try:
         input_text = "\n".join(input_lines) if input_lines else ""
         result = subprocess.run(
-            ["python3", main_file],
-            input=input_text,
+            ["python3", "-u", main_file],
             capture_output=True,
             text=True,
             timeout=30
