@@ -10,7 +10,6 @@ telethon
 aiogram
 python-telegram-bot
 pyrogram
-tlgames
 python-telegram
 
 # ======= سایت‌سازی =======
