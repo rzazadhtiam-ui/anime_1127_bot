@@ -1,46 +1,18 @@
-# ======= سایت و وب =======
+# ======= سایت و API =======
 Flask
+requests
+Jinja2
 Django
 fastapi
-Jinja2
-requests
 aiohttp
-quart
-bottle
-hug
 
-# ======= ربات‌سازی =======
+# ======= ربات سازی =======
+telebot
 pyTelegramBotAPI
 telethon
 aiogram
 python-telegram-bot
 pyrogram
-
-# ======= برنامه‌سازی دسکتاپ =======
-PySimpleGUI
-DearPyGui
-
-# ======= بازی‌سازی =======
-pygame
-arcade
-pyglet
-ursina
-
-# ======= پایگاه داده =======
-sqlalchemy
-pymongo
-redis
-tinydb
-dataset
-peewee
-aiomysql
-
-# ======= فضای ابری و API =======
-boto3
-google-api-python-client
-firebase-admin
-python-cloudant
-websockets
 
 # ======= داده و علم داده =======
 numpy
@@ -51,32 +23,22 @@ seaborn
 plotly
 scikit-learn
 
-# ======= پردازش متن / NLP =======
+# ======= پردازش متن =======
 nltk
 spacy
 transformers
 textblob
 gensim
-fasttext
 
-# ======= شبکه و امنیت =======
-cryptography
-pyOpenSSL
-dnspython
-netifaces
-paramiko
+# ======= پایگاه داده =======
+sqlalchemy
+psycopg2-binary
+mysql-connector-python
+pymongo
+redis
+tinydb
 
-# ======= سیستم و مدیریت فایل =======
-watchdog
-psutil
-pathlib
-shutil
-tempfile
-glob
-zipfile
-tarfile
-
-# ======= ابزارهای کمکی =======
+# ======= ابزار کمکی =======
 python-dotenv
 loguru
 rich
@@ -84,6 +46,4 @@ tqdm
 pydantic
 click
 fire
-boltons
-faker
 attrs
