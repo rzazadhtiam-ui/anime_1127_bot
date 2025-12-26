@@ -100,7 +100,7 @@ def run_python(code: str, persistent=False):
     main_file = os.path.join(workdir, "main.py")
 
     # preload
-preload = """
+    preload = """
 # --- وب و API ---
 import flask
 import fastapi
@@ -180,25 +180,26 @@ import xgboost
 import lightgbm
 """
 
+    # نوشتن کد به فایل
     with open(main_file, "w", encoding="utf-8") as f:
-    f.write(preload + "\n" + code)
+        f.write(preload + "\n" + code)
 
-try:
-    result = subprocess.run(
-        ["python3", main_file],
-        input="123\n",
-        capture_output=True,
-        text=True,
-        timeout=30
-    )
-    output = result.stdout + result.stderr
-except subprocess.TimeoutExpired:
-    output = "⏱ اجرای کد بیش از حد طول کشید"
-finally:
-    if not persistent:
-        shutil.rmtree(workdir, ignore_errors=True)
+    try:
+        result = subprocess.run(
+            ["python3", main_file],
+            input="123\n",
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        output = result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        output = "⏱ اجرای کد بیش از حد طول کشید"
+    finally:
+        if not persistent:
+            shutil.rmtree(workdir, ignore_errors=True)
 
-return output.strip()
+    return output.strip()
 
 # =======================
 # ROUTES
