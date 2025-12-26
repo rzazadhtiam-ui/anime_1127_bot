@@ -100,8 +100,84 @@ def run_python(code: str, persistent=False):
     main_file = os.path.join(workdir, "main.py")
 
     # preload
-    preload = """
-import math, random, datetime
+preload = """
+# --- وب و API ---
+import flask
+import fastapi
+import requests
+import httpx
+import urllib3
+
+# --- تلگرام و پیام‌رسان ---
+import telebot
+import telegram
+import aiogram
+import telethon
+import pyrogram
+
+# --- دیتابیس و ذخیره‌سازی ---
+import sqlite3
+import pymongo
+import psycopg2
+import redis
+import sqlalchemy
+
+# --- امنیت و رمزنگاری ---
+import bcrypt
+import passlib
+import itsdangerous
+import jwt
+import cryptography
+
+# --- پردازش و فرمت‌ها ---
+import json
+import yaml
+import xmltodict
+import lxml
+from bs4 import BeautifulSoup
+
+# --- ابزارها و کمکی‌ها ---
+import math
+import random
+import datetime
+import time
+import os
+import sys
+import functools
+import itertools
+import collections
+
+# --- تاریخ و زمان ---
+import datetime
+import pytz
+import dateutil
+import pendulum
+
+# --- ریاضی و تحلیل داده ---
+import statistics
+import decimal
+import fractions
+import numpy
+import scipy
+import sympy
+import pandas
+
+# --- تصویر و پردازش ---
+from PIL import Image
+import imageio
+import cv2
+import qrcode
+
+# --- متن و NLP ---
+import re
+import nltk
+import spacy
+import textblob
+
+# --- ماشین لرنینگ محدود (CPU) ---
+import sklearn
+import xgboost
+import lightgbm
 """
 
     with open(main_file, "w", encoding="utf-8") as f:
