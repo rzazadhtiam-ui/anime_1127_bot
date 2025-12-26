@@ -150,7 +150,88 @@ def add_video_cmd(message):
     bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
     log_event(f"User {message.from_user.id} ویدئو اضافه کرد: {caption}")
 
+#=======================
+#/addaudio command
+audios_col = db["audios"]  # کالکشن آهنگ‌ها
+
 # =======================
+@bot.message_handler(commands=["addmusic"])
+def add_audio_cmd(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه دارند آهنگ اضافه کنند")
+        log_event(f"User {message.from_user.id} تلاش برای add آهنگ بدون دسترسی")
+        return
+    if not message.reply_to_message:
+        bot.reply_to(message, "روی آهنگ ریپلای کن")
+        log_event(f"User {message.from_user.id} دستور addmusic داد بدون ریپلای")
+        return
+
+    reply = message.reply_to_message
+    file_id = getattr(reply.audio, "file_id", None)
+    if not file_id:
+        bot.reply_to(message, "این پیام شامل آهنگ نیست")
+        log_event(f"User {message.from_user.id} ریپلای نکرد به آهنگ")
+        return
+
+    # گرفتن title و artist از caption یا متن دلخواه
+    caption = reply.caption or "آهنگ بدون متن"
+    # فرض: کاربر اسم آهنگ و خواننده رو با - جدا کرده مثلا "Song Name - Artist Name"
+    if " - " in caption:
+        title, artist = map(str.strip, caption.split(" - ", 1))
+    else:
+        title = caption
+        artist = "ناشناخته"
+
+    # ذخیره در دیتابیس
+    audios_col.insert_one({
+        "file_id": file_id,
+        "caption": caption,
+        "title": title,
+        "artist": artist
+    })
+    bot.reply_to(message, f"آهنگ اضافه شد ✅\n🎵 {title} - {artist}")
+    log_event(f"User {message.from_user.id} آهنگ اضافه کرد: {title} - {artist}")
+# =======================
+# دستور /removeaudio
+@bot.message_handler(commands=["removeaudio"])
+def remove_audio_cmd(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ فقط ادمین ها اجازه حذف دارند")
+        log_event(f"User {message.from_user.id} تلاش برای remove آهنگ بدون دسترسی")
+        return
+    if not message.reply_to_message:
+        bot.reply_to(message, "روی فایل صوتی ریپلای کن")
+        log_event(f"User {message.from_user.id} دستور removeaudio داد بدون ریپلای")
+        return
+
+    reply = message.reply_to_message
+    file_id = getattr(reply.audio, "file_id", None) or getattr(reply.voice, "file_id", None)
+    if not file_id or not audios_col.find_one({"file_id": file_id}):
+        bot.reply_to(message, "فایل صوتی پیدا نشد ❌")
+        log_event(f"User {message.from_user.id} تلاش کرد آهنگ را حذف کند اما پیدا نشد")
+        return
+
+    audios_col.delete_one({"file_id": file_id})
+    bot.reply_to(message, "آهنگ حذف شد ✅")
+    log_event(f"User {message.from_user.id} آهنگ حذف کرد")
+#=======================
+#inline handler music
+# =======================
+@bot.inline_handler(func=lambda query: query.query.lower().startswith("music"))
+def inline_audio_query(inline_query):
+    results = []
+    for idx, audio in enumerate(audios_col.find()):
+        results.append(
+            types.InlineQueryResultCachedAudio(
+                id=str(idx),
+                audio_file_id=audio["file_id"],
+                title=audio["title"],
+                caption=f"{audio['title']} - {audio['artist']}"
+            )
+        )
+    bot.answer_inline_query(inline_query.id, results, cache_time=0)
+    log_event(f"User {inline_query.from_user.id} یک inline query آهنگ داد")
+#=======================
 # Inline handler
 @bot.inline_handler(func=lambda q: True)
 def inline_query(inline_query):
