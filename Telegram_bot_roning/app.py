@@ -1,5 +1,4 @@
 import os
-import ast
 import uuid
 import shutil
 import subprocess
@@ -32,7 +31,7 @@ HTML = """
 body{background:#0b0b0b;color:#fff;font-family:tahoma}
 textarea{width:100%;height:260px;background:#000;color:#00ff9c;padding:15px}
 button{padding:10px 25px;margin:10px;font-size:16px}
-pre{background:#000;border:1px solid #333;padding:15px;min-height:150px}
+pre{background:#000;border:1px solid #333;padding:15px;min-height:150px;overflow:auto}
 </style>
 </head>
 <body>
@@ -79,12 +78,13 @@ def is_code_safe(code: str) -> bool:
 # =======================
 # EXECUTION ENGINE
 # =======================
-def run_python(code: str, persistent=False, input_lines=None):
+def run_python(code: str, persistent=False):
     workdir = tempfile.mkdtemp() if not persistent else os.path.join(BASE_DIR, str(uuid.uuid4()))
     os.makedirs(workdir, exist_ok=True)
 
     main_file = os.path.join(workdir, "main.py")
 
+    # preload کتابخانه‌ها
     preload = """
 # --- preload همه کتابخانه‌ها ---
 import flask, fastapi, requests, httpx, urllib3
@@ -106,7 +106,7 @@ import sklearn, xgboost, lightgbm
         f.write(preload + "\n" + code)
 
     try:
-        input_text = "\n".join(input_lines) if input_lines else ""
+        # اجرای کد با unbuffered برای جلوگیری از timeout خروجی پرینت
         result = subprocess.run(
             ["python3", "-u", main_file],
             capture_output=True,
