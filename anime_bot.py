@@ -1,8 +1,7 @@
-
 import telebot
 from telebot import types
 from pymongo import MongoClient
-from flask import Flask
+from flask import Flask, request
 import threading
 import time
 
@@ -34,12 +33,7 @@ def is_admin(user_id):
 @bot.message_handler(content_types=['video', 'document'])
 def handle_video(message):
     user_id = message.from_user.id
-
-    is_from_channel = (
-        message.forward_from_chat and
-        message.forward_from_chat.username == CHANNEL_USERNAME
-    )
-
+    is_from_channel = message.forward_from_chat and message.forward_from_chat.username == CHANNEL_USERNAME
     if not (user_id in ALLOWED_USERS or is_from_channel):
         return
 
@@ -49,25 +43,12 @@ def handle_video(message):
     elif message.document and message.document.mime_type.startswith("video/"):
         file_id = message.document.file_id
 
-    if not file_id:
-        return
-
-    if videos_col.find_one({"file_id": file_id}):
+    if not file_id or videos_col.find_one({"file_id": file_id}):
         return
 
     caption = message.caption or "ویدئو بدون متن"
-
-    videos_col.insert_one({
-        "file_id": file_id,
-        "caption": caption
-    })
-
-    bot.send_video(
-        OWNER_ID,
-        file_id,
-        caption=caption,
-        disable_notification=True
-    )
+    videos_col.insert_one({"file_id": file_id, "caption": caption})
+    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
 
 # =======================
 # مدیریت ادمین‌ها
@@ -76,7 +57,6 @@ def add_admin(message):
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ فقط مالک کل")
         return
-
     try:
         uid = int(message.text.split()[1])
         if not admins_col.find_one({"user_id": uid}):
@@ -92,7 +72,6 @@ def remove_admin(message):
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ فقط مالک کل")
         return
-
     try:
         uid = int(message.text.split()[1])
         admins_col.delete_one({"user_id": uid})
@@ -107,34 +86,22 @@ def add_video_cmd(message):
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط ادمین")
         return
-
     if not message.reply_to_message:
         bot.reply_to(message, "روی ویدئو ریپلای کن")
         return
 
     reply = message.reply_to_message
-
     file_id = None
     if reply.video:
         file_id = reply.video.file_id
     elif reply.document and reply.document.mime_type.startswith("video/"):
         file_id = reply.document.file_id
-
-    if not file_id:
-        bot.reply_to(message, "ویدئو نیست")
-        return
-
-    if videos_col.find_one({"file_id": file_id}):
-        bot.reply_to(message, "قبلاً ذخیره شده")
+    if not file_id or videos_col.find_one({"file_id": file_id}):
+        bot.reply_to(message, "قبلاً ذخیره شده یا ویدئو نیست")
         return
 
     caption = reply.caption or "ویدئو بدون متن"
-
-    videos_col.insert_one({
-        "file_id": file_id,
-        "caption": caption
-    })
-
+    videos_col.insert_one({"file_id": file_id, "caption": caption})
     bot.reply_to(message, "ذخیره شد ✅")
     bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
 
@@ -153,13 +120,11 @@ def inline_query(inline_query):
                 caption=video["caption"]
             )
         )
-
     bot.answer_inline_query(inline_query.id, results, cache_time=0)
 
 # =======================
 # CLOCK — پیام هر دقیقه و حذف فوری
 clock_running = False
-
 def clock_loop(chat_id):
     global clock_running
     while clock_running:
@@ -173,33 +138,21 @@ def clock_cmd(message):
     if clock_running:
         bot.reply_to(message, "⏰ قبلاً فعاله")
         return
-
     clock_running = True
-    threading.Thread(
-        target=clock_loop,
-        args=(message.chat.id,),
-        daemon=True
-    ).start()
+    threading.Thread(target=clock_loop, args=(message.chat.id,), daemon=True).start()
 
 # =======================
-# Flask سایت الکی برای Render
+# Flask برای Render
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "Bot is alive."
 
-def run_web():
-    app.run(host="0.0.0.0", port=8080)
-
-
 # ست کردن webhook
-WEBHOOK_URL = "https://anime-1127-bot.onrender.com/webhook"  # URL ربات تو
+WEBHOOK_URL = "https://anime-1127-bot.onrender.com/webhook"
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
-
-# route برای دریافت پیام‌ها از تلگرام
-from flask import request
 
 @app.route("/webhook", methods=["POST"])
 def telegram_webhook():
@@ -208,8 +161,6 @@ def telegram_webhook():
     bot.process_new_updates([update])
     return "OK", 200
 
-# فقط اجرای Flask برای Render
+# فقط اجرای Flask
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
-
