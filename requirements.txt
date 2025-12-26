@@ -51,7 +51,8 @@ arcade
 cocos2d
 ursina
 pyglet
-Kivy (for games)
+Kivy 
+pygame
 Ren'Py
 pySFML
 Godot-Python
