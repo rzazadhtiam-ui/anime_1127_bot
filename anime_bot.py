@@ -192,18 +192,16 @@ def home():
     return "Bot is alive ✅"
 
 if __name__ == "__main__":
-    # اجرای همزمان Flask و ربات
     import threading
+    import time
 
+    # اجرای Flask
     def run_flask():
         app.run(host="0.0.0.0", port=8080)
 
     threading.Thread(target=run_flask, daemon=True).start()
-    # حذف webhook قبلی
-    # ---- anti-409 hard fix for Render ----
-import time
 
+    # ---- anti-409 hard fix for Render ----
     bot.remove_webhook()
-    time.sleep(15)  # ⬅️ حیاتی
+    time.sleep(15)  # حیاتی برای Render
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
-    bot.infinity_polling()
