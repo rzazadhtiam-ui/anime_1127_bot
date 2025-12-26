@@ -79,7 +79,6 @@ pyperclip
 pyautogui
 keyboard
 mouse
-tkinter
 pyqt5
 kivy
 pygame
