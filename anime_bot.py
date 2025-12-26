@@ -193,17 +193,23 @@ def run_web():
     app.run(host="0.0.0.0", port=8080)
 
 
-def start_bot():
-    bot.remove_webhook()
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+# ست کردن webhook
+WEBHOOK_URL = "https://anime-1127-bot.onrender.com/webhook"  # URL ربات تو
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
 
+# route برای دریافت پیام‌ها از تلگرام
+from flask import request
 
-def start_web():
+@app.route("/webhook", methods=["POST"])
+def telegram_webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = types.Update.de_json(json_str, bot)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+# فقط اجرای Flask برای Render
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
 
-if __name__ == "__main__":
-    # وب‌سرور برای Render (health check)
-    threading.Thread(target=start_web, daemon=True).start()
 
-    # اجرای ربات فقط یک‌بار
-    start_bot()
