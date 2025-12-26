@@ -254,9 +254,6 @@ def inline_handler(inline_query):
         log_event(f"inline video by {inline_query.from_user.id}")
         return
 
-    # ===== بقیه حالت‌ها =====
-    bot.answer_inline_query(inline_query.id, [], cache_time=0)
-
     # ===== هر چیز دیگه =====
     bot.answer_inline_query(inline_query.id, [], cache_time=0)
 # =======================
