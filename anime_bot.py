@@ -34,12 +34,17 @@ def is_admin(user_id):
 
 # =======================
 # Video Handler
+# Video Handler اصلاح شده
 @bot.message_handler(content_types=['video', 'document'])
 def handle_video(message):
     user_id = message.from_user.id
-    is_from_channel = message.forward_from_chat and getattr(message.forward_from_chat, "username", None) == CHANNEL_USERNAME
-    if not (user_id in ALLOWED_USERS or is_from_channel):
-        return
+    # بررسی ویدئو از پی‌وی دو آیدی مجاز
+    is_allowed_user = user_id in ALLOWED_USERS and message.chat.type == "private"
+    # بررسی ویدئو از چنل فوروارد شده
+    is_from_channel = getattr(message.forward_from_chat, "username", None) == CHANNEL_USERNAME if message.forward_from_chat else False
+
+    if not (is_allowed_user or is_from_channel):
+        return  # اگر نه پی‌وی مجاز و نه از چنل بود، ذخیره نشود
 
     file_id = getattr(message.video, "file_id", None)
     if not file_id and message.document and message.document.mime_type.startswith("video/"):
@@ -53,6 +58,33 @@ def handle_video(message):
     bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
     log_event(f"User {user_id} ارسال ویدئو: {caption}")
 
+# =======================
+# /remov دستور حذف ویدئو
+@bot.message_handler(commands=["remov"])
+def remove_video(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ فقط مالک کل و ادمین اجازه حذف دارند")
+        return
+    if not message.reply_to_message:
+        bot.reply_to(message, "❌ روی ویدئو ریپلای کن تا حذف شود")
+        return
+
+    reply = message.reply_to_message
+    file_id = getattr(reply.video, "file_id", None)
+    if not file_id and reply.document and reply.document.mime_type.startswith("video/"):
+        file_id = reply.document.file_id
+
+    if not file_id:
+        bot.reply_to(message, "❌ ویدئو پیدا نشد")
+        return
+
+    result = videos_col.delete_one({"file_id": file_id})
+    if result.deleted_count:
+        bot.reply_to(message, "ویدئو حذف شد ✅")
+        log_event(f"User {message.from_user.id} ویدئو حذف کرد: {file_id}")
+    else:
+        bot.reply_to(message, "❌ این ویدئو در دیتابیس موجود نبود")
+        log_event(f"User {message.from_user.id} تلاش کرد ویدئو حذف کند که موجود نبود: {file_id}")
 # =======================
 # Admin Handlers
 @bot.message_handler(commands=["addadmin"])
