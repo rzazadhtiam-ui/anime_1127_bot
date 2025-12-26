@@ -1,72 +1,46 @@
-# ======= کتابخانه‌های مورد نیاز سایت Runner =======
+# ======= سایت و وب =======
 Flask
+Django
+fastapi
+Jinja2
 requests
-werkzeug
+aiohttp
+quart
+bottle
+hug
 
 # ======= ربات‌سازی =======
-telebot
 pyTelegramBotAPI
 telethon
 aiogram
 python-telegram-bot
 pyrogram
-python-telegram
-
-# ======= سایت‌سازی =======
-Django
-fastapi
-Jinja2
-bottle
-Tornado
-quart
-pyramid
-web.py
-hug
 
 # ======= برنامه‌سازی دسکتاپ =======
-PyQt5
-PySide6
-wxPython
-kivy
 PySimpleGUI
-PyGTK
-PyObjC
-pywebview
 DearPyGui
 
 # ======= بازی‌سازی =======
 pygame
-panda3d
 arcade
-cocos2d
-ursina
 pyglet
-RenPy
-pySFML
-Godot-Python
+ursina
 
 # ======= پایگاه داده =======
 sqlalchemy
-psycopg2-binary
-mysql-connector-python
 pymongo
 redis
 tinydb
 dataset
 peewee
-cassandra-driver
 aiomysql
 
-# ======= فضای ابری / API =======
+# ======= فضای ابری و API =======
 boto3
-google-cloud-storage
-azure-storage-blob
-aiohttp
-websockets
 google-api-python-client
 firebase-admin
-python-jose
 python-cloudant
+websockets
 
 # ======= داده و علم داده =======
 numpy
@@ -76,9 +50,6 @@ matplotlib
 seaborn
 plotly
 scikit-learn
-statsmodels
-xgboost
-lightgbm
 
 # ======= پردازش متن / NLP =======
 nltk
@@ -86,25 +57,24 @@ spacy
 transformers
 textblob
 gensim
-polyglot
-pattern
-flashtext
 fasttext
-sentence-transformers
 
 # ======= شبکه و امنیت =======
-paramiko
 cryptography
 pyOpenSSL
 dnspython
 netifaces
-scapy
+paramiko
 
 # ======= سیستم و مدیریت فایل =======
-pathlib
 watchdog
-glob
 psutil
+pathlib
+shutil
+tempfile
+glob
+zipfile
+tarfile
 
 # ======= ابزارهای کمکی =======
 python-dotenv
