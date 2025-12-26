@@ -1,7 +1,13 @@
-
 import os
-import sys
-import atexit
+import time
+
+instance_id = os.environ.get("RENDER_INSTANCE_ID")
+
+# فقط اولین instance اجازه polling دارد
+if instance_id and not instance_id.endswith("0"):
+    print("Secondary Render instance detected — polling disabled")
+    while True:
+        time.sleep(3600)
 
 # مسیر فایل lock
 LOCK_FILE = "/tmp/bot.lock"
@@ -194,14 +200,19 @@ def home():
 if __name__ == "__main__":
     import threading
     import time
+    import os
 
-    # اجرای Flask
     def run_flask():
         app.run(host="0.0.0.0", port=8080)
 
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # ---- anti-409 hard fix for Render ----
-    bot.remove_webhook()
-    time.sleep(15)  # حیاتی برای Render
+    instance_id = os.environ.get("RENDER_INSTANCE_ID")
+    if instance_id and not instance_id.endswith("0"):
+        print("Secondary Render instance detected — polling disabled")
+        while True:
+            time.sleep(3600)
+
+    bot.remove_webhook(drop_pending_updates=True)
+    time.sleep(10)
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
