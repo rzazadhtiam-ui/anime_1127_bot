@@ -153,8 +153,7 @@ def add_video_cmd(message):
 
 #=======================
 #/addaudio command
-audios_col = db["audios"]  # کالکشن آهنگ‌ها
-
+music_col = db["music"]
 # =======================
 # دستور /addmusic برای ذخیره آهنگ
 @bot.message_handler(commands=["addmusic"])
@@ -204,12 +203,12 @@ def remove_audio_cmd(message):
 
     reply = message.reply_to_message
     file_id = getattr(reply.audio, "file_id", None) or getattr(reply.voice, "file_id", None)
-    if not file_id or not audios_col.find_one({"file_id": file_id}):
+    if not file_id or not music_col.find_one({"file_id": file_id}):
         bot.reply_to(message, "فایل صوتی پیدا نشد ❌")
         log_event(f"User {message.from_user.id} تلاش کرد آهنگ را حذف کند اما پیدا نشد")
         return
 
-    audios_col.delete_one({"file_id": file_id})
+    music_col.delete_one({"file_id": file_id})
     bot.reply_to(message, "آهنگ حذف شد ✅")
     log_event(f"User {message.from_user.id} آهنگ حذف کرد")
 #=======================
