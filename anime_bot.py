@@ -212,21 +212,21 @@ def remove_audio_cmd(message):
     bot.reply_to(message, "آهنگ حذف شد ✅")
     log_event(f"User {message.from_user.id} آهنگ حذف کرد")
 #=======================
-#inline handler music
+#inline handler music/video
 # =======================
-
-@bot.inline_handler(func=lambda query: True)
-def inline_music_handler(inline_query):
+@bot.inline_handler(func=lambda q: True)
+def inline_handler(inline_query):
     query_text = inline_query.query.lower().strip()
     results = []
 
-    # وقتی فقط کاربر نوشت music
+    # ===== حالت آهنگ =====
     if query_text == "music":
         music_col = db["music"]
+
         for idx, song in enumerate(music_col.find()):
             results.append(
                 types.InlineQueryResultCachedAudio(
-                    id=str(idx),
+                    id=f"music_{idx}",
                     audio_file_id=song["file_id"],
                     title=song.get("title", "نام آهنگ نامشخص"),
                     performer=song.get("artist", "خواننده نامشخص")
@@ -235,25 +235,36 @@ def inline_music_handler(inline_query):
 
         if results:
             bot.answer_inline_query(inline_query.id, results, cache_time=0)
-            log_event(f"User {inline_query.from_user.id} یک inline query آهنگ داد")
         else:
-            bot.answer_inline_query(inline_query.id, [], switch_pm_text="هیچ آهنگی ذخیره نشده", switch_pm_parameter="start")
-#=======================
-# Inline handler
-@bot.inline_handler(func=lambda q: True)
-def inline_query(inline_query):
-    results = []
-    for idx, video in enumerate(videos_col.find()):
-        results.append(types.InlineQueryResultCachedVideo(
-            id=str(idx),
-            video_file_id=video["file_id"],
-            title=video["caption"][:30],
-            description=video["caption"],
-            caption=video["caption"]
-        ))
-    bot.answer_inline_query(inline_query.id, results, cache_time=0)
-    log_event(f"User {inline_query.from_user.id} یک inline query داد")
+            bot.answer_inline_query(
+                inline_query.id,
+                [],
+                switch_pm_text="هیچ آهنگی ذخیره نشده",
+                switch_pm_parameter="start"
+            )
 
+        log_event(f"User {inline_query.from_user.id} inline music")
+        return
+
+    # ===== حالت پیش‌فرض: ویدئو =====
+    if query_text == "":
+        for idx, video in enumerate(videos_col.find()):
+            results.append(
+                types.InlineQueryResultCachedVideo(
+                    id=f"video_{idx}",
+                    video_file_id=video["file_id"],
+                    title=video["caption"][:30],
+                    description=video["caption"],
+                    caption=video["caption"]
+                )
+            )
+
+        bot.answer_inline_query(inline_query.id, results, cache_time=0)
+        log_event(f"User {inline_query.from_user.id} inline video")
+        return
+
+    # ===== هر چیز دیگه =====
+    bot.answer_inline_query(inline_query.id, [], cache_time=0)
 # =======================
 # Flask app
 app = Flask(__name__)
