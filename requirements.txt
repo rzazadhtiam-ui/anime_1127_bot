@@ -1,12 +1,6 @@
 # ======= کتابخانه‌های مورد نیاز سایت Runner =======
 Flask
 requests
-subprocess
-tempfile
-os
-shutil
-time
-threading
 werkzeug
 # ======= ربات‌سازی =======
 telebot
