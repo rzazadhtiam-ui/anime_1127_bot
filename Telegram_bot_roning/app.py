@@ -12,8 +12,6 @@ from flask import Flask, request, jsonify, render_template_string
 PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = os.path.abspath("user_apps")
 os.makedirs(BASE_DIR, exist_ok=True)
-
-# وبهوک مشترک
 GLOBAL_WEBHOOK_PATH = "/webhook"
 
 # =======================
@@ -67,123 +65,51 @@ function run(mode){
 # =======================
 # SECURITY CHECK
 # =======================
-DANGEROUS_NODES = ()
 DANGEROUS_WORDS = [
     "os.system", "subprocess", "shutil.rmtree",
     "open(", "__import__", "eval(", "exec("
 ]
 
 def is_code_safe(code: str) -> bool:
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, DANGEROUS_NODES):
-                return False
-        for word in DANGEROUS_WORDS:
-            if word in code:
-                return False
-        return True
-    except:
-        return False
+    for word in DANGEROUS_WORDS:
+        if word in code:
+            return False
+    return True
 
 # =======================
 # EXECUTION ENGINE
 # =======================
-def run_python(code: str, persistent=False):
+def run_python(code: str, persistent=False, input_lines=None):
     workdir = tempfile.mkdtemp() if not persistent else os.path.join(BASE_DIR, str(uuid.uuid4()))
     os.makedirs(workdir, exist_ok=True)
 
     main_file = os.path.join(workdir, "main.py")
 
-    # preload
     preload = """
-# --- وب و API ---
-import flask
-import fastapi
-import requests
-import httpx
-import urllib3
-
-# --- تلگرام و پیام‌رسان ---
-import telebot
-import telegram
-import aiogram
-import telethon
-import pyrogram
-
-# --- دیتابیس و ذخیره‌سازی ---
-import sqlite3
-import pymongo
-import psycopg2
-import redis
-import sqlalchemy
-
-# --- امنیت و رمزنگاری ---
-import bcrypt
-import passlib
-import itsdangerous
-import jwt
-import cryptography
-
-# --- پردازش و فرمت‌ها ---
-import json
-import yaml
-import xmltodict
-import lxml
+# --- preload همه کتابخانه‌ها ---
+import flask, fastapi, requests, httpx, urllib3
+import telebot, telegram, aiogram, telethon, pyrogram
+import sqlite3, pymongo, psycopg2, redis, sqlalchemy
+import bcrypt, passlib, itsdangerous, jwt, cryptography
+import json, yaml, xmltodict, lxml
 from bs4 import BeautifulSoup
-
-# --- ابزارها و کمکی‌ها ---
-import math
-import random
-import datetime
-import time
-import os
-import sys
-import functools
-import itertools
-import collections
-
-# --- تاریخ و زمان ---
-import datetime
-import pytz
-import dateutil
-import pendulum
-
-# --- ریاضی و تحلیل داده ---
-import statistics
-import decimal
-import fractions
-import numpy
-import scipy
-import sympy
-import pandas
-
-# --- تصویر و پردازش ---
+import math, random, datetime, time, os, sys, functools, itertools, collections
+import pytz, dateutil, pendulum
+import statistics, decimal, fractions, numpy, scipy, sympy, pandas
 from PIL import Image
-import imageio
-import cv2
-import qrcode
-
-# --- متن و NLP ---
-import re
-import nltk
-import spacy
-import textblob
-
-# --- ماشین لرنینگ محدود (CPU) ---
-import sklearn
-import xgboost
-import lightgbm
+import imageio, cv2, qrcode
+import re, nltk, spacy, textblob
+import sklearn, xgboost, lightgbm
 """
 
-    # نوشتن کد به فایل
     with open(main_file, "w", encoding="utf-8") as f:
         f.write(preload + "\n" + code)
 
     try:
+        input_text = "\n".join(input_lines) if input_lines else ""
         result = subprocess.run(
             ["python3", main_file],
-            input="123\n",
+            input=input_text,
             capture_output=True,
             text=True,
             timeout=30
@@ -207,26 +133,19 @@ def index():
 @app.route("/run/test", methods=["POST"])
 def run_test():
     code = request.data.decode()
-
     if not is_code_safe(code):
         return "❌ کاربر گرامی ما قادر به فعال کردن کد شما نمی‌باشیم"
-
     out = run_python(code, persistent=False)
     return out or "بدون خروجی"
 
 @app.route("/run/activate", methods=["POST"])
 def run_activate():
     code = request.data.decode()
-
     if not is_code_safe(code):
         return "❌ کاربر گرامی ما قادر به فعال کردن کد شما نمی‌باشیم"
-
     out = run_python(code, persistent=True)
     return "✅ کاربر گرامی کد شما با موفقیت فعال شد 😁\n\n" + (out or "بدون خروجی")
 
-# =======================
-# WEBHOOK (shared)
-# =======================
 @app.route(GLOBAL_WEBHOOK_PATH, methods=["POST"])
 def webhook():
     return jsonify({"status": "ok"})
