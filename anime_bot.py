@@ -28,7 +28,7 @@ import time
 # =======================
 # تنظیمات اصلی
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
-bot = telebot.TeleBot(TOKEN, threaded=True, skip_pending=True)
+bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
 
 OWNER_ID = 6433381392
 ALLOWED_USERS = [6433381392, 7851824627]
@@ -122,7 +122,7 @@ def add_video_cmd(message):
     caption = reply.caption or "ویدئو بدون متن"
     videos_col.insert_one({"file_id": file_id, "caption": caption})
     bot.reply_to(message, "ویدئو اضافه شد ✅")
-    bot.send_video(OWNER_ID, fi_id, caption=caption, disable_notification=True)
+    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
 
 # =======================
 # Inline Mode
