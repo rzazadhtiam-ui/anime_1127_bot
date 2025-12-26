@@ -155,45 +155,42 @@ def add_video_cmd(message):
 audios_col = db["audios"]  # کالکشن آهنگ‌ها
 
 # =======================
+# دستور /addmusic برای ذخیره آهنگ
 @bot.message_handler(commands=["addmusic"])
-def add_audio_cmd(message):
-    if not is_admin(message.from_user.id):
-        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه دارند آهنگ اضافه کنند")
-        log_event(f"User {message.from_user.id} تلاش برای add آهنگ بدون دسترسی")
+def add_music_cmd(message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه اضافه کردن آهنگ دارند")
+        log_event(f"User {user_id} تلاش برای addmusic بدون دسترسی")
         return
+
     if not message.reply_to_message:
         bot.reply_to(message, "روی آهنگ ریپلای کن")
-        log_event(f"User {message.from_user.id} دستور addmusic داد بدون ریپلای")
+        log_event(f"User {user_id} دستور addmusic داد بدون ریپلای")
         return
 
     reply = message.reply_to_message
-    file_id = getattr(reply.audio, "file_id", None)
-    if not file_id:
-        bot.reply_to(message, "این پیام شامل آهنگ نیست")
-        log_event(f"User {message.from_user.id} ریپلای نکرد به آهنگ")
+    if not reply.audio:
+        bot.reply_to(message, "❌ پیام ریپلای شده آهنگ نیست")
+        log_event(f"User {user_id} دستور addmusic روی پیام غیرآهنگ")
         return
 
-    # گرفتن title و artist از caption یا متن دلخواه
-    caption = reply.caption or "آهنگ بدون متن"
-    # فرض: کاربر اسم آهنگ و خواننده رو با - جدا کرده مثلا "Song Name - Artist Name"
-    if " - " in caption:
-        title, artist = map(str.strip, caption.split(" - ", 1))
-    else:
-        title = caption
-        artist = "ناشناخته"
+    file_id = reply.audio.file_id
+    title = reply.audio.title or "نام آهنگ نامشخص"
+    artist = reply.audio.performer or "خواننده نامشخص"
 
-    # ذخیره در دیتابیس
-    audios_col.insert_one({
-        "file_id": file_id,
-        "caption": caption,
-        "title": title,
-        "artist": artist
-    })
-    bot.reply_to(message, f"آهنگ اضافه شد ✅\n🎵 {title} - {artist}")
-    log_event(f"User {message.from_user.id} آهنگ اضافه کرد: {title} - {artist}")
+    # بررسی اینکه قبلاً ذخیره نشده باشه
+    if db["music"].find_one({"file_id": file_id}):
+        bot.reply_to(message, "این آهنگ قبلاً ذخیره شده")
+        log_event(f"User {user_id} تلاش کرد آهنگ تکراری add کند: {title} - {artist}")
+        return
+
+    db["music"].insert_one({"file_id": file_id, "title": title, "artist": artist})
+    bot.reply_to(message, f"🎵 آهنگ اضافه شد:\n{title} - {artist}")
+    log_event(f"User {user_id} آهنگ اضافه کرد: {title} - {artist}")
 # =======================
 # دستور /removeaudio
-@bot.message_handler(commands=["removeaudio"])
+@bot.message_handler(commands=["removmusic"])
 def remove_audio_cmd(message):
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط ادمین ها اجازه حذف دارند")
@@ -217,20 +214,30 @@ def remove_audio_cmd(message):
 #=======================
 #inline handler music
 # =======================
-@bot.inline_handler(func=lambda query: query.query.lower().startswith("music"))
-def inline_audio_query(inline_query):
+
+@bot.inline_handler(func=lambda query: True)
+def inline_music_handler(inline_query):
+    query_text = inline_query.query.lower().strip()
     results = []
-    for idx, audio in enumerate(audios_col.find()):
-        results.append(
-            types.InlineQueryResultCachedAudio(
-                id=str(idx),
-                audio_file_id=audio["file_id"],
-                title=audio["title"],
-                caption=f"{audio['title']} - {audio['artist']}"
+
+    # وقتی فقط کاربر نوشت music
+    if query_text == "music":
+        music_col = db["music"]
+        for idx, song in enumerate(music_col.find()):
+            results.append(
+                types.InlineQueryResultCachedAudio(
+                    id=str(idx),
+                    audio_file_id=song["file_id"],
+                    title=song.get("title", "نام آهنگ نامشخص"),
+                    performer=song.get("artist", "خواننده نامشخص")
+                )
             )
-        )
-    bot.answer_inline_query(inline_query.id, results, cache_time=0)
-    log_event(f"User {inline_query.from_user.id} یک inline query آهنگ داد")
+
+        if results:
+            bot.answer_inline_query(inline_query.id, results, cache_time=0)
+            log_event(f"User {inline_query.from_user.id} یک inline query آهنگ داد")
+        else:
+            bot.answer_inline_query(inline_query.id, [], switch_pm_text="هیچ آهنگی ذخیره نشده", switch_pm_parameter="start")
 #=======================
 # Inline handler
 @bot.inline_handler(func=lambda q: True)
