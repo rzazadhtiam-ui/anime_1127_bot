@@ -1,10 +1,5 @@
 # ======= سایت و API =======
 Flask
-requests
-Jinja2
-Django
-fastapi
-aiohttp
 
 # ======= ربات سازی =======
 telebot
@@ -14,36 +9,5 @@ aiogram
 python-telegram-bot
 pyrogram
 
-# ======= داده و علم داده =======
-numpy
-pandas
-scipy
-matplotlib
-seaborn
-plotly
-scikit-learn
-
-# ======= پردازش متن =======
-nltk
-spacy
-transformers
-textblob
-gensim
-
 # ======= پایگاه داده =======
-sqlalchemy
-psycopg2-binary
-mysql-connector-python
 pymongo
-redis
-tinydb
-
-# ======= ابزار کمکی =======
-python-dotenv
-loguru
-rich
-tqdm
-pydantic
-click
-fire
-attrs
