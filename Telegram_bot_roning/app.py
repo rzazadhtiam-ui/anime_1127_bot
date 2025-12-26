@@ -121,7 +121,7 @@ def run_python(code: str):
             ["python3", "-u", main_file],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=60
         )
         output = result.stdout + result.stderr
 
