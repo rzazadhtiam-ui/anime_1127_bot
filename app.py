@@ -128,7 +128,7 @@ def run_code():
             ["python3", path],
             capture_output=True,
             text=True,
-            timeout=10
+            
         )
 
         os.remove(path)
