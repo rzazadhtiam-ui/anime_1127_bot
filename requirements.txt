@@ -2,6 +2,7 @@
 Flask
 requests
 werkzeug
+
 # ======= ربات‌سازی =======
 telebot
 pyTelegramBotAPI
@@ -11,11 +12,8 @@ python-telegram-bot
 pyrogram
 tlgames
 python-telegram
-telethon-sync
-telethon-async
 
 # ======= سایت‌سازی =======
-Flask
 Django
 fastapi
 Jinja2
@@ -27,7 +25,6 @@ web.py
 hug
 
 # ======= برنامه‌سازی دسکتاپ =======
-tkinter
 PyQt5
 PySide6
 wxPython
@@ -45,9 +42,7 @@ arcade
 cocos2d
 ursina
 pyglet
-Kivy 
-pygame
-Ren'Py
+RenPy
 pySFML
 Godot-Python
 
@@ -67,7 +62,6 @@ aiomysql
 boto3
 google-cloud-storage
 azure-storage-blob
-requests
 aiohttp
 websockets
 google-api-python-client
@@ -102,25 +96,15 @@ sentence-transformers
 # ======= شبکه و امنیت =======
 paramiko
 cryptography
-requests
-aiohttp
-websockets
 pyOpenSSL
-python-jose
 dnspython
 netifaces
 scapy
 
 # ======= سیستم و مدیریت فایل =======
-os
-shutil
 pathlib
 watchdog
-tempfile
 glob
-zipfile
-tarfile
-subprocess
 psutil
 
 # ======= ابزارهای کمکی =======
