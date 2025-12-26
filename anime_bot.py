@@ -1,3 +1,4 @@
+
 import telebot
 from telebot import types
 from pymongo import MongoClient
@@ -193,15 +194,16 @@ def run_web():
 
 
 def start_bot():
-    bot.remove_webhook(drop_pending_updates=True)
+    bot.remove_webhook()
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
+
 
 def start_web():
     app.run(host="0.0.0.0", port=8080)
 
 if __name__ == "__main__":
-    # وب‌سرور فیک Render
+    # وب‌سرور برای Render (health check)
     threading.Thread(target=start_web, daemon=True).start()
 
-    # فقط یک بار polling
+    # اجرای ربات فقط یک‌بار
     start_bot()
