@@ -2,7 +2,6 @@
 import telebot
 from telebot import types
 from pymongo import MongoClient
-from flask import Flask, request
 import threading
 import time
 
@@ -18,7 +17,6 @@ CHANNEL_USERNAME = "anime_1127"
 # =======================
 # اتصال MongoDB
 MONGO_URI = "mongodb://self_login:tiam_jinx@ac-nbipb9g-shard-00-00.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-01.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-02.v2vzh9e.mongodb.net:27017/?replicaSet=atlas-qppgrd-shard-0&ssl=true&authSource=admin"
-
 mongo = MongoClient(MONGO_URI)
 db = mongo["telegram_bot"]
 
@@ -126,42 +124,59 @@ def inline_query(inline_query):
 # =======================
 # CLOCK — پیام هر دقیقه و حذف فوری
 clock_running = False
+
 def clock_loop(chat_id):
     global clock_running
     while clock_running:
-        msg = bot.send_message(chat_id, "⏰")
-        bot.delete_message(chat_id, msg.message_id)
+        try:
+            msg = bot.send_message(chat_id, "⏰")
+            bot.delete_message(chat_id, msg.message_id)
+        except:
+            pass
         time.sleep(60)
 
 @bot.message_handler(commands=["clock"])
 def clock_cmd(message):
     global clock_running
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک")
+        return
+
     if clock_running:
         bot.reply_to(message, "⏰ قبلاً فعاله")
         return
+
     clock_running = True
     threading.Thread(target=clock_loop, args=(message.chat.id,), daemon=True).start()
+    bot.reply_to(message, "⏰ ساعت شروع شد و هر دقیقه پیام می‌فرسته و سریع پاک می‌کنه ✅")
+
+@bot.message_handler(commands=["stopclock"])
+def stop_clock(message):
+    global clock_running
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک")
+        return
+    clock_running = False
+    bot.reply_to(message, "⏰ ساعت متوقف شد ✅")
+
 
 # =======================
-# Flask برای Render
+# یک سایت خیلی ساده برای Render
+from flask import Flask
+
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot is alive."
+    return "Bot is alive ✅"
 
-# ست کردن webhook
-WEBHOOK_URL = "https://anime-1127-bot.onrender.com/webhook"
-bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
-
-@app.route("/webhook", methods=["POST"])
-def telegram_webhook():
-    json_str = request.get_data().decode("UTF-8")
-    update = types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
-
-# فقط اجرای Flask
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    # اجرای همزمان Flask و ربات
+    import threading
+
+    def run_flask():
+        app.run(host="0.0.0.0", port=8080)
+
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    bot.infinity_polling()
