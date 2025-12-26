@@ -1,59 +1,141 @@
+# ======= کتابخانه‌های مورد نیاز سایت Runner =======
+Flask
+requests
+subprocess
+tempfile
+os
+shutil
+time
+threading
+werkzeug
+# ======= ربات‌سازی =======
+telebot
+pyTelegramBotAPI
+telethon
+aiogram
+python-telegram-bot
+pyrogram
+tlgames
+python-telegram
+telethon-sync
+telethon-async
 
-# علم داده و ریاضیات
+# ======= سایت‌سازی =======
+Flask
+Django
+fastapi
+Jinja2
+bottle
+Tornado
+quart
+pyramid
+web.py
+hug
+
+# ======= برنامه‌سازی دسکتاپ =======
+tkinter
+PyQt5
+PySide6
+wxPython
+kivy
+PySimpleGUI
+PyGTK
+PyObjC
+pywebview
+DearPyGui
+
+# ======= بازی‌سازی =======
+pygame
+panda3d
+arcade
+cocos2d
+ursina
+pyglet
+Kivy (for games)
+Ren'Py
+pySFML
+Godot-Python
+
+# ======= پایگاه داده =======
+sqlalchemy
+psycopg2-binary
+mysql-connector-python
+pymongo
+redis
+tinydb
+dataset
+peewee
+cassandra-driver
+aiomysql
+
+# ======= فضای ابری / API =======
+boto3
+google-cloud-storage
+azure-storage-blob
+requests
+aiohttp
+websockets
+google-api-python-client
+firebase-admin
+python-jose
+python-cloudant
+
+# ======= داده و علم داده =======
 numpy
 pandas
 scipy
 matplotlib
 seaborn
+plotly
+scikit-learn
+statsmodels
+xgboost
+lightgbm
 
-# وب و API
-flask
-fastapi
-requests
-httpx
-beautifulsoup4
-lxml
-
-# دیتابیس و ابری
-pymongo
-sqlalchemy
-psycopg2-binary
-redis
-boto3
-python-dotenv
-
-# پردازش متن و NLP ساده
+# ======= پردازش متن / NLP =======
 nltk
-textblob
 spacy
+transformers
+textblob
+gensim
+polyglot
+pattern
+flashtext
+fasttext
+sentence-transformers
 
-# شبکه و ربات
-python-telegram-bot
-telebot
-discord.py
+# ======= شبکه و امنیت =======
+paramiko
+cryptography
+requests
 aiohttp
 websockets
+pyOpenSSL
+python-jose
+dnspython
+netifaces
+scapy
 
-# ابزارهای عمومی و کمکی
-click
+# ======= سیستم و مدیریت فایل =======
+os
+shutil
+pathlib
+watchdog
+tempfile
+glob
+zipfile
+tarfile
+subprocess
+psutil
+
+# ======= ابزارهای کمکی =======
+python-dotenv
+loguru
 rich
 tqdm
-colorama
-loguru
-pytz
-python-decouple
-python-magic
-
-# سیستم و مدیریت فایل
-psutil
-pathlib
-tempfile
-subprocess
-uuid
-logging
-argparse
-functools
-itertools
-threading
-asyncio
-schedule
+pydantic
+click
+fire
+boltons
+faker
+attrs
