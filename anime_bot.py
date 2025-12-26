@@ -1,3 +1,23 @@
+import os
+import sys
+import atexit
+
+# مسیر فایل lock
+LOCK_FILE = "/tmp/bot.lock"
+
+# بررسی اینکه آیا ربات قبلاً اجرا شده
+if os.path.exists(LOCK_FILE):
+    print("ربات قبلاً اجرا شده، خروج...")
+    sys.exit()
+else:
+    # ایجاد فایل lock
+    open(LOCK_FILE, "w").close()
+
+# حذف فایل lock هنگام خروج برنامه
+@atexit.register
+def remove_lock():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
 
 import telebot
 from telebot import types
