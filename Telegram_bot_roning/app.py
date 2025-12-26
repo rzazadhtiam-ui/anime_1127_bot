@@ -67,13 +67,9 @@ function run(mode){
 # =======================
 # SECURITY CHECK
 # =======================
-DANGEROUS_NODES = (
-    ast.Import,
-    ast.ImportFrom,
-)
-
+DANGEROUS_NODES = ()
 DANGEROUS_WORDS = [
-    "os.", "sys.", "subprocess", "shutil",
+    "os.system", "subprocess", "shutil.rmtree",
     "open(", "__import__", "eval(", "exec("
 ]
 
