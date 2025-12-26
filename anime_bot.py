@@ -1,39 +1,10 @@
 import os
-import time
-
-instance_id = os.environ.get("RENDER_INSTANCE_ID")
-
-# فقط اولین instance اجازه polling دارد
-if instance_id and not instance_id.endswith("0"):
-    print("Secondary Render instance detected — polling disabled")
-    while True:
-        time.sleep(3600)
-
-# مسیر فایل lock
-LOCK_FILE = "/tmp/bot.lock"
-
-# بررسی اینکه آیا ربات قبلاً اجرا شده
-if os.path.exists(LOCK_FILE):
-    print("ربات قبلاً اجرا شده، خروج...")
-    sys.exit()
-else:
-    # ایجاد فایل lock
-    open(LOCK_FILE, "w").close()
-
-# حذف فایل lock هنگام خروج برنامه
-@atexit.register
-def remove_lock():
-    if os.path.exists(LOCK_FILE):
-        os.remove(LOCK_FILE)
-
 import telebot
 from telebot import types
 from pymongo import MongoClient
-import threading
-import time
+from flask import Flask, request
 
 # =======================
-# تنظیمات اصلی
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
 bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
 
@@ -42,11 +13,9 @@ ALLOWED_USERS = [6433381392, 7851824627]
 CHANNEL_USERNAME = "anime_1127"
 
 # =======================
-# اتصال MongoDB
 MONGO_URI = "mongodb://self_login:tiam_jinx@ac-nbipb9g-shard-00-00.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-01.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-02.v2vzh9e.mongodb.net:27017/?replicaSet=atlas-qppgrd-shard-0&ssl=true&authSource=admin"
 mongo = MongoClient(MONGO_URI)
 db = mongo["telegram_bot"]
-
 videos_col = db["videos"]
 admins_col = db["admins"]
 
@@ -55,7 +24,7 @@ def is_admin(user_id):
     return admins_col.find_one({"user_id": user_id}) or user_id == OWNER_ID
 
 # =======================
-# ذخیره ویدئو
+# ویدئو
 @bot.message_handler(content_types=['video', 'document'])
 def handle_video(message):
     user_id = message.from_user.id
@@ -63,10 +32,8 @@ def handle_video(message):
     if not (user_id in ALLOWED_USERS or is_from_channel):
         return
 
-    file_id = None
-    if message.video:
-        file_id = message.video.file_id
-    elif message.document and message.document.mime_type.startswith("video/"):
+    file_id = message.video.file_id if message.video else None
+    if not file_id and message.document and message.document.mime_type.startswith("video/"):
         file_id = message.document.file_id
 
     if not file_id or videos_col.find_one({"file_id": file_id}):
@@ -77,7 +44,7 @@ def handle_video(message):
     bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
 
 # =======================
-# مدیریت ادمین‌ها
+# مدیریت ادمین
 @bot.message_handler(commands=["addadmin"])
 def add_admin(message):
     if message.from_user.id != OWNER_ID:
@@ -103,10 +70,10 @@ def remove_admin(message):
         admins_col.delete_one({"user_id": uid})
         bot.reply_to(message, "ادمین حذف شد ❌")
     except:
-        bot.reply_to(message, "دستور رو اشتباه زدی")
+        bot.reply_to(message, "دستور اشتباه است")
 
 # =======================
-# دستور /add با ریپلای
+# دستور /add
 @bot.message_handler(commands=["add"])
 def add_video_cmd(message):
     if not is_admin(message.from_user.id):
@@ -117,11 +84,10 @@ def add_video_cmd(message):
         return
 
     reply = message.reply_to_message
-    file_id = None
-    if reply.video:
-        file_id = reply.video.file_id
-    elif reply.document and reply.document.mime_type.startswith("video/"):
+    file_id = reply.video.file_id if reply.video else None
+    if not file_id and reply.document and reply.document.mime_type.startswith("video/"):
         file_id = reply.document.file_id
+
     if not file_id or videos_col.find_one({"file_id": file_id}):
         bot.reply_to(message, "قبلاً ذخیره شده یا ویدئو نیست")
         return
@@ -149,70 +115,25 @@ def inline_query(inline_query):
     bot.answer_inline_query(inline_query.id, results, cache_time=0)
 
 # =======================
-# CLOCK — پیام هر دقیقه و حذف فوری
-clock_running = False
-
-def clock_loop(chat_id):
-    global clock_running
-    while clock_running:
-        try:
-            msg = bot.send_message(chat_id, "⏰")
-            bot.delete_message(chat_id, msg.message_id)
-        except:
-            pass
-        time.sleep(60)
-
-@bot.message_handler(commands=["clock"])
-def clock_cmd(message):
-    global clock_running
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک")
-        return
-
-    if clock_running:
-        bot.reply_to(message, "⏰ قبلاً فعاله")
-        return
-
-    clock_running = True
-    threading.Thread(target=clock_loop, args=(message.chat.id,), daemon=True).start()
-    bot.reply_to(message, "⏰ ساعت شروع شد و هر دقیقه پیام می‌فرسته و سریع پاک می‌کنه ✅")
-
-@bot.message_handler(commands=["stopclock"])
-def stop_clock(message):
-    global clock_running
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک")
-        return
-    clock_running = False
-    bot.reply_to(message, "⏰ ساعت متوقف شد ✅")
-
-
-# =======================
-# یک سایت خیلی ساده برای Render
-from flask import Flask
-
+# Flask برای وبهوک
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "Bot is alive ✅"
 
+@app.route(f"/webhook", methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "", 200
+
+# =======================
 if __name__ == "__main__":
-    import threading
-    import time
-    import os
-
-    def run_flask():
-        app.run(host="0.0.0.0", port=port)
-
-    threading.Thread(target=run_flask, daemon=True).start()
-
-    instance_id = os.environ.get("RENDER_INSTANCE_ID")
-    if instance_id and not instance_id.endswith("0"):
-        print("Secondary Render instance detected — polling disabled")
-        while True:
-            time.sleep(3600)
-
-    bot.remove_webhook(drop_pending_updates=True)
-    time.sleep(10)
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    # وبهوک ست می‌کنیم
+    URL = "https://anime-1127-bot.onrender.com/webhook"
+    bot.remove_webhook()
+    bot.set_webhook(URL)
+    
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
