@@ -219,8 +219,8 @@ def inline_handler(inline_query):
     query_text = inline_query.query.lower().strip()
     results = []
 
-    # ===== حالت آهنگ =====
-    if query_text == "music":
+    # ===== آهنگ =====
+    if query_text.startswith("music"):
         music_col = db["music"]
 
         for idx, song in enumerate(music_col.find()):
@@ -233,20 +233,11 @@ def inline_handler(inline_query):
                 )
             )
 
-        if results:
-            bot.answer_inline_query(inline_query.id, results, cache_time=0)
-        else:
-            bot.answer_inline_query(
-                inline_query.id,
-                [],
-                switch_pm_text="هیچ آهنگی ذخیره نشده",
-                switch_pm_parameter="start"
-            )
-
-        log_event(f"User {inline_query.from_user.id} inline music")
+        bot.answer_inline_query(inline_query.id, results, cache_time=0)
+        log_event(f"inline music by {inline_query.from_user.id}")
         return
 
-    # ===== حالت پیش‌فرض: ویدئو =====
+    # ===== فقط وقتی هیچی ننوشته =====
     if query_text == "":
         for idx, video in enumerate(videos_col.find()):
             results.append(
@@ -260,8 +251,11 @@ def inline_handler(inline_query):
             )
 
         bot.answer_inline_query(inline_query.id, results, cache_time=0)
-        log_event(f"User {inline_query.from_user.id} inline video")
+        log_event(f"inline video by {inline_query.from_user.id}")
         return
+
+    # ===== بقیه حالت‌ها =====
+    bot.answer_inline_query(inline_query.id, [], cache_time=0)
 
     # ===== هر چیز دیگه =====
     bot.answer_inline_query(inline_query.id, [], cache_time=0)
