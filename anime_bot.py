@@ -198,5 +198,6 @@ if __name__ == "__main__":
         app.run(host="0.0.0.0", port=8080)
 
     threading.Thread(target=run_flask, daemon=True).start()
-    
+    # حذف webhook قبلی
+    bot.remove_webhook()
     bot.infinity_polling()
