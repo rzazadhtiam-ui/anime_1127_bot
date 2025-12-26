@@ -54,7 +54,7 @@ def handle_video(message):
 @bot.message_handler(commands=["addadmin"])
 def add_admin(message):
     if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک کل")
+        bot.reply_to(message, "❌ شما اجازه اضافه کردن ادمین را ندارید")
         return
     try:
         uid = int(message.text.split()[1])
@@ -62,28 +62,28 @@ def add_admin(message):
             admins_col.insert_one({"user_id": uid})
             bot.reply_to(message, "ادمین اضافه شد ✅")
         else:
-            bot.reply_to(message, "قبلاً ادمینه")
+            bot.reply_to(message, "قبلاً ادمین بوده")
     except:
         bot.reply_to(message, "فرمت اشتباه")
 
 @bot.message_handler(commands=["removeadmin"])
 def remove_admin(message):
     if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک کل")
+        bot.reply_to(message, "❌ شما دستر رسی حذف ادمین را ندارید")
         return
     try:
         uid = int(message.text.split()[1])
         admins_col.delete_one({"user_id": uid})
         bot.reply_to(message, "ادمین حذف شد ❌")
     except:
-        bot.reply_to(message, "فرمت اشتباه")
+        bot.reply_to(message, "دستور رو اشتباه زدی")
 
 # =======================
 # دستور /add با ریپلای
 @bot.message_handler(commands=["add"])
 def add_video_cmd(message):
     if not is_admin(message.from_user.id):
-        bot.reply_to(message, "❌ فقط ادمین")
+        bot.reply_to(message, "❌ فقط ادمین ها اجازه اد کردن دارند")
         return
     if not message.reply_to_message:
         bot.reply_to(message, "روی ویدئو ریپلای کن")
@@ -101,8 +101,8 @@ def add_video_cmd(message):
 
     caption = reply.caption or "ویدئو بدون متن"
     videos_col.insert_one({"file_id": file_id, "caption": caption})
-    bot.reply_to(message, "ذخیره شد ✅")
-    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
+    bot.reply_to(message, "ویدئو اضافه شد ✅")
+    bot.send_video(OWNER_ID, fi_id, caption=caption, disable_notification=True)
 
 # =======================
 # Inline Mode
