@@ -157,7 +157,7 @@ bot.set_webhook(url=WEBHOOK_URL)
 @app.route("/webhook", methods=["POST"])
 def telegram_webhook():
     json_str = request.get_data().decode("UTF-8")
-    update = types.Update.de_json(json_str, bot)
+    update = types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "OK", 200
 
