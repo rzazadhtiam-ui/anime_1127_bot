@@ -1,6 +1,7 @@
 from telethon import TelegramClient
 from datetime import datetime, timedelta
 import pytz
+import asyncio          # <<< این خط باید اضافه شود
 from aiohttp import web
 
 api_id = 24645053
