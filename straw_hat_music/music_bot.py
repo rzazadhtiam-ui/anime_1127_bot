@@ -1,13 +1,13 @@
-
-import requests
-import threading
-import time
 import os
+import time
+import threading
+import requests
+from datetime import datetime
+
+from flask import Flask, request, render_template_string
 import telebot
 from telebot import types
-from pymongo import MongoClient
-from flask import Flask, request, render_template_string
-from datetime import datetime
+from pymongo import MongoClient, errors
 
 # =======================
 TOKEN = "8569519729:AAG2ZLf5xn_2pNtuGDaXF_y_88SU-dqUnis"
@@ -17,18 +17,7 @@ OWNER_ID = 6409859836
 ALLOWED_USERS = [6433381392, 6409859836]
 CHANNEL_USERNAME = "JUDUHDHJHDV"
 keep_alive_running = False
-# =======================
 
-# MongoDB جدید
-from pymongo import MongoClient
-
-MONGO_URI = "mongodb://strawhatmusicdb_db_user:<db_password>@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
-mongo = MongoClient(MONGO_URI)
-db = mongo["telegram_bot"]
-videos_col = db["audios"]
-admins_col = db["admins"]
-
-# =======================
 logs = []
 
 def log_event(text):
@@ -37,6 +26,33 @@ def log_event(text):
     if len(logs) > 100:
         logs.pop(0)
 
+# =======================
+# MongoDB
+MONGO_URI = (
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+)
+
+try:
+    mongo = MongoClient(
+        MONGO_URI,
+        serverSelectionTimeoutMS=10000,
+        tls=True,
+        tlsAllowInvalidCertificates=True
+    )
+    db = mongo["telegram_bot"]
+    audios_col = db["audios"]
+    admins_col = db["admins"]
+    mongo.admin.command("ping")
+    print("✅ اتصال موفق به MongoDB")
+except errors.ServerSelectionTimeoutError as err:
+    print("❌ خطای اتصال MongoDB:", err)
+    raise
+
+# =======================
 def is_admin(user_id):
     return admins_col.find_one({"user_id": user_id}) or user_id == OWNER_ID
 
@@ -46,9 +62,9 @@ def start_cmd(message):
     bot.reply_to(
         message,
         "🎵 سلام به ربات straw hat music خوش اومدی!\n\n"
-        "این ربات  پر از اهنگ های قشنگه.\n"
-        "برای راهنما دستور /help رو بزن"
-)
+        "برای راهنما /help را بزن"
+    )
+
 @bot.message_handler(commands=["help"])
 def help_cmd(message):
     bot.reply_to(
@@ -62,8 +78,7 @@ def help_cmd(message):
     )
 
 # =======================
-# دریافت Audio و Voice
-@bot.message_handler(content_types=["audio"])
+@bot.message_handler(content_types=["audio", "voice"])
 def handle_audio(message):
     user_id = message.from_user.id
 
@@ -90,12 +105,7 @@ def handle_audio(message):
         return
 
     caption = message.caption or "آهنگ بدون عنوان"
-
-    audios_col.insert_one({
-        "file_id": file_id,
-        "caption": caption,
-        "duration": duration
-    })
+    audios_col.insert_one({"file_id": file_id, "caption": caption, "duration": duration})
 
     bot.send_audio(OWNER_ID, file_id, caption=caption, disable_notification=True)
     log_event(f"Audio saved by {user_id}: {caption}")
@@ -106,35 +116,20 @@ def add_audio_cmd(message):
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط ادمین‌ها")
         return
-
     if not message.reply_to_message:
         bot.reply_to(message, "روی آهنگ یا ویس ریپلای کن")
         return
 
     reply = message.reply_to_message
-
-    file_id = None
-    duration = None
-
-    if reply.audio:
-        file_id = reply.audio.file_id
-        duration = reply.audio.duration
-    elif reply.voice:
-        file_id = reply.voice.file_id
-        duration = reply.voice.duration
+    file_id = reply.audio.file_id if reply.audio else reply.voice.file_id
+    duration = reply.audio.duration if reply.audio else reply.voice.duration
 
     if not file_id or audios_col.find_one({"file_id": file_id}):
         bot.reply_to(message, "قبلاً ذخیره شده یا فایل معتبر نیست")
         return
 
     caption = reply.caption or "آهنگ بدون عنوان"
-
-    audios_col.insert_one({
-        "file_id": file_id,
-        "caption": caption,
-        "duration": duration
-    })
-
+    audios_col.insert_one({"file_id": file_id, "caption": caption, "duration": duration})
     bot.reply_to(message, "آهنگ اضافه شد ✅")
     log_event(f"Admin {message.from_user.id} added audio")
 
@@ -144,13 +139,12 @@ def remove_audio(message):
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ دسترسی نداری")
         return
-
     if not message.reply_to_message:
         bot.reply_to(message, "روی آهنگ ریپلای کن")
         return
 
     reply = message.reply_to_message
-    file_id = reply.audio.file_id if reply.audio else reply.voice.file_id if reply.voice else None
+    file_id = reply.audio.file_id if reply.audio else reply.voice.file_id
 
     if not file_id:
         bot.reply_to(message, "فایل پیدا نشد")
@@ -160,22 +154,15 @@ def remove_audio(message):
     bot.reply_to(message, "حذف شد ✅" if result.deleted_count else "در دیتابیس نبود")
 
 # =======================
-# Inline Search
 @bot.inline_handler(func=lambda q: True)
 def inline_handler(inline_query):
     query = inline_query.query.strip().lower()
     results = []
 
-    cursor = audios_col.find(
-        {} if query == "" else {
-            "caption": {"$regex": query, "$options": "i"}
-        }
-    )
-
+    cursor = audios_col.find({} if query == "" else {"caption": {"$regex": query, "$options": "i"}})
     for idx, audio in enumerate(cursor):
         if idx >= 50:
             break
-
         results.append(
             types.InlineQueryResultCachedAudio(
                 id=f"audio_{idx}",
@@ -183,13 +170,30 @@ def inline_handler(inline_query):
                 caption=audio.get("caption", "🎵")
             )
         )
+    bot.answer_inline_query(inline_query.id, results, cache_time=0, is_personal=True)
 
-    bot.answer_inline_query(
-        inline_query.id,
-        results,
-        cache_time=0,
-        is_personal=True
+# =======================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return render_template_string(
+        "<h2>Music Bot Alive 🎵</h2><ul>{% for l in logs %}<li>{{l}}</li>{% endfor %}</ul>",
+        logs=logs
     )
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        json_str = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+        return "", 200
+    except Exception as e:
+        import traceback
+        print("Webhook error:", e)
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
 # =======================
 def keep_alive_loop():
@@ -219,29 +223,6 @@ def sleep_bot(message):
     if message.from_user.id == OWNER_ID:
         keep_alive_running = False
         bot.reply_to(message, "خوابید 😴")
-
-# =======================
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return render_template_string(
-        "<h2>Music Bot Alive 🎵</h2><ul>{% for l in logs %}<li>{{l}}</li>{% endfor %}</ul>",
-        logs=logs
-    )
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    try:
-        json_str = request.get_data().decode("utf-8")
-        update = telebot.types.Update.de_json(json_str)
-        bot.process_new_updates([update])
-        return "", 200
-    except Exception as e:
-        import traceback
-        print("Webhook error:", e)
-        traceback.print_exc()
-        return f"Internal Server Error: {e}", 500
 
 # =======================
 if __name__ == "__main__":
