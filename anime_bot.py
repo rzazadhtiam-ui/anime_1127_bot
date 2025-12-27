@@ -1,4 +1,6 @@
-
+import requests
+import threading
+import time
 import os
 import telebot
 from telebot import types
@@ -13,7 +15,7 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 OWNER_ID = 6433381392
 ALLOWED_USERS = [6433381392, 7851824627]
 CHANNEL_USERNAME = "anime_1127"
-
+keep_alive_running = False
 # =======================
 MONGO_URI = "mongodb://self_login:tiam_jinx@ac-nbipb9g-shard-00-00.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-01.v2vzh9e.mongodb.net:27017,ac-nbipb9g-shard-00-02.v2vzh9e.mongodb.net:27017/?replicaSet=atlas-qppgrd-shard-0&ssl=true&authSource=admin"
 mongo = MongoClient(MONGO_URI)
@@ -33,7 +35,31 @@ def log_event(text):
 def is_admin(user_id):
     return admins_col.find_one({"user_id": user_id}) or user_id == OWNER_ID
 
-# ======================
+#======================
+# دستور /start
+@bot.message_handler(commands=["start"])
+def start_cmd(message):
+    text = (
+        "👋 سلام، خوش اومدی!\n\n"
+        "🎬 این ربات مخصوص دیدن ادیت‌های فیلم، بازی و انیمه‌ست.\n\n"
+        "📌 روش استفاده:\n"
+        "کافیه توی هر چتی بنویسی:\n"
+        "@anime_1127_bot\n\n"
+        "یا برای جستجو اسم یا تگ رو بنویسی، مثلاً:\n"
+        "@anime_1127_bot black\n"
+        "@anime_1127_bot a\n\n"
+        "🔎 ربات بین ادیت‌ها می‌گرده و نتیجه مرتبط رو نشون می‌ده.\n\n"
+        "❗ اگر ادیتی از فیلم، بازی یا انیمه‌ای خواستی که داخل ربات نبود، "
+        "مستقیم بهم پیام بده:\n"
+        "👉 @asta_TIAM\n\n"
+        "📣 برای دیدن ادیت‌های بیشتر، حتماً به چنل ما سر بزن:\n"
+        "👉 @anime_1127\n\n"
+        "✨ خوش بگذره!"
+    )
+    
+    bot.reply_to(message, text)
+
+#==============================
 # Video Handler اصلاح شده
 @bot.message_handler(content_types=['video', 'document'])
 def handle_video(message):
@@ -58,6 +84,16 @@ def handle_video(message):
     bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
     log_event(f"User {user_id} ارسال ویدئو: {caption}")
 
+#=======================
+def keep_alive_loop():
+    global keep_alive_running
+    while keep_alive_running:
+        try:
+            requests.get("https://anime-1127-bot-1.onrender.com/")
+            print("Keep-alive ping sent")
+        except Exception as e:
+            print("Keep-alive error:", e)
+        time.sleep(300)  # هر ۵ دقیقه
 # =======================
 # /remov دستور حذف ویدئو
 @bot.message_handler(commands=["remov"])
@@ -218,6 +254,35 @@ def inline_handler(inline_query):
     except Exception as e:
         print("Inline error:", e)
         bot.answer_inline_query(inline_query.id, [], cache_time=0)
+
+#========================
+#بیدار نگه داشتن ربات با دستور /awake
+@bot.message_handler(commands=["awake"])
+def awake_bot(message):
+    global keep_alive_running
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    if keep_alive_running:
+        bot.reply_to(message, "ربات از قبل بیداره 👁")
+        return
+
+    keep_alive_running = True
+    threading.Thread(target=keep_alive_loop, daemon=True).start()
+    bot.reply_to(message, "ربات بیدار نگه داشته می‌شود 🔥")
+#========================
+#خاموش کردن حالت همیشه روشن /sleep
+@bot.message_handler(commands=["sleep"])
+def sleep_bot(message):
+    global keep_alive_running
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    keep_alive_running = False
+    bot.reply_to(message, "حالت نگه‌دارنده خاموش شد 😴")
+
 # =======================
 # Flask app
 app = Flask(__name__)
