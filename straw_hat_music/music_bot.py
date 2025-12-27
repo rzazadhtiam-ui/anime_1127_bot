@@ -19,10 +19,16 @@ keep_alive_running = False
 # =======================
 
 # MongoDB جدید
-MONGO_URI = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+from pymongo import MongoClient
 
-mongo = MongoClient(MONGO_URI)
-db = mongo["telegram_music_bot"]
+MONGO_URI = "mongodb+srv://strawhatmusicdb_db_user:db_strawhatmusic@cluster0.morh5s8.mongodb.net/strawhatmusic?retryWrites=true&w=majority"
+
+mongo = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000
+)
+
+db = mongo["strawhatmusic"]
 audios_col = db["audios"]
 admins_col = db["admins"]
 
