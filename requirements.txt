@@ -14,4 +14,8 @@ pymongo
 
 #نمیدونم چیه
 dnspython
-gunicorn
+gunicor
+
+#=================
+aiohttp
+pytz
