@@ -232,11 +232,16 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = telebot.types.Update.de_json(
-        request.get_data().decode("utf-8")
-    )
-    bot.process_new_updates([update])
-    return "", 200
+    try:
+        json_str = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+        return "", 200
+    except Exception as e:
+        import traceback
+        print("Webhook error:", e)
+        traceback.print_exc()
+        return f"Internal Server Error: {e}", 500
 
 # =======================
 if __name__ == "__main__":
