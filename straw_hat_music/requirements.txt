@@ -1,0 +1,21 @@
+# ======= سایت و API =======
+Flask
+
+# ======= ربات سازی =======
+telebot
+pyTelegramBotAPI
+telethon
+aiogram
+python-telegram-bot
+pyrogram
+
+# ======= پایگاه داده =======
+pymongo
+
+#نمیدونم چیه
+dnspython
+gunicorn 
+
+#=================
+aiohttp
+pytz
