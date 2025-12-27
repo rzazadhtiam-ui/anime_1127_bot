@@ -49,7 +49,7 @@ def start_cmd(message):
 
 #==============================
 #دستور /help برای راهنما ربات 
-@bot.message_handler(commands=["start"])
+@bot.message_handler(commands=["help"])
 def start_cmd(message):
     text = (
         "راهنما ربات: \n\n"
