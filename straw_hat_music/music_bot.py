@@ -46,8 +46,7 @@ def start_cmd(message):
         "🎵 سلام به ربات straw hat music خوش اومدی!\n\n"
         "این ربات  پر از اهنگ های قشنگه.\n"
         "برای راهنما دستور /help رو بزن"
-    
-
+)
 @bot.message_handler(commands=["help"])
 def help_cmd(message):
     bot.reply_to(
