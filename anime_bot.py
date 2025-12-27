@@ -151,7 +151,7 @@ def add_video_cmd(message):
     log_event(f"User {message.from_user.id} ویدئو اضافه کرد: {caption}")
 
 #=======================
-#inline handler music/video
+#inline handler 
 @bot.inline_handler(func=lambda q: True)
 def inline_handler(inline_query):
     query_text = inline_query.query.strip().lower()
@@ -164,14 +164,14 @@ def inline_handler(inline_query):
                 if idx >= 50:
                     break
 
-                caption = video.get("caption", "بدون توضیح")
+                caption = video.get("caption", "")
 
                 results.append(
                     types.InlineQueryResultCachedVideo(
                         id=f"video_all_{idx}",
                         video_file_id=video["file_id"],
-                        title=caption.replace("\n", " ")[:30],
-                        description="نمایش همه",
+                        title=caption.replace("\n", " ")[:50],
+                        description=caption.replace("\n", " ")[:100],
                         caption=caption
                     )
                 )
@@ -184,13 +184,10 @@ def inline_handler(inline_query):
             )
             return
 
-        # ===== سرچ داخل کپشن (هشتگ‌ها) =====
-        # مثلا black → #Black_clover
-        search = query_text
-
+        # ===== سرچ داخل کپشن =====
         cursor = videos_col.find({
             "caption": {
-                "$regex": search,
+                "$regex": query_text,
                 "$options": "i"
             }
         })
@@ -199,14 +196,14 @@ def inline_handler(inline_query):
             if idx >= 50:
                 break
 
-            caption = video.get("caption", "بدون توضیح")
+            caption = video.get("caption", "")
 
             results.append(
                 types.InlineQueryResultCachedVideo(
                     id=f"video_search_{idx}",
                     video_file_id=video["file_id"],
-                    title=caption.replace("\n", " ")[:30],
-                    description=f"نتیجه برای: {search}",
+                    title=caption.replace("\n", " ")[:50],
+                    description=caption.replace("\n", " ")[:100],
                     caption=caption
                 )
             )
