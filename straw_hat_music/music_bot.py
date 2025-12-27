@@ -25,7 +25,7 @@ from pymongo import MongoClient
 MONGO_URI = "mongodb://strawhatmusicdb_db_user:<db_password>@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 mongo = MongoClient(MONGO_URI)
 db = mongo["telegram_bot"]
-videos_col = db["videos"]
+videos_col = db["audios"]
 admins_col = db["admins"]
 
 # =======================
