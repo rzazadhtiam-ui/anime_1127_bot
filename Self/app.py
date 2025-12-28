@@ -77,8 +77,7 @@ button{background:#5865f2;color:white;cursor:pointer}
 <body>
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
-<p>شماره تلفن را با فرمت <b>+989123456789</b> وارد کنید</p>
-
+<p>شماره خود را با فرمت وارد کنید مثال: <b>+98939xxxxxxx<b> <p>
 <div id="s1">
 <input id="phone" placeholder="شماره تلفن">
 <button onclick="sendPhone()">ارسال کد</button>
