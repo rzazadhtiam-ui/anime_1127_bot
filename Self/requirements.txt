@@ -58,3 +58,160 @@ sounddevice
 tomlkit
 tornado
 wrapt
+#================= PYTHON LIBRARIES SUPPORTED ON RENDER =================
+
+# --- Web / API ---
+Flask
+FastAPI
+Django
+Starlette
+aiohttp
+requests
+httpx
+urllib3
+uvicorn
+gunicorn
+waitress
+
+# --- Telegram / Messaging ---
+pyTelegramBotAPI
+python-telegram-bot
+aiogram
+telethon
+pyrogram
+discord.py
+slack-sdk
+
+# --- Databases / Storage ---
+sqlite3
+pymongo
+motor
+psycopg2-binary
+asyncpg
+redis
+aioredis
+sqlalchemy
+databases
+tinydb
+
+# --- Auth / Security ---
+bcrypt
+passlib
+itsdangerous
+python-jwt
+pyjwt
+cryptography
+
+# --- Parsing / Formats ---
+json
+ujson
+orjson
+yaml
+pyyaml
+xmltodict
+lxml
+beautifulsoup4
+html5lib
+
+# --- Utilities ---
+python-dotenv
+pydantic
+marshmallow
+attrs
+click
+rich
+loguru
+schedule
+tqdm
+tenacity
+cachetools
+faker
+
+# --- Date / Time ---
+datetime
+pytz
+python-dateutil
+pendulum
+arrow
+
+# --- Math / Logic (Standard & pip) ---
+math
+random
+statistics
+decimal
+fractions
+numpy
+scipy
+sympy
+
+# --- Data / Analysis ---
+pandas
+polars
+tabulate
+openpyxl
+xlsxwriter
+
+# --- Images ---
+Pillow
+imageio
+opencv-python
+qrcode
+captcha
+
+# --- Text / NLP (CPU only) ---
+regex
+nltk
+spacy
+langdetect
+textblob
+rapidfuzz
+sentencepiece
+tokenizers
+transformers   (CPU, limited)
+
+# --- ML (CPU only, limited) ---
+scikit-learn
+xgboost
+lightgbm
+joblib
+
+# --- Networking ---
+websockets
+socketio
+python-socketio
+dnspython
+
+# --- Async / Concurrency ---
+asyncio
+anyio
+trio
+greenlet
+gevent
+
+# --- Files / Compression ---
+zipfile
+tarfile
+gzip
+bz2
+lzma
+patool
+
+# --- Cloud / APIs ---
+boto3
+google-cloud-storage
+google-cloud-firestore
+azure-storage-blob
+supabase
+firebase-admin
+
+# --- Testing / Dev ---
+pytest
+pytest-asyncio
+unittest
+coverage
+black
+ruff
+isort
+mypy
+
+#========================================================================
