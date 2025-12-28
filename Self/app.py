@@ -109,7 +109,7 @@ let phone="";
 function formatPhone(num){{
     num = num.trim();
     if(num.startsWith("0")){{ return "+98"+num.slice(1); }}
-    if(num.startsWith("9")){{ return "+98"+num; }}
+    if(num.startsWith("9") && num.length==10){{ return "+98"+num; }}
     return num;
 }}
 
@@ -179,7 +179,9 @@ def ping():
 
 # ===================== Admin Panel ===============================
 
-ADMIN_HTML = f"""""
+# ===================== Admin Panel ===============================
+
+ADMIN_HTML = """
 <!DOCTYPE html>
 <html lang="fa">
 <head>
@@ -187,15 +189,15 @@ ADMIN_HTML = f"""""
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>پنل ادمین</title>
 <style>
-body{{background:#121212;color:white;font-family:tahoma;padding:20px}}
-h2{{text-align:center}}
-form{{margin-bottom:20px;text-align:center}}
-input{{padding:10px;width:120px;border-radius:6px;border:none;margin-right:10px}}
-button{{padding:10px 20px;border:none;border-radius:6px;background:#5865f2;color:white;cursor:pointer}}
-table{{width:100%;border-collapse:collapse;margin-top:20px}}
-th,td{{border:1px solid #444;padding:8px;text-align:center}}
-.copy-btn{{background-color:#fff;color:#212121;border:none;padding:6px 12px;border-radius:6px;cursor:pointer}}
-.copy-btn:hover{{background:#f0f0f0}}
+body{background:#121212;color:white;font-family:tahoma;padding:20px}
+h2{text-align:center}
+form{margin-bottom:20px;text-align:center}
+input{padding:10px;width:120px;border-radius:6px;border:none;margin-right:10px}
+button{padding:10px 20px;border:none;border-radius:6px;background:#5865f2;color:white;cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border:1px solid #444;padding:8px;text-align:center}
+.copy-btn{background-color:#fff;color:#212121;border:none;padding:6px 12px;border-radius:6px;cursor:pointer}
+.copy-btn:hover{background:#f0f0f0}
 </style>
 </head>
 <body>
@@ -217,15 +219,15 @@ th,td{{border:1px solid #444;padding:8px;text-align:center}}
 </table>
 
 <script>
-function copyLink(token){{
-    const link = "{self_config['base_url']}/?key=" + token;
-    navigator.clipboard.writeText(link).then(()=>{{alert("لینک کپی شد!");}});
-}}
+function copyLink(token){
+    const link = "{{ self_config['base_url'] }}/?key=" + token;
+    navigator.clipboard.writeText(link).then(()=>{alert("لینک کپی شد!");});
+}
 </script>
 
 </body>
 </html>
-"""""""
+"""
 
 @app.route("/admin", methods=["GET","POST"])
 def admin():
