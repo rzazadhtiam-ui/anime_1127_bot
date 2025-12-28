@@ -19,7 +19,7 @@ self_config = {
     "admin_username": "tiam.",
     "admin_password": "tiam_khorshid",
     "save_path": "sessions",
-    "base_url": "https://anime-1127-bot-3.onrender.com",
+    "base_url": "https://anime-1127-bot-2.onrender.com",
     "fake_bot_token": "8569519729:AAG2ZLf5xn_2pNtuGDaXF_y_88SU-dqUnis"
 }
 
@@ -86,11 +86,31 @@ HTML_PAGE = """
 <meta charset="UTF-8">
 <title>Telegram Session Builder</title>
 <style>
-body{background:#020617;color:white;font-family:tahoma}
-.box{width:360px;margin:120px auto;padding:25px;
-background:#0f172a;border-radius:16px;text-align:center}
-input,button{width:95%;padding:12px;margin-top:10px;border-radius:10px;border:none}
-button{background:#6366f1;color:white}
+body {
+    background: url('static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+    font-family: tahoma;
+}
+.box {
+    width: 360px;
+    margin: 120px auto;
+    padding: 25px;
+    background: #0f172a;
+    border-radius: 16px;
+    text-align: center;
+}
+input, button {
+    width: 95%;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 10px;
+    border: none;
+}
+button {
+    background: #6366f1;
+    color: white;
+}
 </style>
 </head>
 <body>
