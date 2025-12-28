@@ -2,4 +2,5 @@ flask
 telethon
 pymongo
 dnspython
-requests
+request
+jdatetime
