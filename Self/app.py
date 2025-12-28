@@ -179,7 +179,7 @@ def ping():
 
 # ===================== Admin Panel ===============================
 
-ADMIN_HTML = f"""
+ADMIN_HTML = f"""""
 <!DOCTYPE html>
 <html lang="fa">
 <head>
@@ -225,7 +225,7 @@ function copyLink(token){{
 
 </body>
 </html>
-"""
+"""""""
 
 @app.route("/admin", methods=["GET","POST"])
 def admin():
