@@ -46,7 +46,8 @@ from self_commands_clock import *
 from self_spam import *
 from self_tools import self_tools
 from self_welcome import *
-
+from self_status import SelfStatusBot
+from self_id import register
 
 
 # ---------- تابع رجیستر ابزارها ----------
@@ -65,7 +66,7 @@ def register_tools(client):
             register_custom_tools(client)
             
         if 'register_jinx' in globals():
-        	register_jinx(client, owner_id)
+        	register_jinx(client, owner_id)        
         
         if 'modules_catcher_storage.py' in globals():
         	register_catcher_storage(client)
