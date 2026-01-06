@@ -1,7 +1,7 @@
-================================================================
+#================================================================
 # Telegram Session Builder – FULL FINAL VERSION (ANTI SLEEP)
 # By: Tiam
-================================================================
+#================================================================
 
 import os, asyncio, threading, secrets, time, shutil
 from flask import Flask, request, jsonify, render_template_string, redirect
