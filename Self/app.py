@@ -86,7 +86,7 @@ HTML_PAGE = """
 <title>Telegram Session Builder</title>  
 <style>  
 body { 
-    background: url('/static/astronomy-1867616_1280.jpg') no-repeat center center fixed;
+    background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
     background-size: cover;
     color: white;
     font-family: tahoma; 
