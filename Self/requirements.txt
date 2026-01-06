@@ -13,6 +13,7 @@ dnspython
 
 requests
 aiohttp
+jdatetime
 
 jdatetime
 APScheduler
