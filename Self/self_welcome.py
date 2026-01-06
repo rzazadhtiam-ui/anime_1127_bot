@@ -6,7 +6,7 @@ from telethon import events
 from telethon.tl.functions.channels import EditBannedRequest, GetParticipantsRequest
 from telethon.tl.functions.messages import UpdatePinnedMessageRequest
 from telethon.tl.types import ChatBannedRights, ChannelParticipantsAdmins
-from self_storage_mongo import Storage
+from self_storage import Storage
 
 # کانکتور دیتابیس MongoDB سبک و چند اکانته
 db = Storage()
