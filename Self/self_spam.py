@@ -13,7 +13,7 @@ from pymongo import MongoClient
 # MONGO SETUP
 # ================================================================
 
-MONGO_URI = "mongodb://tism_self..:tiam_jinx_1127@ac-yjpvg6o-shard-00-00.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-01.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-02.35gzto0.mongodb.net:27017/?replicaSet=atlas-fzmhnh-shard-0&ssl=true&authSource=admin"
+MONGO_URI = "mongodb://jinx:titi_jinx@ac-yjpvg6o-shard-00-00.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-01.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-02.35gzto0.mongodb.net:27017/?replicaSet=atlas-fzmhnh-shard-0&ssl=true&authSource=admin"
 client_mongo = MongoClient(MONGO_URI)
 db = client_mongo["self_spam_db"]
 collection = db["owners"]
