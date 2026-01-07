@@ -810,6 +810,16 @@ def del_link():
     links_col.delete_one({"token": request.json["token"]})
     return jsonify(ok=True)
 
+@app.route("/admin/create_link", methods=["POST"])
+@admin_required
+def create_link():
+    data = request.get_json()
+    max_uses = int(data.get("max", 1))
+    token = gen_token()
+    links_col.insert_one({"token": token, "max": max_uses, "used": 0, "expire_at": datetime.utcnow()})
+    return jsonify(ok=True, token=token)
+
+
 # ===================== Routes – User ============================
 
 @app.route("/")
