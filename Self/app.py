@@ -431,7 +431,7 @@ body {
     height: 100%;
     background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
     background-size: cover;
-    opacity: 0.25;
+    opacity: 99.25;
     z-index: -1;
 }
 
@@ -518,12 +518,12 @@ function sendPhone() {
     })
     .then(r => r.json())
     .then(data => {
-        if(data.status==="ok"){
-            document.getElementById("step1").style.display = "none";
-            document.getElementById("step2").style.display = "block";
-        } else {
-            alert(data.message || "خطا در ارسال کد");
-        }
+        if(data.status === "ok" || data.status === "sent" || data.status === "success"){
+    document.getElementById("step1").style.display = "none";
+    document.getElementById("step2").style.display = "block";
+} else {
+    alert(data.message || "خطا در ارسال کد");
+}
     });
 }
 
