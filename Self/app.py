@@ -16,7 +16,7 @@ import requests
 self_config = {
     "api_id": 24645053,
     "api_hash": "88c0167b74a24fac0a85c26c1f6d1991",
-    "admin_username": "tiam.",
+    "admin_username": "tiam",
     "admin_password": "tiam_khorshid",
     "save_path": "sessions",
     "base_url": "https://anime-1127-bot-2.onrender.com",
