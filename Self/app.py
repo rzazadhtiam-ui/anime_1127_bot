@@ -361,7 +361,11 @@ function renderLinks(linksData){
 function confirmDelete(type, id){
     deleteCallback = async ()=> {
         try{
-            await fetch(type==='session'?`/admin/delete_session/${id}`:`/admin/delete_link/${id}`,{method:'POST'});
+            await fetch('/admin/delete_link', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({token: id})
+});
             if(type==='session') loadSessions();
             else loadLinks();
         }catch(e){ console.error(e); }
@@ -826,6 +830,9 @@ def create_link():
 
 @app.route("/")
 def home():
+    key = request.args.get("key")
+    if key and consume_link(key):
+        return render_template_string(FREE_HTML)
     return render_template_string(PAID_HTML)
 
 @app.route("/ping")
