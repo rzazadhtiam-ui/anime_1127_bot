@@ -60,16 +60,18 @@ clients = {}
 def gen_token():
     return secrets.token_urlsafe(8)
 
+
+
+# مصرف لینک با بررسی تعداد استفاده
 def consume_link(token):
     link = links_col.find_one({"token": token})
-    if not link: 
-        return False
-    if link["expire_at"] < datetime.utcnow():
-        links_col.delete_one({"token": token})
+    if not link:
         return False
     if link["used"] + 1 >= link["max"]:
+        # اگر به سقف استفاده رسید، حذف کن
         links_col.delete_one({"token": token})
     else:
+        # در غیر اینصورت تعداد استفاده رو زیاد کن
         links_col.update_one({"token": token}, {"$inc": {"used": 1}})
     return True
 
@@ -824,11 +826,7 @@ def create_link():
 
 @app.route("/")
 def home():
-    key = request.args.get("key")
-    if not key or not consume_link(key):
-        return "❌ لینک نامعتبر"
-    if "paid" in request.args: return render_template_string(PAID_HTML)
-    return render_template_string(FREE_HTML)
+    return render_template_string(PAID_HTML)
 
 @app.route("/ping")
 def ping(): return "OK"
