@@ -119,7 +119,6 @@ async def start_session(doc):
         me = await client.get_me()
         logger.info(f"✅ Session loaded: {me.first_name} ({me.id})")
 
-        # پیام خوش‌آمد
         await client.send_message(
             "me",
             f"کاربر گرامی {me.first_name} عزیز\nربات ⦁ Self Nix برای شما فعال شد"
@@ -132,7 +131,6 @@ async def start_session(doc):
         register_clock(client)
         self_tools(client)
 
-        # وضعیت خودکار
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
@@ -168,7 +166,6 @@ def create_handlers(client: TelegramClient, owner_id: int):
         uid = event.sender_id
         text = (event.raw_text or "").strip()
 
-        # خاموش واقعی
         if not is_enabled(uid):
             if text == ".روشن":
                 set_enabled(uid, True)
@@ -208,7 +205,7 @@ async def session_watcher():
         await asyncio.sleep(30)
 
 # ================================================================
-# FLASK APP (BIRUN)
+# FLASK APP
 # ================================================================
 
 from flask import Flask
@@ -235,5 +232,4 @@ async def main():
 
 if __name__ == "__main__":
     import uvicorn
-    # uvicorn فقط Flask app رو اجرا میکنه
     uvicorn.run("Self.self_userbot_render:app", host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
