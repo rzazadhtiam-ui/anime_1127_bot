@@ -107,13 +107,11 @@ def save_session(phone, client):
         {"$set": {
             "phone": phone,
             "session_string": session_str,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "enabled": True  # اضافه شد
         }},
         upsert=True
     )
-
-    # فایل
-    
 
     # کلاینت بعد از ذخیره خارج می‌شود
     if phone in clients:
