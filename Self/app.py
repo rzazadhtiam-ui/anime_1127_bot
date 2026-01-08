@@ -128,13 +128,13 @@ async def load_all_sessions():
         phone = s["phone"]
         try:
             client = TelegramClient(
-    StringSession(s["session_string"]),
-    CONFIG["api_id"],
-    CONFIG["api_hash"],
-    device_model=CONFIG["device_name"]
-)
-await client.connect()
-clients[phone] = client
+                StringSession(s["session_string"]),
+                CONFIG["api_id"],
+                CONFIG["api_hash"],
+                device_model=CONFIG["device_name"]
+            )
+            await client.connect()
+            clients[phone] = client
             print(f"✅ {phone} فعال شد")
         except Exception as e:
             print(f"❌ مشکل در سشن {phone}: {e}")
