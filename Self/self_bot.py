@@ -2,7 +2,9 @@
 # self_userbot_render.py — SAFE MULTI SESSION + MONGODB + RENDER
 # ================================================================
 
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import json
 import asyncio
 import logging
