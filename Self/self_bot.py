@@ -39,7 +39,7 @@ from all_imports import (
 
 cfg = self_config()
 
-MONGO_URI = os.environ.get("MONGO_URI")
+MONGO_URI = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI is not set")
 
