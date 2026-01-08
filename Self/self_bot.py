@@ -1,5 +1,5 @@
 # ================================================================
-# self_userbot.py — SAFE MULTI SESSION + MONGODB (FINAL FIXED)
+# self_userbot_render.py — SAFE MULTI SESSION + MONGODB + RENDER
 # ================================================================
 
 import os
@@ -99,7 +99,6 @@ async def load_sessions_from_mongo():
         return []
 
 async def start_session(doc):
-    # اگر session_name وجود نداشت، از شماره استفاده کن
     name = doc.get("session_name") or doc.get("phone")
     session_str = doc["session_string"]
 
@@ -115,16 +114,14 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
-
         logger.info(f"✅ Session loaded: {me.first_name} ({me.id})")
 
-        # پیام خوش‌آمد فقط یک بار
+        # پیام خوش‌آمد
         await client.send_message(
             "me",
             f"کاربر گرامی {me.first_name} عزیز\nربات ⦁ Self Nix برای شما فعال شد"
         )
 
-        # ثبت هَندلرها و ابزارها
         register(client)
         create_handlers(client, me.id)
         register_handlers(client)
@@ -141,25 +138,24 @@ async def start_session(doc):
 
     except Exception as e:
         logger.warning(f"❌ Failed session {name}: {e}")
-        # پیام به پیوی شما اگر سشن خراب بود
+        # ارسال پیام به پیوی شما بدون توقف ربات
         try:
             admin_client = TelegramClient(
-                StringSession("YOUR_ADMIN_SESSION_STRING"),  # سشن شما
+                StringSession(os.environ.get("ADMIN_SESSION_STRING")),
                 cfg.api_id,
                 cfg.api_hash,
             )
             await admin_client.start()
             await admin_client.send_message(ADMIN_ID, f"⚠️ سشن خراب: {name}\nخطا: {e}")
             await admin_client.disconnect()
-        except:
-            logger.error("❌ Failed to notify admin about broken session.")
+        except Exception as ex:
+            logger.error(f"❌ Failed to notify admin: {ex}")
 
 # ================================================================
 # HANDLERS
 # ================================================================
 
 def create_handlers(client: TelegramClient, owner_id: int):
-
     @client.on(events.NewMessage)
     async def router(event):
         uid = event.sender_id
@@ -201,15 +197,29 @@ async def session_watcher():
                 await start_session(doc)
         except Exception as e:
             logger.error(f"Session watcher error: {e}")
-        await asyncio.sleep(30)  # هر ۳۰ ثانیه بررسی سشن جدید
+        await asyncio.sleep(30)  # بررسی هر ۳۰ ثانیه
 
 # ================================================================
-# MAIN
+# MAIN (Render Compatible)
 # ================================================================
 
 async def main():
     logger.info("🚀 Bot started. Waiting for sessions from MongoDB...")
     asyncio.create_task(session_watcher())
+
+    # اگر نیاز به وب سرور داری (مثلاً برای Render)، پورت داینامیک بگیر
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route("/")
+    def home():
+        return "Self Nix Bot is running ✅"
+
+    port = int(os.environ.get("PORT", 5000))
+    # اجرای سرور به صورت غیر بلاک‌کننده
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, app.run, "0.0.0.0", port)
+
     while True:
         await asyncio.sleep(3600)
 
