@@ -54,7 +54,7 @@ threading.Thread(target=lambda: (asyncio.set_event_loop(loop), loop.run_forever(
 def run_async(coro): return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 # ===================== Utils ====================================
-
+phone_hashes = {}
 clients = {}
 
 def gen_token():
@@ -97,11 +97,11 @@ def delete_session(phone):
     except Exception:
         pass
 
+
 def save_session(phone, client):
-    # ذخیره دقیق سشن
     session_str = client.session.save()
 
-    # Mongo
+    # MongoDB
     sessions_col.update_one(
         {"phone": phone},
         {"$set": {
@@ -112,14 +112,18 @@ def save_session(phone, client):
         upsert=True
     )
 
-    # فایل
-    
+    # ذخیره روی فایل
+    path = os.path.join(CONFIG["save_path"], f"{phone}.session")
+    with open(path, "w") as f:
+        f.write(session_str)
 
-    # کلاینت بعد از ذخیره خارج می‌شود
+    # خارج کردن کلاینت بعد از ذخیره
     if phone in clients:
         try: run_async(clients[phone].disconnect())
         except: pass
         clients.pop(phone)
+
+
 
 # ===================== Load Sessions ============================
 
@@ -128,16 +132,15 @@ async def load_all_sessions():
         phone = s["phone"]
         try:
             client = TelegramClient(
-    StringSession(s["session_string"]),
-    CONFIG["api_id"],
-    CONFIG["api_hash"],
-    device_model=CONFIG["device_name"]
-)
-await client.connect()
-clients[phone] = client
-            print(f"✅ {phone} فعال شد")
+                StringSession(s["session_string"]),
+                CONFIG["api_id"],
+                CONFIG["api_hash"],
+                device_model=CONFIG["device_name"]
+            )
+            await client.connect()
+            clients[phone] = client
         except Exception as e:
-            print(f"❌ مشکل در سشن {phone}: {e}")
+            print(f"[LOAD_SESSION_ERROR] {phone} -> {e}")
 
 # ===================== Client Creation ==========================
 
@@ -944,37 +947,85 @@ def admin_delete_session():
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
     phone = normalize_phone(request.json["phone"])
+
     async def job():
-        c = await get_client(phone)
-        clients[phone]=c
-        await c.send_code_request(phone)
-    run_async(job())
-    return jsonify(ok=True)
+        try:
+            # اگر قبلاً کلاینت داشتیم از آن استفاده کن
+            client = clients.get(phone)
+            if not client:
+                client = await get_client(phone)
+            
+            # ارسال کد
+            sent = await client.send_code_request(phone)
+            
+            # ذخیره hash برای send_code
+            phone_hashes[phone] = sent.phone_code_hash
+            clients[phone] = client
+            return {"ok": True}
+        except Exception as e:
+            print(f"[SEND_PHONE_ERROR] {phone}: {e}")
+            return {"ok": False, "msg": str(e)}
+
+    result = run_async(job())
+    return jsonify(result)
+
 
 @app.route("/send_code", methods=["POST"])
 def send_code():
     phone = normalize_phone(request.json["phone"])
+    code = request.json["code"]
+
     client = clients.get(phone)
-    if not client: return jsonify(status="error", msg="Client not found")
-    try:
-        run_async(client.sign_in(phone, request.json["code"]))
-        save_session(phone, client)
-        return jsonify(status="ok")
-    except SessionPasswordNeededError: return jsonify(status="2fa")
-    except PhoneCodeInvalidError: return jsonify(status="error")
-    except Exception as e: return jsonify(status="error", msg=str(e))
+    code_hash = phone_hashes.get(phone)
+
+    if not client or not code_hash:
+        return jsonify(status="error", msg="کلاینت یا کد hash پیدا نشد")
+
+    async def login_code():
+        try:
+            await client.sign_in(phone=phone, code=code, phone_code_hash=code_hash)
+
+            # اگر کاربر وارد شد، سشن ذخیره شود
+            if client.is_user_authorized():
+                save_session(phone, client)
+                return {"status": "ok"}
+            else:
+                # نیاز به رمز دو مرحله‌ای
+                return {"status": "2fa"}
+        except SessionPasswordNeededError:
+            return {"status": "2fa"}
+        except PhoneCodeInvalidError:
+            return {"status": "error", "msg": "کد اشتباه است"}
+        except Exception as e:
+            return {"status": "error", "msg": str(e)}
+
+    result = run_async(login_code())
+    return jsonify(result)
+
 
 @app.route("/send_password", methods=["POST"])
 def send_password():
     phone = normalize_phone(request.json["phone"])
+    password = request.json["password"]
+
     client = clients.get(phone)
-    if not client: return jsonify(ok=False, msg="Client not found")
-    try:
-        run_async(client.sign_in(password=request.json["password"]))
-        save_session(phone, client)
-        return jsonify(status="ok")
-    except Exception as e:
-        return jsonify(ok=False, msg=str(e))
+    if not client:
+        return jsonify(status="error", msg="کلاینت پیدا نشد")
+
+    async def login_pass():
+        try:
+            await client.sign_in(password=password)
+            # بعد از ورود کامل سشن ذخیره شود
+            if client.is_user_authorized():
+                save_session(phone, client)
+                return {"status": "ok"}
+            else:
+                return {"status": "error", "msg": "رمز صحیح ولی ورود کامل نشد"}
+        except Exception as e:
+            return {"status": "error", "msg": str(e)}
+
+    result = run_async(login_pass())
+    return jsonify(result)
 
 @app.route("/register_session_time", methods=["POST"])
 def register_time():
