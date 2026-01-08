@@ -1,10 +1,9 @@
 # ================================================================
-# self_userbot_render.py — SAFE MULTI SESSION + MONGODB + RENDER
+# self_userbot_render.py — COMPLETE SAFE MULTI SESSION + MONGODB + RENDER
 # ================================================================
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import json
 import asyncio
 import logging
@@ -15,6 +14,8 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from all_imports import (
     self_config,
@@ -27,7 +28,7 @@ from all_imports import (
 )
 
 # ================================================================
-# CONFIG
+# CONFIGURATION
 # ================================================================
 
 cfg = self_config()
@@ -40,7 +41,7 @@ MONGO_URI = (
     "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 )
 
-DB_NAME = "sessions_db"
+DB_NAME = "telegram_sessions"
 COLLECTION_NAME = "sessions"
 
 ADMIN_ID = 6433381392
@@ -55,7 +56,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("self_userbot")
 
 # ================================================================
-# USER STATE (ON / OFF PER USER)
+# USER STATE MANAGEMENT
 # ================================================================
 
 def _user_file(uid):
@@ -80,7 +81,7 @@ def set_enabled(uid, status: bool):
     save_user(uid, data)
 
 # ================================================================
-# MONGODB
+# MONGODB CONNECTION
 # ================================================================
 
 mongo = MongoClient(MONGO_URI)
@@ -88,7 +89,7 @@ db = mongo[DB_NAME]
 sessions_col = db[COLLECTION_NAME]
 
 # ================================================================
-# SESSION MANAGER
+# ACTIVE SESSIONS
 # ================================================================
 
 active_clients: Dict[str, TelegramClient] = {}
@@ -131,7 +132,7 @@ async def start_session(doc):
         register_clock(client)
         self_tools(client)
 
-        # استارت وضعیت خودکار
+        # وضعیت خودکار
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
@@ -142,14 +143,18 @@ async def start_session(doc):
         logger.warning(f"❌ Failed session {name}: {e}")
         # ارسال پیام به پیوی شما بدون توقف ربات
         try:
-            admin_client = TelegramClient(
-                StringSession(os.environ.get("ADMIN_SESSION_STRING")),
-                cfg.api_id,
-                cfg.api_hash,
-            )
-            await admin_client.start()
-            await admin_client.send_message(ADMIN_ID, f"⚠️ سشن خراب: {name}\nخطا: {e}")
-            await admin_client.disconnect()
+            admin_session = os.environ.get("ADMIN_SESSION_STRING")
+            if admin_session:
+                admin_client = TelegramClient(
+                    StringSession(admin_session),
+                    cfg.api_id,
+                    cfg.api_hash,
+                )
+                await admin_client.start()
+                await admin_client.send_message(
+                    ADMIN_ID, f"⚠️ سشن خراب: {name}\nخطا: {e}"
+                )
+                await admin_client.disconnect()
         except Exception as ex:
             logger.error(f"❌ Failed to notify admin: {ex}")
 
@@ -163,6 +168,7 @@ def create_handlers(client: TelegramClient, owner_id: int):
         uid = event.sender_id
         text = (event.raw_text or "").strip()
 
+        # خاموش واقعی
         if not is_enabled(uid):
             if text == ".روشن":
                 set_enabled(uid, True)
@@ -188,7 +194,7 @@ def create_handlers(client: TelegramClient, owner_id: int):
             await m.edit(f"🏓 {int((t1 - t0) * 1000)}ms")
 
 # ================================================================
-# SESSION WATCHER (AUTO RELOAD)
+# SESSION WATCHER (AUTO-RELOAD)
 # ================================================================
 
 async def session_watcher():
@@ -199,31 +205,35 @@ async def session_watcher():
                 await start_session(doc)
         except Exception as e:
             logger.error(f"Session watcher error: {e}")
-        await asyncio.sleep(30)  # بررسی هر ۳۰ ثانیه
+        await asyncio.sleep(30)
 
 # ================================================================
-# MAIN (Render Compatible)
+# FLASK APP (BIRUN)
+# ================================================================
+
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Self Nix Bot is running ✅"
+
+# ================================================================
+# ASYNC MAIN
 # ================================================================
 
 async def main():
     logger.info("🚀 Bot started. Waiting for sessions from MongoDB...")
     asyncio.create_task(session_watcher())
-
-    # اگر نیاز به وب سرور داری (مثلاً برای Render)، پورت داینامیک بگیر
-    from flask import Flask
-    app = Flask(__name__)
-
-    @app.route("/")
-    def home():
-        return "Self Nix Bot is running ✅"
-
-    port = int(os.environ.get("PORT", 5000))
-    # اجرای سرور به صورت غیر بلاک‌کننده
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, app.run, "0.0.0.0", port)
-
     while True:
         await asyncio.sleep(3600)
 
+# ================================================================
+# ENTRY POINT
+# ================================================================
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    # uvicorn فقط Flask app رو اجرا میکنه
+    uvicorn.run("Self.self_userbot_render:app", host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
