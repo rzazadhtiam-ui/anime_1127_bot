@@ -1,38 +1,38 @@
-================================================================
+#================================================================
 
-self_userbot_render.py — FIXED STABLE RENDER VERSION
+#self_userbot_render.py — FIXED STABLE RENDER VERSION
 
-Problems fixed:
+#Problems fixed:
 
-- Broken sessions -> notify admin in PV + auto delete from DB
+#- Broken sessions -> notify admin in PV + auto delete from DB
 
-- Already started sessions will NOT restart
+#- Already started sessions will NOT restart
 
-- No sleep / render-safe keep-alive
+#- No sleep / render-safe keep-alive
 
-- .خاموش and .روشن commands REMOVED
+#- .خاموش and .روشن commands REMOVED
 
-================================================================
+#================================================================
 
 import os import sys import json import time import asyncio import logging import threading from typing import Dict
 
 from flask import Flask from telethon import TelegramClient, events from telethon.sessions import StringSession from pymongo import MongoClient from pymongo.errors import PyMongoError
 
-------------------------------------------------
+#------------------------------------------------
 
-PATH FIX
+#PATH FIX
 
-------------------------------------------------
+#------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(file)) sys.path.append(BASE_DIR)
 
 from all_imports import ( self_config, self_tools, register_handlers, register_group_handlers, register_clock, SelfStatusBot, register, )
 
-================================================================
+#================================================================
 
-CONFIG
+#CONFIG
 
-================================================================
+#================================================================
 
 cfg = self_config()
 
@@ -48,11 +48,11 @@ os.makedirs(SESSION_DIR, exist_ok=True) os.makedirs(USER_DATA_DIR, exist_ok=True
 
 logging.basicConfig(level=logging.INFO) logger = logging.getLogger("SELF-NIX")
 
-================================================================
+#================================================================
 
-FLASK (KEEP ALIVE ONLY)
+#FLASK (KEEP ALIVE ONLY)
 
-================================================================
+#================================================================
 
 app = Flask(name)
 
@@ -60,27 +60,27 @@ app = Flask(name)
 
 def run_flask(): port = int(os.environ.get("PORT", 5000)) app.run(host="0.0.0.0", port=port)
 
-================================================================
+#================================================================
 
-DATABASE
+#DATABASE
 
-================================================================
+#================================================================
 
 mongo = MongoClient(MONGO_URI) db = mongo[DB_NAME] sessions_col = db[COLLECTION_NAME]
 
-================================================================
+#================================================================
 
-ACTIVE CLIENTS (ANTI DUPLICATE START)
+#ACTIVE CLIENTS (ANTI DUPLICATE START)
 
-================================================================
+#================================================================
 
 active_clients: Dict[str, TelegramClient] = {} started_sessions = set()   # prevents re-start
 
-================================================================
+#================================================================
 
-ADMIN NOTIFY
+#ADMIN NOTIFY
 
-================================================================
+#================================================================
 
 async def notify_admin_and_delete(name, error, doc_id): try: if ADMIN_SESSION_STRING: admin = TelegramClient( StringSession(ADMIN_SESSION_STRING), cfg.api_id, cfg.api_hash, ) await admin.start() await admin.send_message( ADMIN_ID, f"⚠️ سشن خراب و حذف شد:\n{name}\n\n{error}" ) await admin.disconnect() except Exception as e: logger.error(f"Admin notify failed: {e}")
 
@@ -90,11 +90,11 @@ try:
 except Exception as e:
     logger.error(f"Delete failed: {e}")
 
-================================================================
+#================================================================
 
-SESSION STARTER
+#SESSION STARTER
 
-================================================================
+#================================================================
 
 async def start_session(doc): name = doc.get("session_name") or doc.get("phone") session_str = doc.get("session_string") doc_id = doc.get("_id")
 
@@ -136,11 +136,11 @@ except Exception as e:
     logger.error(f"❌ Broken session {name}: {e}")
     await notify_admin_and_delete(name, str(e), doc_id)
 
-================================================================
+#================================================================
 
-HANDLERS (NO .خاموش .روشن)
+#HANDLERS (NO .خاموش .روشن)
 
-================================================================
+#================================================================
 
 def create_handlers(client: TelegramClient): @client.on(events.NewMessage) async def router(event): uid = event.sender_id text = (event.raw_text or "").strip()
 
@@ -157,22 +157,22 @@ def create_handlers(client: TelegramClient): @client.on(events.NewMessage) async
         m = await event.reply("⏳")
         await m.edit(f"🏓 {int((time.time() - t)*1000)}ms")
 
-================================================================
+#================================================================
 
-SESSION WATCHER
+#SESSION WATCHER
 
-================================================================
+#================================================================
 
 async def session_watcher(): logger.info("🔄 Session watcher started") while True: try: docs = list(sessions_col.find({"enabled": True})) for doc in docs: await start_session(doc) except PyMongoError as e: logger.error(f"Mongo error: {e}") except Exception as e: logger.error(f"Watcher error: {e}")
 
 # anti-sleep loop (render safe)
     await asyncio.sleep(15)
 
-================================================================
+#================================================================
 
-MAIN
+#MAIN
 
-================================================================
+#================================================================
 
 async def main(): logger.info("🚀 Self Nix Bot started") asyncio.create_task(session_watcher())
 
@@ -180,10 +180,10 @@ async def main(): logger.info("🚀 Self Nix Bot started") asyncio.create_task(s
 while True:
     await asyncio.sleep(60)
 
-================================================================
+#================================================================
 
-ENTRY POINT
+#ENTRY POINT
 
-================================================================
+#================================================================
 
 if name == "main": threading.Thread(target=run_flask, daemon=True).start() asyncio.run(main())
