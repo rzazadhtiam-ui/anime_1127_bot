@@ -7,7 +7,7 @@ from telebot import types
 from pymongo import MongoClient
 from flask import Flask, request, render_template_string
 from datetime import datetime
-from anime_panel_module import register_anime_panel
+
 
 
 # =======================
@@ -321,7 +321,7 @@ def webhook():
     return "", 200
 
 
-register_anime_panel(bot, db, is_admin, OWNER_ID)
+
 
 # =======================
 if __name__ == "__main__":
