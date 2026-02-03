@@ -7,6 +7,8 @@ from telebot import types
 from pymongo import MongoClient
 from flask import Flask, request, render_template_string
 from datetime import datetime
+from anime_panel_module import register_anime_panel
+
 
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
@@ -317,6 +319,9 @@ def webhook():
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "", 200
+
+
+   register_anime_panel(bot, db, is_admin, OWNER_ID)
 
 # =======================
 if __name__ == "__main__":
