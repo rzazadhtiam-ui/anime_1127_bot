@@ -321,7 +321,7 @@ def webhook():
     return "", 200
 
 
-   register_anime_panel(bot, db, is_admin, OWNER_ID)
+register_anime_panel(bot, db, is_admin, OWNER_ID)
 
 # =======================
 if __name__ == "__main__":
