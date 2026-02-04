@@ -140,7 +140,7 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
-        OWNER_ID = me.id
+        
         
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
