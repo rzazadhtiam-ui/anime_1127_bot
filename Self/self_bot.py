@@ -1,16 +1,9 @@
 # ================================================================
-# self_userbot_render.py — FIXED & STABLE
-# ================================================================
-# Problems fixed:
-# - Broken sessions -> notify admin + auto delete from DB
-# - Already started sessions will NOT restart
-# - No sleep / render-safe keep-alive
-# - .خاموش and .روشن commands REMOVED
+# self_userbot_render.py — FIXED & PRODUCTION SAFE
 # ================================================================
 
 import os
 import sys
-import json
 import time
 import asyncio
 import logging
@@ -88,7 +81,7 @@ db = mongo[DB_NAME]
 sessions_col = db[COLLECTION_NAME]
 
 # ================================================================
-# ACTIVE CLIENTS (ANTI DUPLICATE START)
+# ACTIVE CLIENTS (MULTI SESSION SAFE)
 # ================================================================
 active_clients: Dict[str, TelegramClient] = {}
 started_sessions = set()   # prevents re-start
@@ -96,7 +89,7 @@ started_sessions = set()   # prevents re-start
 # ================================================================
 # ADMIN NOTIFY + DELETE BROKEN SESSION
 # ================================================================
-async def notify_admin_and_delete(name, error, doc_id):
+async def notify_admin_and_delete(name, error, doc_id=None):
     try:
         if ADMIN_SESSION_STRING:
             admin = TelegramClient(
@@ -113,14 +106,15 @@ async def notify_admin_and_delete(name, error, doc_id):
     except Exception as e:
         logger.error(f"Admin notify failed: {e}")
 
-    try:
-        sessions_col.delete_one({"_id": doc_id})
-        logger.info(f"🗑 Deleted broken session: {name}")
-    except Exception as e:
-        logger.error(f"Delete failed: {e}")
+    if doc_id:
+        try:
+            sessions_col.delete_one({"_id": doc_id})
+            logger.info(f"🗑 Deleted broken session: {name}")
+        except Exception as e:
+            logger.error(f"Delete failed: {e}")
 
 # ================================================================
-# SESSION STARTER
+# SESSION STARTER (SAFE)
 # ================================================================
 async def start_session(doc):
     name = doc.get("session_name") or doc.get("phone")
@@ -140,26 +134,31 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
-        
-        
+
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
-        # register systems
+        # -------------------------------
+        # register handlers safely
+        # -------------------------------
         register(client)
         create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client)
+        register_group_handlers(client, me.id)  # ✅ owner_id safe
         register_clock(client)
         self_tools(client)
 
+        # -------------------------------
+        # Status bot async
+        # -------------------------------
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
+        # -------------------------------
+        # register active session
+        # -------------------------------
         active_clients[name] = client
         started_sessions.add(name)
-
-        # run_until_disconnected removed → render-safe
 
     except Exception as e:
         logger.error(f"❌ Broken session {name}: {e}")
