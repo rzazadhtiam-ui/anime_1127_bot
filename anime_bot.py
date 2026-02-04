@@ -305,6 +305,49 @@ def admin_list_cmd(message):
 
 # =======================
 # /send_request
+# /send_request فقط پیوی
+@bot.message_handler(commands=["send_request", f"send_request@{BOT_USERNAME}"])
+def send_request_cmd(message):
+    uid = message.from_user.id
+
+    if message.chat.type != "private":
+        bot.reply_to(message, "❌ این دستور فقط در پیوی ربات قابل استفاده است")
+        return
+
+    if is_admin(uid):
+        bot.reply_to(message, "❌ شما ادمین هستید، این دستور مخصوص کاربران عادی است")
+        return
+
+    if uid in user_next_message:
+        bot.reply_to(message, "⚠️ شما قبلاً درخواست ارسال پیام داده‌اید، لطفاً پیام خود را بفرستید")
+        return
+
+    bot.reply_to(
+        message,
+        "✅ پیام بعدی که ارسال کنید برای مالک فوروارد می‌شود.\n📩 متن، عکس، ویدئو یا فایل می‌توانید ارسال کنید."
+    )
+    user_next_message[uid] = {"action": "send_request", "time": time.time()}
+
+
+# /echo فقط پیوی
+@bot.message_handler(commands=["echo", f"echo@{BOT_USERNAME}"])
+def echo_cmd(message):
+    uid = message.from_user.id
+
+    if message.chat.type != "private":
+        bot.reply_to(message, "❌ این دستور فقط در پیوی ربات قابل استفاده است")
+        return
+
+    if not is_admin(uid):
+        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه استفاده دارند")
+        return
+
+    bot.reply_to(message, "✅ پیام بعدی شما برای همه ارسال خواهد شد")
+    user_next_message[uid] = {"action": "echo", "time": time.time()}
+
+
+# =======================
+# Handler واحد برای پیام بعدی
 @bot.message_handler(func=lambda m: m.from_user.id in user_next_message)
 def handle_next_message(message):
     uid = message.from_user.id
@@ -312,6 +355,7 @@ def handle_next_message(message):
     if not data:
         return
 
+    # send_request
     if data["action"] == "send_request":
         try:
             user = message.from_user
@@ -351,23 +395,22 @@ def handle_next_message(message):
                 bot.send_video_note(OWNER_ID, message.video_note.file_id)
 
             bot.reply_to(message, "پیام شما برای مالک ارسال شد ✅")
-
         except Exception as e:
             bot.reply_to(message, f"❌ خطا در ارسال پیام: {e}")
 
+    # echo
     elif data["action"] == "echo":
         success = 0
         fail = 0
         all_chats = set()
 
-        # همه کاربران و گروه ها
         for item in users_col.find():
             if item.get("type") == "user":
                 all_chats.add(item["user_id"])
             elif item.get("type") == "group":
                 all_chats.add(item["group_id"])
 
-        all_chats.add(OWNER_ID)  # اضافه کردن مالک
+        all_chats.add(OWNER_ID)
 
         for cid in all_chats:
             try:
@@ -391,14 +434,12 @@ def handle_next_message(message):
                 success += 1
             except Exception:
                 fail += 1
-                # اگر بلاک کرده بود، اختیاری حذف شود
                 users_col.delete_one({"$or": [{"user_id": cid}, {"group_id": cid}]})
 
         bot.reply_to(
             message,
             f"📊 آمار ارسال:\n✅ موفق: {success}\n❌ ناموفق: {fail}\n👥 کل مقصدها: {len(all_chats)}"
         )
-
 # =======================
 # Keep-alive
 def keep_alive_loop():
