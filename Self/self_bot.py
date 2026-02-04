@@ -149,7 +149,7 @@ async def start_session(doc):
         register(client)
         create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client, OWNER_ID)
+        register_group_handlers(client)
         register_clock(client)
         self_tools(client)
 
