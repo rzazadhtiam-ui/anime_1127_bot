@@ -58,7 +58,7 @@ def start_cmd(message):
         "برای دیدن راهنما دستور /help رو بزن"
     )
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("پنل ربات", switch_inline_query_current_chat=f"@{BOT_USERNAME}"))
+    markup.add(types.InlineKeyboardButton("پنل ربات", switch_inline_query_current_chat=""))
     bot.reply_to(message, text, reply_markup=markup)
 
 # /help
@@ -80,28 +80,77 @@ def help_cmd(message):
 @bot.message_handler(commands=["search", f"search@{BOT_USERNAME}"])
 def search_panel(message):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("پنل جستجو", switch_inline_query_current_chat=f"@{BOT_USERNAME}"))
+    markup.add(types.InlineKeyboardButton("پنل جستجو", switch_inline_query_current_chat=""))
     bot.reply_to(message, "برای جستجو روی دکمه زیر بزن:", reply_markup=markup)
 
 # =======================
-# Video Handler
-@bot.message_handler(content_types=['video', 'document'])
-def handle_video(message):
-    user_id = message.from_user.id
-    is_allowed_user = user_id in ALLOWED_USERS and message.chat.type == "private"
-    is_from_channel = getattr(message.forward_from_chat, "username", None) == CHANNEL_USERNAME if message.forward_from_chat else False
+#inline handler 
+@bot.inline_handler(func=lambda q: True)
+def inline_handler(inline_query):
+    query_text = inline_query.query.strip().lower()
+    results = []
 
-    if not (is_allowed_user or is_from_channel):
-        return
+    try:
+        # ===== وقتی هیچی ننوشته =====
+        if query_text == "":
+            for idx, video in enumerate(videos_col.find()):
+                if idx >= 50:
+                    break
 
-    file_id = get_video_file_id(message)
-    if not file_id or videos_col.find_one({"file_id": file_id}):
-        return
+                caption = video.get("caption", "")
 
-    caption = message.caption or "ویدئو بدون متن"
-    videos_col.insert_one({"file_id": file_id, "caption": caption})
-    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
-    log_event(f"User {user_id} ارسال ویدئو: {caption}")
+                results.append(
+                    types.InlineQueryResultCachedVideo(
+                        id=f"video_all_{idx}",
+                        video_file_id=video["file_id"],
+                        title=caption.replace("\n", " ")[:50],
+                        description=caption.replace("\n", " ")[:100],
+                        caption=caption
+                    )
+                )
+
+            bot.answer_inline_query(
+                inline_query.id,
+                results,
+                cache_time=0,
+                is_personal=True
+            )
+            return
+
+        # ===== سرچ داخل کپشن =====
+        cursor = videos_col.find({
+            "caption": {
+                "$regex": query_text,
+                "$options": "i"
+            }
+        })
+
+        for idx, video in enumerate(cursor):
+            if idx >= 50:
+                break
+
+            caption = video.get("caption", "")
+
+            results.append(
+                types.InlineQueryResultCachedVideo(
+                    id=f"video_search_{idx}",
+                    video_file_id=video["file_id"],
+                    title=caption.replace("\n", " ")[:50],
+                    description=caption.replace("\n", " ")[:100],
+                    caption=caption
+                )
+            )
+
+        bot.answer_inline_query(
+            inline_query.id,
+            results,
+            cache_time=0,
+            is_personal=True
+        )
+
+    except Exception as e:
+        print("Inline error:", e)
+        bot.answer_inline_query(inline_query.id, [], cache_time=0)
 
 # =======================
 # /add
