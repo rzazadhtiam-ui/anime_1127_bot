@@ -307,18 +307,14 @@ def admin_list_cmd(message):
 # /send_request
 @bot.message_handler(func=lambda m: m.from_user.id in user_next_message)
 def handle_next_message(message):
-
     uid = message.from_user.id
     data = user_next_message.pop(uid, None)
-
     if not data:
         return
 
     if data["action"] == "send_request":
-
         try:
             user = message.from_user
-
             name = user.first_name or "None"
             username = f"@{user.username}" if user.username else "None"
             user_id = user.id
@@ -337,46 +333,19 @@ def handle_next_message(message):
 
             if ct == "text":
                 bot.send_message(OWNER_ID, header + message.text)
-
             elif ct == "photo":
-                bot.send_photo(
-                    OWNER_ID,
-                    message.photo[-1].file_id,
-                    caption=header + (message.caption or "")
-                )
-
+                bot.send_photo(OWNER_ID, message.photo[-1].file_id, caption=header + (message.caption or ""))
             elif ct == "video":
-                bot.send_video(
-                    OWNER_ID,
-                    message.video.file_id,
-                    caption=header + (message.caption or "")
-                )
-
+                bot.send_video(OWNER_ID, message.video.file_id, caption=header + (message.caption or ""))
             elif ct == "document":
-                bot.send_document(
-                    OWNER_ID,
-                    message.document.file_id,
-                    caption=header + (message.caption or "")
-                )
-
+                bot.send_document(OWNER_ID, message.document.file_id, caption=header + (message.caption or ""))
             elif ct == "voice":
-                bot.send_voice(
-                    OWNER_ID,
-                    message.voice.file_id,
-                    caption=header
-                )
-
+                bot.send_voice(OWNER_ID, message.voice.file_id, caption=header)
             elif ct == "animation":
-                bot.send_animation(
-                    OWNER_ID,
-                    message.animation.file_id,
-                    caption=header + (message.caption or "")
-                )
-
+                bot.send_animation(OWNER_ID, message.animation.file_id, caption=header + (message.caption or ""))
             elif ct == "sticker":
                 bot.send_message(OWNER_ID, header)
                 bot.send_sticker(OWNER_ID, message.sticker.file_id)
-
             elif ct == "video_note":
                 bot.send_message(OWNER_ID, header)
                 bot.send_video_note(OWNER_ID, message.video_note.file_id)
@@ -385,123 +354,50 @@ def handle_next_message(message):
 
         except Exception as e:
             bot.reply_to(message, f"❌ خطا در ارسال پیام: {e}")
-# /echo
-@bot.message_handler(commands=["echo", f"echo@{BOT_USERNAME}"])
-def echo_cmd(message):
-    uid = message.from_user.id
-    if not is_admin(uid):
-        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه استفاده دارند")
-        return
-    bot.reply_to(message, "✅ پیام بعدی شما برای همه ارسال خواهد شد")
-    user_next_message[uid] = "echo"
 
-# =======================
-
-@bot.message_handler(func=lambda m: m.from_user.id in user_next_message)
-def handle_next_message(message):
-
-    uid = message.from_user.id
-    action = user_next_message.pop(uid, None)
-
-    if action == "send_request":
-        try:
-            bot.forward_message(OWNER_ID, message.chat.id, message.message_id)
-            bot.reply_to(message, "پیام شما برای مالک ارسال شد ✅")
-        except Exception as e:
-            bot.reply_to(message, f"❌ خطا در ارسال پیام: {e}")
-
-    elif action == "echo":
-
+    elif data["action"] == "echo":
         success = 0
         fail = 0
-
         all_chats = set()
 
-        # ======================
-        # خواندن همه کاربران و گروه ها از users_col
-        # ======================
+        # همه کاربران و گروه ها
         for item in users_col.find():
-
-            # اگر یوزر باشد
             if item.get("type") == "user":
                 all_chats.add(item["user_id"])
-
-            # اگر گروه باشد
             elif item.get("type") == "group":
                 all_chats.add(item["group_id"])
 
-        # اضافه کردن OWNER
-        all_chats.add(OWNER_ID)
+        all_chats.add(OWNER_ID)  # اضافه کردن مالک
 
-        # ======================
-        # ارسال پیام
-        # ======================
         for cid in all_chats:
             try:
-
                 ct = message.content_type
-
                 if ct == "text":
                     bot.send_message(cid, message.text)
-
                 elif ct == "photo":
-                    bot.send_photo(
-                        cid,
-                        message.photo[-1].file_id,
-                        caption=message.caption
-                    )
-
+                    bot.send_photo(cid, message.photo[-1].file_id, caption=message.caption)
                 elif ct == "video":
-                    bot.send_video(
-                        cid,
-                        message.video.file_id,
-                        caption=message.caption
-                    )
-
+                    bot.send_video(cid, message.video.file_id, caption=message.caption)
                 elif ct == "document":
-                    bot.send_document(
-                        cid,
-                        message.document.file_id,
-                        caption=message.caption
-                    )
-
+                    bot.send_document(cid, message.document.file_id, caption=message.caption)
                 elif ct == "sticker":
                     bot.send_sticker(cid, message.sticker.file_id)
-
                 elif ct == "voice":
                     bot.send_voice(cid, message.voice.file_id)
-
                 elif ct == "animation":
-                    bot.send_animation(
-                        cid,
-                        message.animation.file_id,
-                        caption=message.caption
-                    )
-
+                    bot.send_animation(cid, message.animation.file_id, caption=message.caption)
                 elif ct == "video_note":
                     bot.send_video_note(cid, message.video_note.file_id)
-
                 success += 1
-
             except Exception:
-
                 fail += 1
-
-                # اگر کاربر ربات را بلاک کرده باشد حذف شود (اختیاری)
-                users_col.delete_one({
-                    "$or": [
-                        {"user_id": cid},
-                        {"group_id": cid}
-                    ]
-                })
+                # اگر بلاک کرده بود، اختیاری حذف شود
+                users_col.delete_one({"$or": [{"user_id": cid}, {"group_id": cid}]})
 
         bot.reply_to(
             message,
-            f"📊 آمار ارسال:\n"
-            f"✅ موفق: {success}\n"
-            f"❌ ناموفق: {fail}\n"
-            f"👥 کل مقصدها: {len(all_chats)}"
-                    )
+            f"📊 آمار ارسال:\n✅ موفق: {success}\n❌ ناموفق: {fail}\n👥 کل مقصدها: {len(all_chats)}"
+        )
 
 # =======================
 # Keep-alive
