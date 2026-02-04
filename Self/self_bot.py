@@ -140,7 +140,8 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
-
+        OWNER_ID = me.id
+        
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
@@ -148,7 +149,7 @@ async def start_session(doc):
         register(client)
         create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client)
+        register_group_handlers(client, OWNER_ID)
         register_clock(client)
         self_tools(client)
 
