@@ -48,12 +48,37 @@ def get_video_file_id(message):
         return None
     return None
 
+# ============================
+# Force commands with bot username in groups
+# ============================
+def command_allowed(message):
+
+    # در پیوی همیشه اجازه بده
+    if message.chat.type == "private":
+        return True
+
+    # اگر متن نبود اجازه بده
+    if not message.text:
+        return True
+
+    # اگر دستور نبود اجازه بده
+    if not message.text.startswith("/"):
+        return True
+
+    # اگر دستور بود ولی یوزرنیم نداشت → بلاک
+    if f"@{BOT_USERNAME}" not in message.text:
+        return False
+
+    return True
 # ======================
 #/start
 users_col = db["users"]
 
 @bot.message_handler(commands=["start", f"start@{BOT_USERNAME}"])
 def start_cmd(message):
+    if not command_allowed(message):
+        return
+    
 
     chat = message.chat
     user = message.from_user
@@ -105,9 +130,12 @@ def start_cmd(message):
     )
 
     bot.reply_to(message, text, reply_markup=markup)
+
 # /help
 @bot.message_handler(commands=["help", f"help@{BOT_USERNAME}"])
 def help_cmd(message):
+    if not command_allowed(message):
+        return
     text = (
         "راهنما ربات:\n\n"
         "🎬 مخصوص دیدن ادیت‌های فیلم، بازی و انیمه‌ست.\n\n"
@@ -200,6 +228,8 @@ def inline_handler(inline_query):
 # /add
 @bot.message_handler(commands=["add", f"add@{BOT_USERNAME}"])
 def add_video_cmd(message):
+    if not command_allowed(message):
+        return
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط ادمین ها اجازه اد کردن دارند")
         log_event(f"User {message.from_user.id} تلاش برای add ویدئو بدون دسترسی")
@@ -224,6 +254,8 @@ def add_video_cmd(message):
 # /remov
 @bot.message_handler(commands=["remov", f"remov@{BOT_USERNAME}"])
 def remove_video(message):
+    if not command_allowed(message):
+        return
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط مالک کل و ادمین اجازه حذف دارند")
         return
@@ -248,6 +280,8 @@ def remove_video(message):
 # Admin Management
 @bot.message_handler(commands=["addadmin", f"addadmin@{BOT_USERNAME}"])
 def add_admin(message):
+    if not command_allowed(message):
+        return
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ شما اجازه اضافه کردن ادمین را ندارید")
         log_event(f"User {message.from_user.id} تلاش برای اضافه کردن ادمین بدون دسترسی")
@@ -267,6 +301,8 @@ def add_admin(message):
 
 @bot.message_handler(commands=["removeadmin", f"removeadmin@{BOT_USERNAME}"])
 def remove_admin(message):
+    if not command_allowed(message):
+        return
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ شما دستر رسی حذف ادمین را ندارید")
         log_event(f"User {message.from_user.id} تلاش برای حذف ادمین بدون دسترسی")
@@ -282,6 +318,8 @@ def remove_admin(message):
 
 @bot.message_handler(commands=["admin_list", f"admin_list@{BOT_USERNAME}"])
 def admin_list_cmd(message):
+    if not command_allowed(message):
+        return
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط مالک و ادمین‌ها اجازه دیدن لیست ادمین‌ها را دارند")
         return
@@ -308,6 +346,8 @@ def admin_list_cmd(message):
 # /send_request فقط پیوی
 @bot.message_handler(commands=["send_request", f"send_request@{BOT_USERNAME}"])
 def send_request_cmd(message):
+    if not command_allowed(message):
+        return
     uid = message.from_user.id
 
     if message.chat.type != "private":
@@ -332,6 +372,8 @@ def send_request_cmd(message):
 # /echo فقط پیوی
 @bot.message_handler(commands=["echo", f"echo@{BOT_USERNAME}"])
 def echo_cmd(message):
+    if not command_allowed(message):
+        return
     uid = message.from_user.id
 
     if message.chat.type != "private":
@@ -454,6 +496,8 @@ def keep_alive_loop():
 
 @bot.message_handler(commands=["awake", f"awake@{BOT_USERNAME}"])
 def awake_bot(message):
+    if not command_allowed(message):
+        return
     global keep_alive_running
     if message.from_user.id != OWNER_ID: return
     if keep_alive_running:
@@ -461,10 +505,12 @@ def awake_bot(message):
         return
     keep_alive_running = True
     threading.Thread(target=keep_alive_loop, daemon=True).start()
-    bot.reply_to(message, "ربات بیدار نگه داشته می‌شود 🔥")
+    bot.reply_to(message, "ربات بیدار نگه داشته میشه 🔥")
 
 @bot.message_handler(commands=["sleep", f"sleep@{BOT_USERNAME}"])
 def sleep_bot(message):
+    if not command_allowed(message):
+        return
     global keep_alive_running
     if message.from_user.id != OWNER_ID: return
     keep_alive_running = False
