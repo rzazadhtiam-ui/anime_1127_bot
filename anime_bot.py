@@ -174,14 +174,14 @@ def inline_handler(inline_query):
         # ساخت query
         # ======================
         if query_text == "":
-            cursor = videos_col.find().sort("_id", -1)
+            cursor = videos_col.find().sort("_id", 1)
         else:
             cursor = videos_col.find({
                 "caption": {
                     "$regex": query_text,
                     "$options": "i"
                 }
-            }).sort("_id", -1)
+            }).sort("_id", 1)
 
         # ======================
         # اعمال pagination
