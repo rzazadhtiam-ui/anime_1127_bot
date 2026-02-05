@@ -157,118 +157,68 @@ def search_panel(message):
 
 # =======================
 #inline handler 
-INLINE_LIMIT = 50  # محدودیت رسمی تلگرام
-
-
 @bot.inline_handler(func=lambda q: True)
 def inline_handler(inline_query):
-
     query_text = inline_query.query.strip().lower()
     results = []
+    added_ids = set()  # جلوگیری از تکراری‌ها
 
-    try:
+    try:  
+        # ===== وقتی هیچی ننوشته =====  
+        if query_text == "":  
+            for idx, video in enumerate(videos_col.find().sort("upload_date", -1)):  # مرتب بر اساس تاریخ
+                file_id = video["file_id"]
+                if file_id in added_ids:
+                    continue
+                added_ids.add(file_id)
 
-        # =========================
-        # Offset برای pagination
-        # =========================
-        offset = int(inline_query.offset) if inline_query.offset else 0
+                caption = video.get("caption", "")  
+                results.append(  
+                    types.InlineQueryResultCachedVideo(  
+                        id=f"video_all_{idx}",  
+                        video_file_id=file_id,  
+                        title=caption.replace("\n", " ")[:50],  
+                        description=caption.replace("\n", " ")[:100],  
+                        caption=caption  
+                    )  
+                )  
 
-        # =========================
-        # وقتی چیزی نوشته نشده
-        # =========================
-        if query_text == "":
+        # ===== سرچ داخل کپشن =====  
+        else:  
+            cursor = videos_col.find({  
+                "caption": {  
+                    "$regex": query_text,  
+                    "$options": "i"  
+                }  
+            }).sort("upload_date", -1)  # مرتب بر اساس تاریخ
 
-            cursor = (
-                videos_col
-                .find()
-                .sort("_id", 1)  # قدیمی → جدید
-                .skip(offset)
-                .limit(INLINE_LIMIT)
-            )
+            for idx, video in enumerate(cursor):  
+                file_id = video["file_id"]
+                if file_id in added_ids:
+                    continue
+                added_ids.add(file_id)
 
-            count = 0
+                caption = video.get("caption", "")  
+                results.append(  
+                    types.InlineQueryResultCachedVideo(  
+                        id=f"video_search_{idx}",  
+                        video_file_id=file_id,  
+                        title=caption.replace("\n", " ")[:50],  
+                        description=caption.replace("\n", " ")[:100],  
+                        caption=caption  
+                    )  
+                )  
 
-            for idx, video in enumerate(cursor):
+        bot.answer_inline_query(  
+            inline_query.id,  
+            results,  
+            cache_time=0,  
+            is_personal=True  
+        )  
 
-                caption = video.get("caption", "")
-                clean_caption = caption.replace("\n", " ")
-
-                results.append(
-                    types.InlineQueryResultCachedVideo(
-                        id=f"video_all_{offset}_{idx}",
-                        video_file_id=video["file_id"],
-                        title=clean_caption[:50],
-                        description=clean_caption[:100],
-                        caption=caption
-                    )
-                )
-
-                count += 1
-
-            next_offset = str(offset + INLINE_LIMIT) if count == INLINE_LIMIT else ""
-
-            bot.answer_inline_query(
-                inline_query.id,
-                results,
-                cache_time=0,
-                is_personal=True,
-                next_offset=next_offset
-            )
-            return
-
-        # =========================
-        # سرچ داخل کپشن
-        # =========================
-        cursor = (
-            videos_col
-            .find({
-                "caption": {
-                    "$regex": query_text,
-                    "$options": "i"
-                }
-            })
-            .sort("_id", 1)  # قدیمی → جدید
-            .skip(offset)
-            .limit(INLINE_LIMIT)
-        )
-
-        count = 0
-
-        for idx, video in enumerate(cursor):
-
-            caption = video.get("caption", "")
-            clean_caption = caption.replace("\n", " ")
-
-            results.append(
-                types.InlineQueryResultCachedVideo(
-                    id=f"video_search_{offset}_{idx}",
-                    video_file_id=video["file_id"],
-                    title=clean_caption[:50],
-                    description=clean_caption[:100],
-                    caption=caption
-                )
-            )
-
-            count += 1
-
-        next_offset = str(offset + INLINE_LIMIT) if count == INLINE_LIMIT else ""
-
-        bot.answer_inline_query(
-            inline_query.id,
-            results,
-            cache_time=0,
-            is_personal=True,
-            next_offset=next_offset
-        )
-
-    except Exception as e:
-        print("Inline error:", e)
-
-        bot.answer_inline_query(
-            inline_query.id,
-            [],
-            cache_time=0
-        )
+    except Exception as e:  
+        print("Inline error:", e)  
+        bot.answer_inline_query(inline_query.id, [], cache_time=0)
 # =======================
 # /add
 @bot.message_handler(commands=["add", f"add@{BOT_USERNAME}"])
