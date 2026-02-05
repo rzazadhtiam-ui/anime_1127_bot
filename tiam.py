@@ -1,143 +1,169 @@
 import asyncio
 import os
 import re
+import tempfile
+import threading
+import requests
+import time
+
 from telethon import TelegramClient, events
 from telethon.errors import ChannelPrivateError, FloodWaitError
 from telethon.tl.types import PeerChannel
 from datetime import datetime
 import pytz
-import tempfile  # برای فایل موقت
 
-# ===============================
-# CONFIGURATION
-# ===============================
+from flask import Flask
+
+# ================= CONFIG =================
+
 API_ID = 24645053
-API_HASH = '88c0167b74a24fac0a85c26c1f6d1991'
-SESSION_NAME = 'selfbot'
+API_HASH = "88c0167b74a24fac0a85c26c1f6d1991"
+SESSION_NAME = "selfbot"
+
+SOURCE_CHAT = 6433381392  # جایی که لینک‌ها را می‌فرستی
 
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 
-# ===============================
-# UTILS
-# ===============================
+download_queue = asyncio.Queue()
+
+# ================= TIME =================
+
 def iran_time():
     return datetime.now(IRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-async def edit_status(msg, link, status, progress=0):
-    try:
-        await msg.edit(
-            f"لینک ویدئو: {link}\n"
-            f"وضعیت: {status}\n"
-            f"پیشرفت: {progress}%\n"
-            f"تاریخ: {iran_time()}"
-        )
-    except:
-        pass
+# ================= LINK PARSER =================
 
 def parse_link(link):
-    """
-    لینک پرایوت t.me/c/... یا عمومی t.me/username/... را پارس می‌کند
-    """
-    m_private = re.match(r'https://t.me/c/(\d+)/(\d+)', link)
+
+    m_private = re.match(r"https://t.me/c/(\d+)/(\d+)", link)
     if m_private:
-        return ('private', int(m_private.group(1)), int(m_private.group(2)))
-    m_public = re.match(r'https://t.me/([\w_]+)/(\d+)', link)
+        return ("private", int(m_private.group(1)), int(m_private.group(2)))
+
+    m_public = re.match(r"https://t.me/([\w_]+)/(\d+)", link)
     if m_public:
-        return ('public', m_public.group(1), int(m_public.group(2)))
+        return ("public", m_public.group(1), int(m_public.group(2)))
+
     return None, None, None
 
-async def forward_media(message, reply_to, link):
-    """
-    دانلود موقت فایل و آپلود به Saved Messages
-    """
-    media_type = 'unknown'
-    if message.video:
-        media_type = 'video'
-    elif message.photo:
-        media_type = 'photo'
-    elif message.voice:
-        media_type = 'voice'
-    elif message.document:
-        media_type = 'document'
+# ================= DOWNLOAD + SAVE =================
 
-    if media_type == 'unknown':
-        return None, "نوع مدیا پشتیبانی نمی‌شود"
+async def download_and_save(link):
 
-    # استفاده از tempfile برای فایل موقت
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        file_path = tmp_file.name
+    link_type, identifier, msg_id = parse_link(link)
 
-    try:
-        await message.download_media(
-            file=file_path,
-            progress_callback=lambda d, t: asyncio.create_task(
-                edit_status(reply_to, link, "در حال دانلود", int(d*100/t))
-            )
-        )
-    except Exception as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        return None, f"خطا در دانلود: {str(e)}"
-
-    try:
-        new_msg = await client.send_file(
-            'me',  # همیشه Saved Messages
-            file_path,
-            progress_callback=lambda d, t: asyncio.create_task(
-                edit_status(reply_to, link, "در حال آپلود", int(d*100/t))
-            )
-        )
-        os.remove(file_path)  # حذف فایل بعد از آپلود موفق
-        return new_msg.id, "عملیات انجام شد"
-    except Exception as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        return None, f"خطا در آپلود: {str(e)}"
-
-# ===============================
-# EVENT HANDLER
-# ===============================
-@client.on(events.NewMessage(pattern=r'^.save (.+)'))
-async def save_media(event):
-    link_text = event.pattern_match.group(1)
-    msg = event.message
-    await edit_status(msg, link_text, "در حال پردازش", 0)
-
-    link_type, identifier, msg_id = parse_link(link_text)
     if not identifier:
-        await edit_status(msg, link_text, "خطا: لینک نامعتبر", 0)
+        print("Invalid Link")
         return
 
     try:
-        if link_type == 'public':
+
+        if link_type == "public":
             entity = await client.get_entity(identifier)
         else:
             entity = await client.get_entity(PeerChannel(identifier))
 
-        target_msg = await client.get_messages(entity, ids=msg_id)
-        if not target_msg:
-            await edit_status(msg, link_text, "خطا: پیام پیدا نشد", 0)
+        message = await client.get_messages(entity, ids=msg_id)
+
+        if not message:
+            print("Message not found")
             return
 
-        new_msg_id, status_text = await forward_media(target_msg, msg, link_text)
-        if new_msg_id:
-            status_text += f"\nID پیام جدید در Saved Messages: {new_msg_id}"
-        await edit_status(msg, link_text, status_text, 100)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            file_path = tmp.name
+
+        print("Downloading:", link)
+
+        await message.download_media(file=file_path)
+
+        print("Uploading to Saved Messages")
+
+        await client.send_file("me", file_path)
+
+        os.remove(file_path)
+
+        print("Completed:", link)
+
+    except FloodWaitError as f:
+        print("FloodWait:", f.seconds)
+        await asyncio.sleep(f.seconds)
 
     except ChannelPrivateError:
-        await edit_status(msg, link_text, "خطا: کانال خصوصی یا دسترسی ندارید", 0)
-    except FloodWaitError as f:
-        await edit_status(msg, link_text, f"خطا: صبر کنید {f.seconds} ثانیه", 0)
-    except Exception as e:
-        await edit_status(msg, link_text, f"خطا: {str(e)}", 0)
+        print("No access to channel")
 
-# ===============================
-# MAIN
-# ===============================
-async def main():
+    except Exception as e:
+        print("Error:", e)
+
+# ================= QUEUE WORKER =================
+
+async def queue_worker():
+
+    while True:
+
+        link = await download_queue.get()
+
+        await download_and_save(link)
+
+        download_queue.task_done()
+
+# ================= READ LINKS =================
+
+@client.on(events.NewMessage(chats=SOURCE_CHAT))
+async def read_links(event):
+
+    text = event.raw_text
+
+    links = re.findall(r"https://t.me/\S+", text)
+
+    for link in links:
+        await download_queue.put(link)
+        print("Added to Queue:", link)
+
+# ================= FLASK KEEP ALIVE =================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "SelfBot Running"
+
+@app.route("/health")
+def health():
+    return "OK"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+# ================= AUTO PING =================
+
+def auto_ping():
+
+    while True:
+        try:
+            url = os.environ.get("RENDER_EXTERNAL_URL")
+            if url:
+                requests.get(url)
+        except:
+            pass
+
+        time.sleep(300)
+
+# ================= MAIN =================
+
+async def start_bot():
+
     await client.start()
-    print("Self Bot آماده است...")
+
+    print("SelfBot Started")
+
+    asyncio.create_task(queue_worker())
+
     await client.run_until_disconnected()
 
-asyncio.run(main())
+if __name__ == "__main__":
+
+    threading.Thread(target=run_flask).start()
+    threading.Thread(target=auto_ping).start()
+
+    asyncio.run(start_bot())
