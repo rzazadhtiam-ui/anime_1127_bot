@@ -159,65 +159,79 @@ def search_panel(message):
 #inline handler 
 @bot.inline_handler(func=lambda q: True)
 def inline_handler(inline_query):
+
     query_text = inline_query.query.strip().lower()
+    offset = int(inline_query.offset or 0)
+
+    LIMIT = 50   # محدودیت تلگرام (قابل تغییر نیست)
+
     results = []
-    added_ids = set()  # جلوگیری از تکراری‌ها
+    added_ids = set()
 
-    try:  
-        # ===== وقتی هیچی ننوشته =====  
-        if query_text == "":  
-            for idx, video in enumerate(videos_col.find().sort("upload_date", -1)):  # مرتب بر اساس تاریخ
-                file_id = video["file_id"]
-                if file_id in added_ids:
-                    continue
-                added_ids.add(file_id)
+    try:
 
-                caption = video.get("caption", "")  
-                results.append(  
-                    types.InlineQueryResultCachedVideo(  
-                        id=f"video_all_{idx}",  
-                        video_file_id=file_id,  
-                        title=caption.replace("\n", " ")[:50],  
-                        description=caption.replace("\n", " ")[:100],  
-                        caption=caption  
-                    )  
-                )  
+        # ======================
+        # ساخت query
+        # ======================
+        if query_text == "":
+            cursor = videos_col.find().sort("_id", -1)
+        else:
+            cursor = videos_col.find({
+                "caption": {
+                    "$regex": query_text,
+                    "$options": "i"
+                }
+            }).sort("_id", -1)
 
-        # ===== سرچ داخل کپشن =====  
-        else:  
-            cursor = videos_col.find({  
-                "caption": {  
-                    "$regex": query_text,  
-                    "$options": "i"  
-                }  
-            }).sort("upload_date", -1)  # مرتب بر اساس تاریخ
+        # ======================
+        # اعمال pagination
+        # ======================
+        cursor = cursor.skip(offset)
 
-            for idx, video in enumerate(cursor):  
-                file_id = video["file_id"]
-                if file_id in added_ids:
-                    continue
-                added_ids.add(file_id)
+        count = 0
+        index = offset
 
-                caption = video.get("caption", "")  
-                results.append(  
-                    types.InlineQueryResultCachedVideo(  
-                        id=f"video_search_{idx}",  
-                        video_file_id=file_id,  
-                        title=caption.replace("\n", " ")[:50],  
-                        description=caption.replace("\n", " ")[:100],  
-                        caption=caption  
-                    )  
-                )  
+        for video in cursor:
 
-        bot.answer_inline_query(  
-            inline_query.id,  
-            results,  
-            cache_time=0,  
-            is_personal=True  
-        )  
+            file_id = video.get("file_id")
+            if not file_id or file_id in added_ids:
+                continue
 
-    except Exception as e:  
-        print("Inline error:", e)  
+            added_ids.add(file_id)
+
+            caption = video.get("caption", "")
+
+            results.append(
+                types.InlineQueryResultCachedVideo(
+                    id=f"video_{index}",
+                    video_file_id=file_id,
+                    title=caption.replace("\n", " ")[:50] or "Video",
+                    description=caption.replace("\n", " ")[:100],
+                    caption=caption[:1024]
+                )
+            )
+
+            count += 1
+            index += 1
+
+            if count >= LIMIT:
+                break
+
+        # ======================
+        # offset بعدی
+        # ======================
+        next_offset = str(offset + count) if count == LIMIT else ""
+
+        bot.answer_inline_query(
+            inline_query.id,
+            results,
+            cache_time=0,
+            is_personal=True,
+            next_offset=next_offset
+        )
+
+    except Exception as e:
+        print("Inline error:", e)
         bot.answer_inline_query(inline_query.id, [], cache_time=0)
 # =======================
 # /add
