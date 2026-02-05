@@ -157,73 +157,118 @@ def search_panel(message):
 
 # =======================
 #inline handler 
+INLINE_LIMIT = 50  # محدودیت رسمی تلگرام
+
+
 @bot.inline_handler(func=lambda q: True)
 def inline_handler(inline_query):
+
     query_text = inline_query.query.strip().lower()
     results = []
 
     try:
-        # ===== وقتی هیچی ننوشته =====
+
+        # =========================
+        # Offset برای pagination
+        # =========================
+        offset = int(inline_query.offset) if inline_query.offset else 0
+
+        # =========================
+        # وقتی چیزی نوشته نشده
+        # =========================
         if query_text == "":
-            for idx, video in enumerate(videos_col.find()):
-                if idx >= 50:
-                    break
+
+            cursor = (
+                videos_col
+                .find()
+                .sort("_id", 1)  # قدیمی → جدید
+                .skip(offset)
+                .limit(INLINE_LIMIT)
+            )
+
+            count = 0
+
+            for idx, video in enumerate(cursor):
 
                 caption = video.get("caption", "")
+                clean_caption = caption.replace("\n", " ")
 
                 results.append(
                     types.InlineQueryResultCachedVideo(
-                        id=f"video_all_{idx}",
+                        id=f"video_all_{offset}_{idx}",
                         video_file_id=video["file_id"],
-                        title=caption.replace("\n", " ")[:50],
-                        description=caption.replace("\n", " ")[:100],
+                        title=clean_caption[:50],
+                        description=clean_caption[:100],
                         caption=caption
                     )
                 )
+
+                count += 1
+
+            next_offset = str(offset + INLINE_LIMIT) if count == INLINE_LIMIT else ""
 
             bot.answer_inline_query(
                 inline_query.id,
                 results,
                 cache_time=0,
-                is_personal=True
+                is_personal=True,
+                next_offset=next_offset
             )
             return
 
-        # ===== سرچ داخل کپشن =====
-        cursor = videos_col.find({
-            "caption": {
-                "$regex": query_text,
-                "$options": "i"
-            }
-        })
+        # =========================
+        # سرچ داخل کپشن
+        # =========================
+        cursor = (
+            videos_col
+            .find({
+                "caption": {
+                    "$regex": query_text,
+                    "$options": "i"
+                }
+            })
+            .sort("_id", 1)  # قدیمی → جدید
+            .skip(offset)
+            .limit(INLINE_LIMIT)
+        )
+
+        count = 0
 
         for idx, video in enumerate(cursor):
-            if idx >= 50:
-                break
 
             caption = video.get("caption", "")
+            clean_caption = caption.replace("\n", " ")
 
             results.append(
                 types.InlineQueryResultCachedVideo(
-                    id=f"video_search_{idx}",
+                    id=f"video_search_{offset}_{idx}",
                     video_file_id=video["file_id"],
-                    title=caption.replace("\n", " ")[:50],
-                    description=caption.replace("\n", " ")[:100],
+                    title=clean_caption[:50],
+                    description=clean_caption[:100],
                     caption=caption
                 )
             )
+
+            count += 1
+
+        next_offset = str(offset + INLINE_LIMIT) if count == INLINE_LIMIT else ""
 
         bot.answer_inline_query(
             inline_query.id,
             results,
             cache_time=0,
-            is_personal=True
+            is_personal=True,
+            next_offset=next_offset
         )
 
     except Exception as e:
         print("Inline error:", e)
-        bot.answer_inline_query(inline_query.id, [], cache_time=0)
 
+        bot.answer_inline_query(
+            inline_query.id,
+            [],
+            cache_time=0
+        )
 # =======================
 # /add
 @bot.message_handler(commands=["add", f"add@{BOT_USERNAME}"])
