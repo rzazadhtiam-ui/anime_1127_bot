@@ -13,7 +13,7 @@ API_ID = 24645053
 API_HASH = "88c0167b74a24fac0a85c26c1f6d1991"
 SESSION_NAME = "selfbot"
 
-OWNER_ID = 6433381392   # فقط این شخص اجازه استفاده دارد
+OWNER_ID = 8588914809   # فقط این شخص اجازه استفاده دارد
 
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 IRAN_TZ = pytz.timezone("Asia/Tehran")
