@@ -141,7 +141,7 @@ def auto_ping():
 
     while True:
         try:
-            url = os.environ.get("RENDER_EXTERNAL_URL")
+            url = os.environ.get("https://anime-1127-bot.onrender.com/")
             if url:
                 requests.get(url)
         except:
