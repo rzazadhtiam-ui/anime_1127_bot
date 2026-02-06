@@ -351,19 +351,16 @@ import string
 
 # =========================
 # CONFIG
+# =========================
 CONFIRM_ACCOUNT = 8588914809
-
-remove_all_sessions = {}   # state storage
-
+remove_all_sessions = {}  # state storage
 
 # =========================
-# ابزار ساخت کیبورد رندوم
-def random_keyboard(buttons):
-    random.shuffle(buttons)
-    markup = types.InlineKeyboardMarkup(row_width=2)
+# ابزار ساخت کیبورد ستونی (vertical)
+def vertical_keyboard(buttons):
+    markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     return markup
-
 
 # =========================
 # مرحله 1
@@ -381,17 +378,15 @@ def remove_all_panel(message):
     remove_all_sessions[uid] = {"step": 1}
 
     buttons = [
-        types.InlineKeyboardButton("no", callback_data="rm_no"),
-        types.InlineKeyboardButton("Nope, nevermind", callback_data="rm_no"),
-        types.InlineKeyboardButton("Yes, delete the all", callback_data="rm_yes_1")
+        types.InlineKeyboardButton("❌ لغو", callback_data="rm_no"),
+        types.InlineKeyboardButton("✅ حذف کامل", callback_data="rm_yes_1")
     ]
 
     bot.send_message(
         message.chat.id,
         "⚠️ هشدار حذف کامل دیتابیس\nآیا مطمئن هستی؟",
-        reply_markup=random_keyboard(buttons)
+        reply_markup=vertical_keyboard(buttons)
     )
-
 
 # =========================
 # مدیریت Callback ها
@@ -399,7 +394,6 @@ def remove_all_panel(message):
 def remove_all_callbacks(call):
 
     uid = call.from_user.id
-
     if uid != OWNER_ID:
         return
 
@@ -407,41 +401,38 @@ def remove_all_callbacks(call):
     if not session:
         return
 
-    # ---------- لغو ----------
-    if call.data == "rm_no":
+    # ---------- لغو فوری در هر مرحله ----------
+    if call.data in ["rm_no"]:
         remove_all_sessions.pop(uid, None)
         bot.edit_message_text("❌ عملیات لغو شد", call.message.chat.id, call.message.message_id)
         return
 
-
     # ---------- مرحله 2 ----------
     if call.data == "rm_yes_1":
-
         session["step"] = 2
+        remove_all_sessions[uid] = session
 
         buttons = [
-            types.InlineKeyboardButton("No!", callback_data="rm_no"),
-            types.InlineKeyboardButton("Hell no!", callback_data="rm_no"),
-            types.InlineKeyboardButton("Yes, I'm 100% sure!", callback_data="rm_yes_2")
+            types.InlineKeyboardButton("❌ لغو", callback_data="rm_no"),
+            types.InlineKeyboardButton("✅ مطمئنم، حذف شود", callback_data="rm_yes_2")
         ]
 
         bot.edit_message_text(
-            "⚠️ تأیید دوم\nکاملاً مطمئنی؟",
+            "⚠️ تأیید دوم\nآیا کاملاً مطمئن هستی؟",
             call.message.chat.id,
             call.message.message_id,
-            reply_markup=random_keyboard(buttons)
+            reply_markup=vertical_keyboard(buttons)
         )
         return
 
-
-    # ---------- مرحله 3 (ارسال کد) ----------
-    if call.data == "rm_yes_2":
+    # ---------- مرحله 3 (ارسال کد به اکانت امنیتی) ----------
+    if call.data == "rm_yes_2" and session.get("step") == 2:
 
         code = "".join(random.choices(string.digits, k=6))
-
         session["step"] = 3
         session["code"] = code
         session["name"] = call.from_user.first_name
+        remove_all_sessions[uid] = session
 
         # ارسال کد به اکانت امنیتی
         bot.send_message(
@@ -454,7 +445,6 @@ def remove_all_callbacks(call):
             call.message.chat.id,
             call.message.message_id
         )
-
 
 # =========================
 # دریافت کد تأیید
