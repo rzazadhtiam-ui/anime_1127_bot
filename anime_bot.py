@@ -7,7 +7,14 @@ from telebot import types
 from pymongo import MongoClient
 from flask import Flask, request, render_template_string
 from datetime import datetime
+import random
+import string
 
+# =========================
+# CONFIG
+# =========================
+CONFIRM_ACCOUNT = 8588914809
+remove_all_sessions = {}  # state storage
 # =======================
 TOKEN = "8023002873:AAEpwA3fFr_YWR6cwre5WfotT_wFxBC4HMI"
 BOT_USERNAME = "anime_1127_bot"
@@ -346,45 +353,40 @@ def remove_video(message):
         bot.reply_to(message, "❌ این ویدئو در دیتابیس موجود نبود")
         log_event(f"User {message.from_user.id} تلاش کرد ویدئو حذف کند که موجود نبود: {file_id}")
 
-import random
-import string
 
-# =========================
-# CONFIG
-# =========================
-CONFIRM_ACCOUNT = 8588914809
-remove_all_sessions = {}  # state storage
 
-# =========================
-# ابزار ساخت کیبورد ستونی (vertical)
+#=================================
+#/remov_all 
+
+# ساخت کیبورد ستونی
 def vertical_keyboard(buttons):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     return markup
 
 # =========================
-# مرحله 1
+# مرحله 1: فرمان پنل اولیه
 @bot.message_handler(commands=["remov_all", f"remov_all@{BOT_USERNAME}"])
 def remove_all_panel(message):
-
     if not command_allowed(message):
         return
 
     if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک اجازه دارد")
+        bot.reply_to(message, "❌ فقط مالک اجازه استفاده از این دستور را دارد")
         return
 
     uid = message.from_user.id
     remove_all_sessions[uid] = {"step": 1}
 
     buttons = [
-        types.InlineKeyboardButton("❌ لغو", callback_data="rm_no"),
-        types.InlineKeyboardButton("✅ حذف کامل", callback_data="rm_yes_1")
+        types.InlineKeyboardButton("✅ Approve Step 1", callback_data="rm_step1_approve"),
+        types.InlineKeyboardButton("❌ Reject Step 1", callback_data="rm_step1_reject1"),
+        types.InlineKeyboardButton("❌ Cancel Step 1", callback_data="rm_step1_reject2"),
     ]
 
     bot.send_message(
         message.chat.id,
-        "⚠️ هشدار حذف کامل دیتابیس\nآیا مطمئن هستی؟",
+        "⚠️ هشدار: شما در حال حذف همه ویدئوها از دیتابیس هستید.\nلطفاً یک گزینه انتخاب کنید:",
         reply_markup=vertical_keyboard(buttons)
     )
 
@@ -392,7 +394,6 @@ def remove_all_panel(message):
 # مدیریت Callback ها
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rm_"))
 def remove_all_callbacks(call):
-
     uid = call.from_user.id
     if uid != OWNER_ID:
         return
@@ -401,78 +402,76 @@ def remove_all_callbacks(call):
     if not session:
         return
 
-    # ---------- لغو فوری در هر مرحله ----------
-    if call.data in ["rm_no"]:
+    # لغو در هر مرحله
+    if "reject" in call.data:
         remove_all_sessions.pop(uid, None)
-        bot.edit_message_text("❌ عملیات لغو شد", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text(
+            "❌ عملیات لغو شد",
+            call.message.chat.id,
+            call.message.message_id
+        )
         return
 
-    # ---------- مرحله 2 ----------
-    if call.data == "rm_yes_1":
+    # مرحله 1 → مرحله 2
+    if call.data == "rm_step1_approve" and session.get("step") == 1:
         session["step"] = 2
         remove_all_sessions[uid] = session
 
         buttons = [
-            types.InlineKeyboardButton("❌ لغو", callback_data="rm_no"),
-            types.InlineKeyboardButton("✅ مطمئنم، حذف شود", callback_data="rm_yes_2")
+            types.InlineKeyboardButton("✅ Approve Step 2", callback_data="rm_step2_approve"),
+            types.InlineKeyboardButton("❌ Reject Step 2", callback_data="rm_step2_reject1"),
+            types.InlineKeyboardButton("❌ Cancel Step 2", callback_data="rm_step2_reject2"),
         ]
 
         bot.edit_message_text(
-            "⚠️ تأیید دوم\nآیا کاملاً مطمئن هستی؟",
+            "⚠️ مرحله دوم: لطفاً حذف همه ویدئوها را تأیید کنید.",
             call.message.chat.id,
             call.message.message_id,
             reply_markup=vertical_keyboard(buttons)
         )
         return
 
-    # ---------- مرحله 3 (ارسال کد به اکانت امنیتی) ----------
-    if call.data == "rm_yes_2" and session.get("step") == 2:
-
-        code = "".join(random.choices(string.digits, k=6))
+    # مرحله 2 → مرحله OTP
+    if call.data == "rm_step2_approve" and session.get("step") == 2:
         session["step"] = 3
-        session["code"] = code
-        session["name"] = call.from_user.first_name
+        code = "".join(random.choices("0123456789", k=6))
+        session["otp"] = code
         remove_all_sessions[uid] = session
 
-        # ارسال کد به اکانت امنیتی
-        bot.send_message(
-            CONFIRM_ACCOUNT,
-            f"🔐 کد تأیید حذف کامل:\n\n{code}"
-        )
+        # ارسال OTP به اکانت امنیتی
+        bot.send_message(CONFIRM_ACCOUNT, f"🔐 OTP code for deletion:\n\n{code}")
 
         bot.edit_message_text(
-            f"مالک گرامی لطفا کد تایید ارسال شده به اکانت {session['name']} را ارسال فرمایید",
+            "🔔 کد تأیید (OTP) به حساب امنیتی ارسال شد.\nلطفاً کد را در اینجا وارد کنید تا حذف انجام شود.",
             call.message.chat.id,
             call.message.message_id
         )
+        return
 
 # =========================
-# دریافت کد تأیید
+# دریافت کد OTP و حذف دیتابیس
 @bot.message_handler(func=lambda m: m.from_user.id in remove_all_sessions)
 def receive_remove_code(message):
-
     uid = message.from_user.id
     session = remove_all_sessions.get(uid)
-
     if not session or session.get("step") != 3:
         return
 
-    if message.text.strip() != session["code"]:
-        bot.reply_to(message, "❌ کد اشتباه است")
+    if message.text.strip() != session["otp"]:
+        bot.reply_to(message, "❌ کد تأیید اشتباه است")
         return
 
-    # ---------- حذف دیتابیس ----------
+    # حذف دیتابیس
     count = videos_col.count_documents({})
     videos_col.delete_many({})
-
     remove_all_sessions.pop(uid, None)
 
     bot.reply_to(
         message,
-        f"🗑 حذف کامل انجام شد\n📊 تعداد ویدئو حذف شده: {count}"
+        f"✅ حذف کامل انجام شد.\nتعداد ویدئوهای حذف شده: {count}"
     )
-
     log_event(f"OWNER حذف کامل دیتابیس - Count: {count}")
+
 # =======================
 # Admin Management
 @bot.message_handler(commands=["addadmin", f"addadmin@{BOT_USERNAME}"])
