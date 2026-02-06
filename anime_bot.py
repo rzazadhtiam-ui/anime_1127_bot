@@ -698,9 +698,9 @@ def handle_next_message(message):
 
     # echo
     elif data["action"] == "echo":
-    success = 0
-    fail = 0
-    all_chats = set()
+        success = 0
+        fail = 0
+        all_chats = set()
 
     # جمع‌آوری همه کاربران و گروه‌ها
     for item in users_col.find():
@@ -798,42 +798,78 @@ def auto_save_videos(message):
         print("Auto Save Error:", e)
         traceback.print_exc()
 # =======================
-# Keep-alive
+# Keep-alive (Professional Version)
+
+KEEP_ALIVE_URLS = [
+    "https://anime-1127-bot-1.onrender.com/",
+    "https://anime-1127-bot-3.onrender.com/"
+]
+
+KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
+
+def ping_site(url):
+    try:
+        res = requests.get(url, timeout=10)
+
+        if res.status_code == 200:
+            log_event(f"Keep-alive SUCCESS -> {url}")
+        else:
+            log_event(f"Keep-alive WARNING -> {url} | Status: {res.status_code}")
+
+    except Exception as e:
+        log_event(f"Keep-alive ERROR -> {url} | {e}")
+
+
 def keep_alive_loop():
     global keep_alive_running
+
     while keep_alive_running:
-        try:
-            requests.get("https://anime-1127-bot-1.onrender.com/")
-            log_event("Keep-alive ping successful")
-        except Exception as e:
-            log_event(f"Keep-alive error: {e}")
-        time.sleep(300)
+
+        for url in KEEP_ALIVE_URLS:
+            ping_site(url)
+
+        time.sleep(KEEP_ALIVE_INTERVAL)
+
 
 @bot.message_handler(commands=["awake", f"awake@{BOT_USERNAME}"])
 def awake_bot(message):
     if not command_allowed(message):
         return
-    if not force_join_required(message):
-        return
+
     global keep_alive_running
-    if message.from_user.id != OWNER_ID: return
-    if keep_alive_running:
-        bot.reply_to(message, "ربات از قبل بیداره 👁")
+
+    if message.from_user.id != OWNER_ID:
         return
+
+    if keep_alive_running:
+        bot.reply_to(message, "ربات قبلاً در حالت بیدار نگه داشتن است 👁")
+        return
+
     keep_alive_running = True
-    threading.Thread(target=keep_alive_loop, daemon=True).start()
-    bot.reply_to(message, "ربات بیدار نگه داشته میشه 🔥")
+
+    threading.Thread(
+        target=keep_alive_loop,
+        daemon=True
+    ).start()
+
+    bot.reply_to(message, "سیستم Keep-Alive فعال شد 🔥")
+
 
 @bot.message_handler(commands=["sleep", f"sleep@{BOT_USERNAME}"])
 def sleep_bot(message):
     if not command_allowed(message):
         return
-    if not force_join_required(message):
-        return
+
     global keep_alive_running
-    if message.from_user.id != OWNER_ID: return
+
+    if message.from_user.id != OWNER_ID:
+        return
+
     keep_alive_running = False
-    bot.reply_to(message, "حالت نگه‌دارنده خاموش شد 😴")
+
+    bot.reply_to(message, "سیستم Keep-Alive خاموش شد 😴")
+
+
 
 # =======================
 # Flask App
