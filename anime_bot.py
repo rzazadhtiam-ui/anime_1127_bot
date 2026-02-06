@@ -235,31 +235,92 @@ def inline_handler(inline_query):
         bot.answer_inline_query(inline_query.id, [], cache_time=0)
 # =======================
 # /add
+def get_video_data(message):
+    try:
+        # اگر ویدئو معمولی باشد
+        if message.video:
+            return (
+                message.video.file_id,
+                message.video.file_unique_id
+            )
+
+        # اگر ویدئو به صورت document ارسال شده باشد
+        if message.document:
+            if message.document.mime_type and message.document.mime_type.startswith("video/"):
+                return (
+                    message.document.file_id,
+                    message.document.file_unique_id
+                )
+    except Exception as e:
+        print("Video detect error:", e)
+
+    return None, None
+
+
 @bot.message_handler(commands=["add", f"add@{BOT_USERNAME}"])
 def add_video_cmd(message):
+
     if not command_allowed(message):
         return
-    if not is_admin(message.from_user.id):
-        bot.reply_to(message, "❌ فقط ادمین ها اجازه اد کردن دارند")
-        log_event(f"User {message.from_user.id} تلاش برای add ویدئو بدون دسترسی")
+
+    user_id = message.from_user.id
+
+    # بررسی دسترسی ادمین
+    if not is_admin(user_id):
+        bot.reply_to(message, "❌ فقط ادمین‌ها اجازه اضافه کردن ویدئو دارند")
+        log_event(f"User {user_id} تلاش add بدون دسترسی")
         return
+
+    # بررسی ریپلای
     if not message.reply_to_message:
-        bot.reply_to(message, "روی ویدئو ریپلای کن")
-        log_event(f"User {message.from_user.id} دستور add داد بدون ریپلای")
+        bot.reply_to(message, "❌ روی ویدئو ریپلای کن")
+        log_event(f"User {user_id} دستور add بدون ریپلای")
         return
 
-    file_id = get_video_file_id(message.reply_to_message)
-    if not file_id or videos_col.find_one({"file_id": file_id}):
-        bot.reply_to(message, "قبلاً ذخیره شده یا ویدئو نیست")
-        log_event(f"User {message.from_user.id} تلاش کرد ویدئو add کند که قبلاً ذخیره شده یا ویدئو نیست")
+    # دریافت اطلاعات ویدئو
+    file_id, unique_id = get_video_data(message.reply_to_message)
+
+    if not file_id:
+        bot.reply_to(message, "❌ فایل ویدئو نیست")
         return
 
+    # جلوگیری از ذخیره تکراری
+    if videos_col.find_one({"unique_id": unique_id}):
+        bot.reply_to(message, "⚠️ این ویدئو قبلاً ذخیره شده")
+        log_event(f"Duplicate video blocked by {user_id}")
+        return
+
+    # گرفتن کپشن
     caption = message.reply_to_message.caption or "ویدئو بدون متن"
-    videos_col.insert_one({"file_id": file_id, "caption": caption})
-    bot.reply_to(message, "ویدئو اضافه شد ✅")
-    bot.send_video(OWNER_ID, file_id, caption=caption, disable_notification=True)
-    log_event(f"User {message.from_user.id} ویدئو اضافه کرد: {caption}")
 
+    # ذخیره در دیتابیس
+    try:
+        videos_col.insert_one({
+            "file_id": file_id,
+            "unique_id": unique_id,
+            "caption": caption,
+            "added_by": user_id,
+            "added_time": datetime.now()
+        })
+
+        bot.reply_to(message, "✅ ویدئو با موفقیت اضافه شد")
+
+        # ارسال برای مالک جهت بکاپ
+        try:
+            bot.send_video(
+                OWNER_ID,
+                file_id,
+                caption=f"📥 ویدئو جدید اضافه شد:\n\n{caption}",
+                disable_notification=True
+            )
+        except:
+            pass
+
+        log_event(f"Video added by {user_id}: {caption}")
+
+    except Exception as e:
+        bot.reply_to(message, "❌ خطا در ذخیره ویدئو")
+        log_event(f"Add video DB error: {e}")
 # /remov
 @bot.message_handler(commands=["remov", f"remov@{BOT_USERNAME}"])
 def remove_video(message):
@@ -285,6 +346,143 @@ def remove_video(message):
         bot.reply_to(message, "❌ این ویدئو در دیتابیس موجود نبود")
         log_event(f"User {message.from_user.id} تلاش کرد ویدئو حذف کند که موجود نبود: {file_id}")
 
+import random
+import string
+
+# =========================
+# CONFIG
+CONFIRM_ACCOUNT = 8588914809
+
+remove_all_sessions = {}   # state storage
+
+
+# =========================
+# ابزار ساخت کیبورد رندوم
+def random_keyboard(buttons):
+    random.shuffle(buttons)
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(*buttons)
+    return markup
+
+
+# =========================
+# مرحله 1
+@bot.message_handler(commands=["remov_all", f"remov_all@{BOT_USERNAME}"])
+def remove_all_panel(message):
+
+    if not command_allowed(message):
+        return
+
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک اجازه دارد")
+        return
+
+    uid = message.from_user.id
+    remove_all_sessions[uid] = {"step": 1}
+
+    buttons = [
+        types.InlineKeyboardButton("no", callback_data="rm_no"),
+        types.InlineKeyboardButton("Nope, nevermind", callback_data="rm_no"),
+        types.InlineKeyboardButton("Yes, delete the all", callback_data="rm_yes_1")
+    ]
+
+    bot.send_message(
+        message.chat.id,
+        "⚠️ هشدار حذف کامل دیتابیس\nآیا مطمئن هستی؟",
+        reply_markup=random_keyboard(buttons)
+    )
+
+
+# =========================
+# مدیریت Callback ها
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rm_"))
+def remove_all_callbacks(call):
+
+    uid = call.from_user.id
+
+    if uid != OWNER_ID:
+        return
+
+    session = remove_all_sessions.get(uid)
+    if not session:
+        return
+
+    # ---------- لغو ----------
+    if call.data == "rm_no":
+        remove_all_sessions.pop(uid, None)
+        bot.edit_message_text("❌ عملیات لغو شد", call.message.chat.id, call.message.message_id)
+        return
+
+
+    # ---------- مرحله 2 ----------
+    if call.data == "rm_yes_1":
+
+        session["step"] = 2
+
+        buttons = [
+            types.InlineKeyboardButton("No!", callback_data="rm_no"),
+            types.InlineKeyboardButton("Hell no!", callback_data="rm_no"),
+            types.InlineKeyboardButton("Yes, I'm 100% sure!", callback_data="rm_yes_2")
+        ]
+
+        bot.edit_message_text(
+            "⚠️ تأیید دوم\nکاملاً مطمئنی؟",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=random_keyboard(buttons)
+        )
+        return
+
+
+    # ---------- مرحله 3 (ارسال کد) ----------
+    if call.data == "rm_yes_2":
+
+        code = "".join(random.choices(string.digits, k=6))
+
+        session["step"] = 3
+        session["code"] = code
+        session["name"] = call.from_user.first_name
+
+        # ارسال کد به اکانت امنیتی
+        bot.send_message(
+            CONFIRM_ACCOUNT,
+            f"🔐 کد تأیید حذف کامل:\n\n{code}"
+        )
+
+        bot.edit_message_text(
+            f"مالک گرامی لطفا کد تایید ارسال شده به اکانت {session['name']} را ارسال فرمایید",
+            call.message.chat.id,
+            call.message.message_id
+        )
+
+
+# =========================
+# دریافت کد تأیید
+@bot.message_handler(func=lambda m: m.from_user.id in remove_all_sessions)
+def receive_remove_code(message):
+
+    uid = message.from_user.id
+    session = remove_all_sessions.get(uid)
+
+    if not session or session.get("step") != 3:
+        return
+
+    if message.text.strip() != session["code"]:
+        bot.reply_to(message, "❌ کد اشتباه است")
+        return
+
+    # ---------- حذف دیتابیس ----------
+    count = videos_col.count_documents({})
+    videos_col.delete_many({})
+
+    remove_all_sessions.pop(uid, None)
+
+    bot.reply_to(
+        message,
+        f"🗑 حذف کامل انجام شد\n📊 تعداد ویدئو حذف شده: {count}"
+    )
+
+    log_event(f"OWNER حذف کامل دیتابیس - Count: {count}")
 # =======================
 # Admin Management
 @bot.message_handler(commands=["addadmin", f"addadmin@{BOT_USERNAME}"])
@@ -491,6 +689,47 @@ def handle_next_message(message):
             message,
             f"📊 آمار ارسال:\n✅ موفق: {success}\n❌ ناموفق: {fail}\n👥 کل مقصدها: {len(all_chats)}"
         )
+
+@bot.message_handler(content_types=["video", "document"])
+def auto_save_videos(message):
+    try:
+        # ---------- شرط 1 : کاربران مجاز ----------
+        allowed_user = message.from_user and message.from_user.id in ALLOWED_USERS
+
+        # ---------- شرط 2 : ارسال از کانال داخل گروه ----------
+        channel_forward = (
+            message.forward_from_chat
+            and message.forward_from_chat.username == CHANNEL_USERNAME
+        )
+
+        if not allowed_user and not channel_forward:
+            return
+
+        # دریافت file_id و unique_id
+        file_id, unique_id = get_video_data(message)
+        if not file_id:
+            return
+
+        # جلوگیری از ذخیره تکراری
+        if videos_col.find_one({"unique_id": unique_id}):
+            return
+
+        caption = message.caption or "Auto Saved Video"
+
+        videos_col.insert_one({
+            "file_id": file_id,
+            "unique_id": unique_id,
+            "caption": caption,
+            "auto_saved": True,
+            "time": datetime.utcnow()
+        })
+
+        log_event(f"Auto Saved Video: {caption}")
+
+    except Exception as e:
+        import traceback
+        print("Auto Save Error:", e)
+        traceback.print_exc()
 # =======================
 # Keep-alive
 def keep_alive_loop():
