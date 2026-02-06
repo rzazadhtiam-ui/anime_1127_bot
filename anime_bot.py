@@ -353,124 +353,159 @@ def remove_video(message):
         bot.reply_to(message, "❌ این ویدئو در دیتابیس موجود نبود")
         log_event(f"User {message.from_user.id} تلاش کرد ویدئو حذف کند که موجود نبود: {file_id}")
 
+# ================================
+# RANDOM SECURE REMOVE ALL
+# ================================
 
+REMOVE_OTP_EXPIRE = 120
+remove_all_sessions = {}
 
-#=================================
-#/remov_all 
-
-# ساخت کیبورد ستونی
-def vertical_keyboard(buttons):
+# ---------- Random Vertical Keyboard ----------
+def random_vertical_keyboard(buttons):
+    random.shuffle(buttons)
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     return markup
 
-# =========================
-# مرحله 1: فرمان پنل اولیه
+
+# ================================
+# START PANEL
 @bot.message_handler(commands=["remov_all", f"remov_all@{BOT_USERNAME}"])
-def remove_all_panel(message):
+def remove_all_start(message):
+
     if not command_allowed(message):
         return
 
     if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "❌ فقط مالک اجازه استفاده از این دستور را دارد")
         return
 
     uid = message.from_user.id
-    remove_all_sessions[uid] = {"step": 1}
+
+    remove_all_sessions[uid] = {
+        "step": 1
+    }
 
     buttons = [
-        types.InlineKeyboardButton("✅ Approve Step 1", callback_data="rm_step1_approve"),
-        types.InlineKeyboardButton("❌ Reject Step 1", callback_data="rm_step1_reject1"),
-        types.InlineKeyboardButton("❌ Cancel Step 1", callback_data="rm_step1_reject2"),
+        types.InlineKeyboardButton("No", callback_data="rm_cancel"),
+        types.InlineKeyboardButton("Nope, nevermind", callback_data="rm_cancel"),
+        types.InlineKeyboardButton("Yes, delet the all video", callback_data="rm_step1_yes")
     ]
 
     bot.send_message(
         message.chat.id,
-        "⚠️ هشدار: شما در حال حذف همه ویدئوها از دیتابیس هستید.\nلطفاً یک گزینه انتخاب کنید:",
-        reply_markup=vertical_keyboard(buttons)
+        "⚠️ WARNING\nDelete ALL videos?",
+        reply_markup=random_vertical_keyboard(buttons)
     )
 
-# =========================
-# مدیریت Callback ها
+
+# ================================
+# CALLBACK CONTROL
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rm_"))
-def remove_all_callbacks(call):
+def remove_all_callback(call):
+
     uid = call.from_user.id
+
+    # فقط OWNER
     if uid != OWNER_ID:
+        bot.answer_callback_query(call.id, "Access denied")
         return
 
     session = remove_all_sessions.get(uid)
     if not session:
+        bot.answer_callback_query(call.id, "Session expired")
         return
 
-    # لغو در هر مرحله
-    if "reject" in call.data:
+    # ---------- CANCEL ----------
+    if call.data == "rm_cancel":
+
         remove_all_sessions.pop(uid, None)
+
         bot.edit_message_text(
-            "❌ عملیات لغو شد",
+            "Cancelled",
             call.message.chat.id,
             call.message.message_id
         )
         return
 
-    # مرحله 1 → مرحله 2
-    if call.data == "rm_step1_approve" and session.get("step") == 1:
+    # ---------- PANEL 2 ----------
+    if call.data == "rm_step1_yes" and session["step"] == 1:
+
         session["step"] = 2
         remove_all_sessions[uid] = session
 
         buttons = [
-            types.InlineKeyboardButton("✅ Approve Step 2", callback_data="rm_step2_approve"),
-            types.InlineKeyboardButton("❌ Reject Step 2", callback_data="rm_step2_reject1"),
-            types.InlineKeyboardButton("❌ Cancel Step 2", callback_data="rm_step2_reject2"),
+            types.InlineKeyboardButton("No!", callback_data="rm_cancel"),
+            types.InlineKeyboardButton("Yes, I'm 100% sure!", callback_data="rm_step2_yes"),
+            types.InlineKeyboardButton("Hell no!", callback_data="rm_cancel")
         ]
 
         bot.edit_message_text(
-            "⚠️ مرحله دوم: لطفاً حذف همه ویدئوها را تأیید کنید.",
+            "⚠️ FINAL WARNING\nThis action is irreversible.",
             call.message.chat.id,
             call.message.message_id,
-            reply_markup=vertical_keyboard(buttons)
+            reply_markup=random_vertical_keyboard(buttons)
         )
         return
 
-    # مرحله 2 → مرحله OTP
-    if call.data == "rm_step2_approve" and session.get("step") == 2:
+    # ---------- OTP PANEL ----------
+    if call.data == "rm_step2_yes" and session["step"] == 2:
+
+        otp = "".join(random.choices(string.digits, k=6))
+
         session["step"] = 3
-        code = "".join(random.choices("0123456789", k=6))
-        session["otp"] = code
+        session["otp"] = otp
+        session["time"] = time.time()
+
         remove_all_sessions[uid] = session
 
-        # ارسال OTP به اکانت امنیتی
-        bot.send_message(CONFIRM_ACCOUNT, f"🔐 OTP code for deletion:\n\n{code}")
+        try:
+            bot.send_message(CONFIRM_ACCOUNT, f"OTP CODE:\n{otp}")
+        except:
+            bot.answer_callback_query(call.id, "OTP send failed")
+            return
 
         bot.edit_message_text(
-            "🔔 کد تأیید (OTP) به حساب امنیتی ارسال شد.\nلطفاً کد را در اینجا وارد کنید تا حذف انجام شود.",
+            "Enter OTP code:",
             call.message.chat.id,
             call.message.message_id
         )
-        return
 
-# =========================
-# دریافت کد OTP و حذف دیتابیس
-@bot.message_handler(func=lambda m: m.from_user.id in remove_all_sessions)
-def receive_remove_code(message):
+
+# ================================
+# OTP RECEIVE
+@bot.message_handler(func=lambda m:
+    m.from_user.id in remove_all_sessions and
+    remove_all_sessions[m.from_user.id].get("step") == 3
+)
+def remove_all_receive_otp(message):
+
     uid = message.from_user.id
     session = remove_all_sessions.get(uid)
-    if not session or session.get("step") != 3:
+
+    if not message.text or not message.text.isdigit():
         return
 
+    # expire check
+    if time.time() - session["time"] > REMOVE_OTP_EXPIRE:
+        remove_all_sessions.pop(uid, None)
+        bot.reply_to(message, "OTP expired")
+        return
+
+    # wrong otp
     if message.text.strip() != session["otp"]:
-        bot.reply_to(message, "❌ کد تأیید اشتباه است")
+        bot.reply_to(message, "Wrong OTP")
         return
 
-    # حذف دیتابیس
+    # delete videos
     count = videos_col.count_documents({})
     videos_col.delete_many({})
+
     remove_all_sessions.pop(uid, None)
 
-    bot.reply_to(
-        message,
-        f"✅ حذف کامل انجام شد.\nتعداد ویدئوهای حذف شده: {count}"
-    )
-    log_event(f"OWNER حذف کامل دیتابیس - Count: {count}")
+    bot.reply_to(message, f"All videos deleted\nCount: {count}")
+
+    log_event(f"OWNER removed ALL videos -> {count}")
+
 
 # =======================
 # Admin Management
