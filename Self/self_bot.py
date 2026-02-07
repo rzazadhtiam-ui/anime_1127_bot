@@ -73,6 +73,70 @@ def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+
+
+# ================================================================
+# ADVANCED SELF KEEP ALIVE (PRODUCTION SAFE)
+# ================================================================
+import aiohttp
+
+class SelfKeepAlive:
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.fail_count = 0
+        self.max_fail = 3
+
+        self.url = (
+            os.environ.get("RENDER_EXTERNAL_URL")
+            or os.environ.get("APP_URL")
+            or "http://localhost:5000"
+        )
+
+        # interval config (seconds)
+        self.normal_interval = 240     # 4 min
+        self.fail_interval = 60        # retry faster if fail
+
+    async def ping(self):
+        timeout = aiohttp.ClientTimeout(total=15)
+
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(self.url) as resp:
+                return resp.status
+
+    async def run(self):
+        await asyncio.sleep(15)  # wait full boot
+
+        self.logger.info(f"🌐 KeepAlive started -> {self.url}")
+
+        while True:
+            try:
+                status = await self.ping()
+
+                if status == 200:
+                    if self.fail_count > 0:
+                        self.logger.info("✅ KeepAlive recovered")
+
+                    self.fail_count = 0
+                    self.logger.info("🏓 KeepAlive OK")
+
+                    await asyncio.sleep(self.normal_interval)
+
+                else:
+                    raise Exception(f"Bad status {status}")
+
+            except Exception as e:
+                self.fail_count += 1
+
+                self.logger.warning(
+                    f"⚠️ KeepAlive failed ({self.fail_count}) -> {e}"
+                )
+
+                # adaptive retry
+                if self.fail_count >= self.max_fail:
+                    self.logger.error("🚨 KeepAlive multiple failures")
+
+                await asyncio.sleep(self.fail_interval)
 # ================================================================
 # DATABASE
 # ================================================================
@@ -213,9 +277,12 @@ async def session_watcher():
 # ================================================================
 async def main():
     logger.info("🚀 Self Nix Bot started")
+
     asyncio.create_task(session_watcher())
 
-    # never sleep loop
+    keep_alive = SelfKeepAlive(logger)
+    asyncio.create_task(keep_alive.run())
+
     while True:
         await asyncio.sleep(60)
 
