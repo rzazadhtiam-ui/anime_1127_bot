@@ -79,148 +79,169 @@ def command_allowed(message):
     return True
 
 # =========================
-# FORCE JOIN SYSTEM
+# FORCE JOIN SYSTEM - MongoDB Version
 # =========================
 
-FORCE_CHANNELS = [
-    ("anime_1127", "اوتاکوزون|Otakuzon"),
-    ("Otaghoz", "اوتاغوز|Otaghoz")
-]
-
+force_join_col = db["force_join"]  # کلکسیون برای کانال‌ها/گروه‌های اجباری
 
 # -------------------------
 # بررسی عضویت کاربر
 # -------------------------
 def check_user_joined(user_id):
-
-    for channel_username, _ in FORCE_CHANNELS:
+    force_channels = list(force_join_col.find())
+    for fc in force_channels:
+        chat_id = fc.get("chat_id")
         try:
-            member = bot.get_chat_member(f"@{channel_username}", user_id)
-
+            member = bot.get_chat_member(chat_id, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
-
         except Exception:
             return False
-
     return True
-
 
 # -------------------------
 # ارسال پیام عضویت اجباری
 # -------------------------
 def send_force_join(message):
-
+    force_channels = list(force_join_col.find())
     markup = types.InlineKeyboardMarkup()
+    for fc in force_channels:
+        title = fc.get("title") or "کانال/گروه"
+        username = fc.get("username")
+        url = f"https://t.me/{username}" if username else "https://t.me/c/{str(fc.get('chat_id'))[4:]}"
+        markup.add(types.InlineKeyboardButton(title, url=url))
 
-    # دکمه ورود به کانال‌ها
-    for channel_username, title in FORCE_CHANNELS:
-        markup.add(
-            types.InlineKeyboardButton(
-                title,
-                url=f"https://t.me/{channel_username}"
-            )
-        )
-
-    # دکمه تایید عضویت
-    markup.add(
-        types.InlineKeyboardButton(
-            "✅ تایید عضویت",
-            callback_data="check_join"
-        )
-    )
-
-    bot.reply_to(
-        message,
-        "کاربر گرامی برای استفاده از ربات لطفا در چنل‌های زیر عضو شوید 👇",
-        reply_markup=markup
-    )
-
+    markup.add(types.InlineKeyboardButton("✅ تایید عضویت", callback_data="check_join"))
+    bot.reply_to(message, "کاربر گرامی برای استفاده از ربات لطفا در کانال‌ها/گروه‌های زیر عضو شوید 👇", reply_markup=markup)
 
 # -------------------------
 # کنترل قبل از اجرای دستورات
 # -------------------------
 def force_join_required(message):
-
+    if message.chat.type == "private":
+        return True
     if not check_user_joined(message.from_user.id):
         send_force_join(message)
         return False
-
     return True
-
 
 # -------------------------
 # تایید عضویت (دکمه)
 # -------------------------
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def check_join_callback(call):
-
     user_id = call.from_user.id
-
     if check_user_joined(user_id):
-
         bot.answer_callback_query(call.id, "عضویت تایید شد ✅")
-
-        bot.edit_message_text(
-            "✅ عضویت شما تایید شد. حالا می‌توانید از ربات استفاده کنید.",
-            call.message.chat.id,
-            call.message.message_id
-        )
-
+        bot.edit_message_text("✅ عضویت شما تایید شد. حالا می‌توانید از ربات استفاده کنید.",
+                              call.message.chat.id, call.message.message_id)
     else:
-        bot.answer_callback_query(
-            call.id,
-            "❌ هنوز عضو همه کانال‌ها نشدی",
-            show_alert=True
-)
+        bot.answer_callback_query(call.id, "❌ هنوز عضو همه کانال‌ها/گروه‌ها نشدی", show_alert=True)
 
-# ======================
-#/start
-users_col = db["users"]
-
-@bot.message_handler(commands=["start", f"start@{BOT_USERNAME}"])
-def start_cmd(message):
+# -------------------------
+# /id - نمایش لیست کانال‌ها و گروه‌های اجباری
+# -------------------------
+@bot.message_handler(commands=["id", f"id@{BOT_USERNAME}"])
+def show_force_join_ids(message):
     if not command_allowed(message):
         return
-    if not force_join_required(message):
+    if not is_admin(message.from_user.id):
+        bot.reply_to(message, "❌ فقط ادمین‌ها می‌توانند لیست را ببینند")
         return
-    
+    rows = []
+    for fc in force_join_col.find():
+        chat_id = fc.get("chat_id")
+        username = fc.get("username") or "None"
+        title = fc.get("title") or "None"
+        rows.append(f"{chat_id} | {username} | {title}")
+    if not rows:
+        bot.reply_to(message, "⚠️ هنوز کانال یا گروه اجباری اضافه نشده")
+    else:
+        bot.reply_to(message, "📌 کانال‌ها/گروه‌های اجباری:\n" + "\n".join(rows))
 
+# -------------------------
+# /add_force - اضافه کردن کانال/گروه اجباری
+# -------------------------
+@bot.message_handler(commands=["add_force", f"add_force@{BOT_USERNAME}"])
+def add_force_join(message):
+    if not command_allowed(message):
+        return
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک می‌تواند کانال/گروه اضافه کند")
+        return
+    try:
+        parts = message.text.split()
+        chat_id = int(parts[1])
+        username = parts[2] if len(parts) > 2 else None
+        title = " ".join(parts[3:]) if len(parts) > 3 else "None"
+        if force_join_col.find_one({"chat_id": chat_id}):
+            bot.reply_to(message, "⚠️ این کانال/گروه قبلاً اضافه شده")
+            return
+        force_join_col.insert_one({"chat_id": chat_id, "username": username, "title": title})
+        bot.reply_to(message, "✅ کانال/گروه اجباری اضافه شد")
+    except Exception as e:
+        bot.reply_to(message, f"❌ دستور اشتباه است\nفرمت: /add_force <chat_id> <username/None> <title>")
+
+# -------------------------
+# /remove_force - حذف کانال/گروه اجباری
+# -------------------------
+@bot.message_handler(commands=["remove_force", f"remove_force@{BOT_USERNAME}"])
+def remove_force_join(message):
+    if not command_allowed(message):
+        return
+    if message.from_user.id != OWNER_ID:
+        bot.reply_to(message, "❌ فقط مالک می‌تواند کانال/گروه حذف کند")
+        return
+    try:
+        chat_id = int(message.text.split()[1])
+        result = force_join_col.delete_one({"chat_id": chat_id})
+        if result.deleted_count:
+            bot.reply_to(message, "✅ کانال/گروه حذف شد")
+        else:
+            bot.reply_to(message, "❌ این کانال/گروه در لیست نبود")
+    except:
+        bot.reply_to(message, "❌ دستور اشتباه است\nفرمت: /remove_force <chat_id>")
+
+# ======================
+# Collection
+users_col = db["users"]
+
+# تابع ثبت کاربر یا گروه
+def register_user_or_group(message):
     chat = message.chat
     user = message.from_user
 
-    # ======================
-    # اگر پیوی باشد
-    # ======================
     if chat.type == "private":
-
         data = {
             "type": "user",
             "name": user.first_name or "None",
             "user_id": user.id,
             "user_name": user.username or "None"
         }
-
         if not users_col.find_one({"user_id": user.id}):
             users_col.insert_one(data)
 
-    # ======================
-    # اگر گروه یا سوپرگروه باشد
-    # ======================
     elif chat.type in ["group", "supergroup"]:
-
         data = {
             "type": "group",
             "group_id": chat.id,
             "group_title": chat.title or "None"
         }
-
         if not users_col.find_one({"group_id": chat.id}):
             users_col.insert_one(data)
 
-    # ======================
-    # پیام استارت
-    # ======================
+# ======================
+# /start
+@bot.message_handler(commands=["start", f"start@{BOT_USERNAME}"])
+def start_cmd(message):
+    if not command_allowed(message):
+        return
+    if not force_join_required(message):
+        return
+
+    # ذخیره کاربر یا گروه قبل از هر چیزی
+    register_user_or_group(message)
+
     text = (
         "👋 سلام، خوش اومدی به ربات anime_Bot!\n\n"
         "🎬 این ربات مخصوص دیدن ادیت‌های فیلم، بازی و انیمه‌ست.\n"
@@ -237,6 +258,7 @@ def start_cmd(message):
 
     bot.reply_to(message, text, reply_markup=markup)
 
+
 # /help
 @bot.message_handler(commands=["help", f"help@{BOT_USERNAME}"])
 def help_cmd(message):
@@ -244,6 +266,8 @@ def help_cmd(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     text = (
         "راهنما ربات:\n\n"
         "🎬 مخصوص دیدن ادیت‌های فیلم، بازی و انیمه‌ست.\n\n"
@@ -263,6 +287,8 @@ def search_panel(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("پنل جستجو", switch_inline_query_current_chat=""))
     bot.reply_to(message, "برای جستجو روی دکمه زیر بزن:", reply_markup=markup)
@@ -376,6 +402,8 @@ def add_video_cmd(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
 
     user_id = message.from_user.id
 
@@ -448,6 +476,7 @@ def remove_video(message):
     if not message.reply_to_message:
         bot.reply_to(message, "❌ روی ویدئو ریپلای کن تا حذف شود")
         return
+    register_user_or_group(message)
 
     file_id = get_video_file_id(message.reply_to_message)
     if not file_id:
@@ -511,10 +540,13 @@ def add_admin(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ شما اجازه اضافه کردن ادمین را ندارید")
         log_event(f"User {message.from_user.id} تلاش برای اضافه کردن ادمین بدون دسترسی")
         return
+     
     try:
         uid = int(message.text.split()[1])
         if not admins_col.find_one({"user_id": uid}):
@@ -534,6 +566,8 @@ def remove_admin(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     if message.from_user.id != OWNER_ID:
         bot.reply_to(message, "❌ شما دستر رسی حذف ادمین را ندارید")
         log_event(f"User {message.from_user.id} تلاش برای حذف ادمین بدون دسترسی")
@@ -553,6 +587,8 @@ def admin_list_cmd(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     if not is_admin(message.from_user.id):
         bot.reply_to(message, "❌ فقط مالک و ادمین‌ها اجازه دیدن لیست ادمین‌ها را دارند")
         return
@@ -583,6 +619,8 @@ def send_request_cmd(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
+    
     uid = message.from_user.id
 
     if message.chat.type != "private":
@@ -614,6 +652,7 @@ def echo_cmd(message):
         return
     if not force_join_required(message):
         return
+    register_user_or_group(message)
 
     uid = message.from_user.id
 
@@ -646,7 +685,19 @@ def echo_cmd(message):
 
 # =======================
 # Handler واحد برای پیام بعدی
-@bot.message_handler(func=lambda m: m.from_user.id in user_next_message)
+@bot.message_handler(
+    func=lambda m: m.from_user.id in user_next_message,
+    content_types=[
+        "text",
+        "photo",
+        "video",
+        "document",
+        "animation",
+        "voice",
+        "video_note",
+        "sticker"
+    ]
+)
 def handle_next_message(message):
     uid = message.from_user.id
     data = user_next_message.pop(uid, None)
@@ -702,59 +753,69 @@ def handle_next_message(message):
         fail = 0
         all_chats = set()
 
-    # جمع‌آوری همه کاربران و گروه‌ها
-    for item in users_col.find():
-        if item.get("type") == "user":
-            all_chats.add(item["user_id"])
-        elif item.get("type") == "group":
-            all_chats.add(item["group_id"])
+        # جمع‌آوری کاربران و گروه‌ها
+        for item in users_col.find():
+            if item.get("type") == "user":
+                all_chats.add(item["user_id"])
+            elif item.get("type") == "group":
+                all_chats.add(item["group_id"])
 
-    # اضافه کردن مالک
-    all_chats.add(OWNER_ID)
+        # اضافه کردن مالک
+        all_chats.add(OWNER_ID)
 
-    # تابع عمومی برای ارسال پیام
-    def send_content(cid, message):
-        ct = message.content_type
-        caption = getattr(message, "caption", "") or ""
+        # تابع ارسال محتوا
+        def send_content(cid, message):
+            ct = message.content_type
+            caption = getattr(message, "caption", "") or ""
 
-        try:
-            if ct == "text":
-                bot.send_message(cid, message.text)
-            elif ct == "photo":
-                bot.send_photo(cid, message.photo[-1].file_id, caption=caption)
-            elif ct == "video":
-                bot.send_video(cid, message.video.file_id, caption=caption)
-            elif ct == "document":
-                bot.send_document(cid, message.document.file_id, caption=caption)
-            elif ct == "animation":
-                bot.send_animation(cid, message.animation.file_id, caption=caption)
-            elif ct == "voice":
-                bot.send_voice(cid, message.voice.file_id)
-            elif ct == "video_note":
-                bot.send_video_note(cid, message.video_note.file_id)
-            elif ct == "sticker":
-                bot.send_sticker(cid, message.sticker.file_id)
-            else:
+            try:
+                if ct == "text":
+                    bot.send_message(cid, message.text)
+
+                elif ct == "photo":
+                    bot.send_photo(cid, message.photo[-1].file_id, caption=caption)
+
+                elif ct == "video":
+                    bot.send_video(cid, message.video.file_id, caption=caption)
+
+                elif ct == "document":
+                    bot.send_document(cid, message.document.file_id, caption=caption)
+
+                elif ct == "animation":
+                    bot.send_animation(cid, message.animation.file_id, caption=caption)
+
+                elif ct == "voice":
+                    bot.send_voice(cid, message.voice.file_id)
+
+                elif ct == "video_note":
+                    bot.send_video_note(cid, message.video_note.file_id)
+
+                elif ct == "sticker":
+                    bot.send_sticker(cid, message.sticker.file_id)
+
+                else:
+                    return False
+
+                return True
+
+            except Exception as e:
+                print(f"Echo send error to {cid}: {e}")
                 return False
-            return True
-        except Exception as e:
-            print(f"Echo send error to {cid}: {e}")
-            return False
 
-    # ارسال به همه چت‌ها
-    for cid in all_chats:
-        if send_content(cid, message):
-            success += 1
-        else:
-            fail += 1
-            # حذف چت خراب از دیتابیس
-            users_col.delete_one({"$or": [{"user_id": cid}, {"group_id": cid}]})
+        # ارسال به همه
+        for cid in all_chats:
+            if send_content(cid, message):
+                success += 1
+            else:
+                fail += 1
+                users_col.delete_one({"$or": [{"user_id": cid}, {"group_id": cid}]})
 
-    # گزارش به کاربر ادمین
-    bot.reply_to(
-        message,
-        f"📊 آمار ارسال:\n✅ موفق: {success}\n❌ ناموفق: {fail}\n👥 کل مقصدها: {len(all_chats)}"
-    )
+            time.sleep(0.05)
+
+        bot.reply_to(
+            message,
+            f"📊 آمار ارسال:\n✅ موفق: {success}\n❌ ناموفق: {fail}\n👥 کل مقصدها: {len(all_chats)}"
+        )
     
 
 @bot.message_handler(content_types=["video", "document"])
