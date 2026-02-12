@@ -1,9 +1,10 @@
 # ================================================================
 # Telegram Session Builder - Flask + Telethon + MongoDB
-# Only for creating sessions
+# Self-ping every 4 minutes to stay alive
 # By: Tiam
 # ================================================================
 
+import os
 import asyncio
 import threading
 from flask import Flask, request, jsonify
@@ -12,6 +13,8 @@ from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from datetime import datetime
+import requests
+import time
 
 # ================= CONFIG =================
 API_ID = 24645053
@@ -50,29 +53,32 @@ def run_async(coro):
 # ================= Clients =================
 clients = {}  # phone: TelegramClient
 
-# ================= API ROUTES =================
+# ================= Routes =================
+@app.route("/", methods=["GET"])
+def home():
+    return "Server is running", 200
 
-# 1 - ارسال شماره برای OTP
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({"status":"ok","message":"alive"})
+
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
     phone = request.json.get("phone")
     if not phone:
         return jsonify({"status":"error","message":"شماره وارد نشده"})
-    
     async def task():
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
         await client.send_code_request(phone)
         clients[phone] = client
         return True
-
     try:
         run_async(task())
         return jsonify({"status":"ok","message":"کد OTP ارسال شد"})
     except Exception as e:
         return jsonify({"status":"error","message":str(e)})
 
-# 2 - ارسال کد OTP
 @app.route("/send_code", methods=["POST"])
 def send_code():
     data = request.json
@@ -81,12 +87,10 @@ def send_code():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-    
     async def task():
         try:
             await client.sign_in(phone=phone, code=code)
             session_str = client.session.save()
-            # ذخیره در MongoDB فقط
             doc = {
                 "phone": phone,
                 "created_at": datetime.utcnow(),
@@ -101,10 +105,8 @@ def send_code():
             return {"status":"error","message":"کد OTP اشتباه است"}
         except Exception as e:
             return {"status":"error","message":str(e)}
-
     return jsonify(run_async(task()))
 
-# 3 - ارسال 2FA (در صورت نیاز)
 @app.route("/send_2fa", methods=["POST"])
 def send_2fa():
     data = request.json
@@ -113,7 +115,6 @@ def send_2fa():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-    
     async def task():
         try:
             await client.sign_in(password=password)
@@ -128,10 +129,22 @@ def send_2fa():
             return {"status":"ok","message":"سشن ساخته شد و ورود کامل شد"}
         except Exception as e:
             return {"status":"error","message":str(e)}
-
     return jsonify(run_async(task()))
+
+# ================= Self Ping =================
+def self_ping(url):
+    while True:
+        try:
+            requests.get(url)
+        except:
+            pass
+        time.sleep(240)  # هر ۴ دقیقه یکبار
 
 # ================= RUN APP =================
 if __name__ == "__main__":
-    print("Server running on http://0.0.0.0:8000")
-    app.run(host="0.0.0.0", port=8000)
+    PORT = int(os.environ.get("PORT", 8000))
+    # شروع Thread خودپینگ
+    url = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{PORT}")
+    threading.Thread(target=self_ping, args=(url,), daemon=True).start()
+    print(f"Server running on {url}")
+    app.run(host="0.0.0.0", port=PORT)
