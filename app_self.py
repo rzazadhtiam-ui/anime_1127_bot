@@ -1,20 +1,21 @@
 # ================================================================
 # Telegram Session Builder - Flask + Telethon + MongoDB
 # Self-ping every 4 minutes to stay alive
+# Power flag added to each session
 # By: Tiam
 # ================================================================
 
 import os
 import asyncio
 import threading
+import time
+import requests
 from flask import Flask, request, jsonify
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from datetime import datetime
-import requests
-import time
 
 # ================= CONFIG =================
 API_ID = 24645053
@@ -91,10 +92,12 @@ def send_code():
         try:
             await client.sign_in(phone=phone, code=code)
             session_str = client.session.save()
+            # ذخیره در MongoDB با power: "on"
             doc = {
                 "phone": phone,
                 "created_at": datetime.utcnow(),
                 "enabled": True,
+                "power": "on",
                 "session_string": session_str
             }
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
@@ -123,6 +126,7 @@ def send_2fa():
                 "phone": phone,
                 "created_at": datetime.utcnow(),
                 "enabled": True,
+                "power": "on",
                 "session_string": session_str
             }
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
@@ -143,7 +147,6 @@ def self_ping(url):
 # ================= RUN APP =================
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 8000))
-    # شروع Thread خودپینگ
     url = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{PORT}")
     threading.Thread(target=self_ping, args=(url,), daemon=True).start()
     print(f"Server running on {url}")
