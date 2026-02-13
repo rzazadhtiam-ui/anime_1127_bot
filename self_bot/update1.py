@@ -111,8 +111,8 @@ class PanelManager:
             user_id = q.from_user.id
             result = types.InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
-                title="📋 پنل شما",
-                input_message_content=types.InputTextMessageContent("📖 پنل شخصی شما:"),
+                title="📋پنل ربات ⦁ Self Nix",
+                input_message_content=types.InputTextMessageContent("📖پنل راهنما ربات ⦁ Self Nix:"),
                 reply_markup=self.main_panel(user_id)
             )
             self.bot.answer_inline_query(q.id, [result], cache_time=0)
