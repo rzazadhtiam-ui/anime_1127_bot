@@ -7,17 +7,12 @@ import os
 OWNER_ID = 8588914809
 DB_FILE = "buttons.json"
 
-
 class PanelManager:
     def __init__(self, bot: telebot.TeleBot):
         self.bot = bot
-
-        # بارگذاری دکمه‌ها از فایل
         self.buttons_db = self.load_buttons()
-
         self.user_state = {}   # وضعیت کاربر برای افزودن دکمه
         self.temp_button = {}  # دکمه موقت در حال ساخت
-
         self.register_handlers()
 
     # ---------------- ذخیره ----------------
@@ -70,15 +65,13 @@ class PanelManager:
         # -------- افزودن دکمه --------
         @self.bot.message_handler(commands=['add'])
         def add_button_start(message):
-            if message.from_user.id != OWNER_ID:
-                return
+            if message.from_user.id != OWNER_ID: return
             self.bot.send_message(message.chat.id, "اسم دکمه را بفرست")
             self.user_state[message.from_user.id] = "wait_name"
 
         @self.bot.message_handler(func=lambda m: True)
         def add_button_process(message):
-            if message.from_user.id != OWNER_ID:
-                return
+            if message.from_user.id != OWNER_ID: return
             uid = message.from_user.id
 
             if self.user_state.get(uid) == "wait_name":
@@ -101,8 +94,7 @@ class PanelManager:
         # -------- حذف دکمه --------
         @self.bot.message_handler(commands=['remov'])
         def remove_button(message):
-            if message.from_user.id != OWNER_ID:
-                return
+            if message.from_user.id != OWNER_ID: return
             if not self.buttons_db:
                 self.bot.send_message(message.chat.id, "هیچ دکمه‌ای وجود ندارد")
                 return
@@ -113,14 +105,14 @@ class PanelManager:
                 reply_markup=panel
             )
 
-        # -------- اینلاین --------
+        # -------- Inline Query --------
         @self.bot.inline_handler(func=lambda q: True)
         def inline_handler(q):
             user_id = q.from_user.id
             result = types.InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
-                title="📋 پنل",
-                input_message_content=types.InputTextMessageContent("📖راهنما سلف:"),
+                title="📋 پنل شما",
+                input_message_content=types.InputTextMessageContent("📖 پنل شخصی شما:"),
                 reply_markup=self.main_panel(user_id)
             )
             self.bot.answer_inline_query(q.id, [result], cache_time=0)
@@ -183,8 +175,7 @@ class PanelManager:
 
             # ===== حذف دکمه =====
             elif data.startswith("remove_"):
-                if click_user != OWNER_ID:
-                    return
+                if click_user != OWNER_ID: return
                 name = data.replace("remove_", "")
                 if name in self.buttons_db:
                     del self.buttons_db[name]
@@ -205,6 +196,5 @@ class PanelManager:
                                 call.message.message_id
                             )
 
-
 # ================= اجرای ربات =================
-print("update1.py")
+print("PanelManager ready")
