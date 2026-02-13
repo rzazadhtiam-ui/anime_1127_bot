@@ -11,8 +11,8 @@ class PanelManager:
     def __init__(self, bot: telebot.TeleBot):
         self.bot = bot
         self.buttons_db = self.load_buttons()
-        self.user_state = {}   # وضعیت کاربر برای افزودن دکمه
-        self.temp_button = {}  # دکمه موقت در حال ساخت
+        self.user_state = {}
+        self.temp_button = {}
         self.register_handlers()
 
     # ---------------- ذخیره ----------------
@@ -29,7 +29,7 @@ class PanelManager:
 
     # ---------------- پنل اصلی ----------------
     def main_panel(self, user_id):
-        markup = types.InlineKeyboardMarkup()
+        markup = types.InlineKeyboardMarkup(row_width=2)
         for btn_name in self.buttons_db:
             if btn_name.strip():
                 markup.add(types.InlineKeyboardButton(
@@ -51,12 +51,29 @@ class PanelManager:
     def remove_panel(self):
         if not self.buttons_db:
             return None
-        markup = types.InlineKeyboardMarkup()
+        markup = types.InlineKeyboardMarkup(row_width=2)
         for btn_name in self.buttons_db:
             markup.add(types.InlineKeyboardButton(
                 f"❌ {btn_name}",
                 callback_data=f"remove_{btn_name}"
             ))
+        return markup
+
+    # ---------------- پنل ادمین ----------------
+    def admin_panel(self, btn_name):
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("⬆️ بالا", callback_data=f"move_up_{btn_name}"),
+            types.InlineKeyboardButton("⬇️ پایین", callback_data=f"move_down_{btn_name}"),
+        )
+        markup.add(
+            types.InlineKeyboardButton("⬅️ چپ", callback_data=f"move_left_{btn_name}"),
+            types.InlineKeyboardButton("➡️ راست", callback_data=f"move_right_{btn_name}")
+        )
+        markup.add(
+            types.InlineKeyboardButton("❌ حذف", callback_data=f"remove_{btn_name}"),
+            types.InlineKeyboardButton("🔙 بازگشت", callback_data="back_admin")
+        )
         return markup
 
     # ================= ثبت handler =================
@@ -123,31 +140,40 @@ class PanelManager:
             data = call.data
             click_user = call.from_user.id
 
-            # ===== نمایش دکمه =====
+            # ===== نمایش دکمه (ادمین و کاربر) =====
             if data.startswith("btn_"):
                 _, owner_id, name = data.split("_", 2)
                 owner_id = int(owner_id)
-                if owner_id != click_user:
-                    self.bot.answer_callback_query(
-                        call.id,
-                        "❌ این پنل برای شما نیست",
-                        show_alert=True
-                    )
-                    return
-                text = self.buttons_db.get(name, "یافت نشد")
-                if call.inline_message_id:
-                    self.bot.edit_message_text(
-                        text,
-                        inline_message_id=call.inline_message_id,
-                        reply_markup=self.back_panel(owner_id)
-                    )
-                elif call.message:
-                    self.bot.edit_message_text(
-                        text,
-                        call.message.chat.id,
-                        call.message.message_id,
-                        reply_markup=self.back_panel(owner_id)
-                    )
+                if click_user == OWNER_ID:
+                    if call.message:
+                        self.bot.edit_message_text(
+                            f"🛠 مدیریت دکمه: {name}",
+                            call.message.chat.id,
+                            call.message.message_id,
+                            reply_markup=self.admin_panel(name)
+                        )
+                else:
+                    if owner_id != click_user:
+                        self.bot.answer_callback_query(
+                            call.id,
+                            "❌ این پنل برای شما نیست",
+                            show_alert=True
+                        )
+                        return
+                    text = self.buttons_db.get(name, "یافت نشد")
+                    if call.inline_message_id:
+                        self.bot.edit_message_text(
+                            text,
+                            inline_message_id=call.inline_message_id,
+                            reply_markup=self.back_panel(owner_id)
+                        )
+                    elif call.message:
+                        self.bot.edit_message_text(
+                            text,
+                            call.message.chat.id,
+                            call.message.message_id,
+                            reply_markup=self.back_panel(owner_id)
+                        )
 
             # ===== بازگشت =====
             elif data.startswith("back_"):
@@ -171,6 +197,14 @@ class PanelManager:
                         call.message.chat.id,
                         call.message.message_id,
                         reply_markup=self.main_panel(owner_id)
+                    )
+            elif data == "back_admin" and click_user == OWNER_ID:
+                if call.message:
+                    self.bot.edit_message_text(
+                        "پنل مدیریت دکمه‌ها",
+                        call.message.chat.id,
+                        call.message.message_id,
+                        reply_markup=self.remove_panel()
                     )
 
             # ===== حذف دکمه =====
@@ -196,5 +230,30 @@ class PanelManager:
                                 call.message.message_id
                             )
 
-# ================= اجرای ربات =================
+            # ===== جابه‌جایی دکمه (ادمین) =====
+            elif data.startswith("move_") and click_user == OWNER_ID:
+                parts = data.split("_", 2)
+                direction, btn_name = parts[1], parts[2]
+
+                keys = list(self.buttons_db.keys())
+                index = keys.index(btn_name)
+
+                if direction in ["up", "left"] and index > 0:
+                    keys[index], keys[index-1] = keys[index-1], keys[index]
+                elif direction in ["down", "right"] and index < len(keys)-1:
+                    keys[index], keys[index+1] = keys[index+1], keys[index]
+
+                # بازسازی دیکشنری با ترتیب جدید
+                new_db = {k: self.buttons_db[k] for k in keys}
+                self.buttons_db = new_db
+                self.save_buttons()
+
+                # بروزرسانی پیام ادمین
+                if call.message:
+                    self.bot.edit_message_reply_markup(
+                        call.message.chat.id,
+                        call.message.message_id,
+                        reply_markup=self.admin_panel(btn_name)
+                    )
+
 print("PanelManager ready")
