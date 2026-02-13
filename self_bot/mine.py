@@ -1,5 +1,5 @@
 import telebot
-from tiam import PanelManager
+from update1 import PanelManager
 
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 bot = telebot.TeleBot(TOKEN)
