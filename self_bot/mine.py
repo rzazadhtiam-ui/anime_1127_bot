@@ -3,8 +3,11 @@ from update1 import PanelManager
 from flask import Flask
 import threading
 import os
+import time
+import requests
 
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
+RENDER_URL = "https://anime-1127-bot-1-edmd.onrender.com"  # لینک سایت رندر
 
 bot = telebot.TeleBot(TOKEN)
 panel = PanelManager(bot)
@@ -22,6 +25,18 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 
+# -------- Self Ping --------
+def self_ping():
+    while True:
+        try:
+            requests.get(RENDER_URL)
+            print("Self Ping Success ✅")
+        except Exception as e:
+            print("Self Ping Error:", e)
+
+        time.sleep(300)  # هر 5 دقیقه
+
+
 # -------- Telegram Bot --------
 def run_bot():
     print("Bot Running...")
@@ -31,3 +46,4 @@ def run_bot():
 # -------- Threads --------
 threading.Thread(target=run_web).start()
 threading.Thread(target=run_bot).start()
+threading.Thread(target=self_ping).start()
