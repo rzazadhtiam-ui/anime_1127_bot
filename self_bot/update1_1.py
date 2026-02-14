@@ -79,7 +79,7 @@ def setup_self_bot(bot, TOKEN):
             types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="account_info"),
             types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="referral")
         )
-        markup.add(types.InlineKeyboardButton("🛍 خرید الماس 💰", callback_data="buy_coins"))
+        markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="buy_coins"))
         markup.add(types.InlineKeyboardButton("🗣گپ 💬", url="https://t.me/+UFkNow4CYBNmZGY8"))
         return markup
 
@@ -110,7 +110,10 @@ def setup_self_bot(bot, TOKEN):
         uid = message.from_user.id
         bot.send_message(
             uid,
-            "👋 سلام! به ربات سلف‌  ⦁ Self Nix خوش آمدید 🌹\nبرای مشاهده امکانات، دکمه‌ها را استفاده کنید.",
+            """ ✨ سلام و درود 🌹
+به ربات ⦁ Self Nix خوش اومدید 🙌🔥
+
+با این ربات می‌تونید امکانات اکانتتون رو بیشتر و خاص‌تر کنید 💎🚀""",
             reply_markup=get_main_panel()
         )
 
@@ -164,11 +167,7 @@ def setup_self_bot(bot, TOKEN):
 تعداد زیر مجموعه: {referrals}
 تعداد سکه: {coins}
 تاریخ عضویت: {created_str}
-
-زیر مجموعه:
-لینک زیر مجموعه گیری: {referral_link}
-با دعوت افراد سکه رایگان بگیر
-هر زیر مجموعه: {REFERRAL_REWARD} الماس✨️"""
+ """
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
         # ---------- زیر مجموعه ----------
@@ -177,17 +176,17 @@ def setup_self_bot(bot, TOKEN):
             msg = f"""🌟 لینک اختصاصی زیر مجموعه شما:
 {referral_link}
 با دعوت افراد سکه رایگان بگیرید!
-هر زیر مجموعه: {REFERRAL_REWARD} الماس✨️"""
+هر زیر مجموعه: {REFERRAL_REWARD} سکه✨️"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
         # ---------- خرید الماس ----------
         elif data == "buy_coins":
-            msg = f"""به ربات سلف‌  ⦁ Self Nix خوش آمدید
+            msg = f"""به ربات   ⦁ Self Nix خوش آمدید
 
-با خرید الماس می‌توانید سلف داشته باشید
+با خرید سکه می‌توانید سلف داشته باشید
 قیمت هر ۵۰ سکه: {PRICE_PER_50} تومان
 
-تعداد الماس مورد نظر خود را ارسال کنید:"""
+تعداد سکه مورد نظر خود را ارسال کنید:"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
             user_state[uid] = "await_buy_amount"
 
