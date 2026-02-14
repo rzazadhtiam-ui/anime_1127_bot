@@ -69,6 +69,17 @@ class PanelManager:
 
         return markup
 
+# ---------- پنل فقط بازگشت ----------
+    def back_only_panel(self, user_id):
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton(
+                "🔙 بازگشت",
+                callback_data=f"back_{user_id}"
+            )
+        )
+        return markup
+    
     # ---------- پنل حذف ----------
     def remove_panel(self):
         markup = types.InlineKeyboardMarkup()
@@ -215,12 +226,7 @@ class PanelManager:
 
                 self.history.setdefault(uid, []).append(btn["text"])
 
-                self.safe_edit(
-                    call,
-                    btn["text"],
-                    self.main_panel(uid, True)
-                )
-
+                self.safe_edit(call, btn["text"], self.back_only_panel(uid))
             # ---------- بازگشت ----------
             elif data.startswith("back_"):
 
