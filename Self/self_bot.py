@@ -1,5 +1,5 @@
 # ================================================================
-# self_userbot_render.py — FIXED & PRODUCTION SAFE
+# self_userbot_render.py — FIXED & PRODUCTION SAFE (POWER SAFE)
 # ================================================================
 
 import os
@@ -74,7 +74,6 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 
-
 # ================================================================
 # ADVANCED SELF KEEP ALIVE (PRODUCTION SAFE)
 # ================================================================
@@ -94,49 +93,38 @@ class SelfKeepAlive:
         )
 
         # interval config (seconds)
-        self.normal_interval = 240     # 4 min
-        self.fail_interval = 60        # retry faster if fail
+        self.normal_interval = 240
+        self.fail_interval = 60
 
     async def ping(self):
         timeout = aiohttp.ClientTimeout(total=15)
-
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(self.url) as resp:
                 return resp.status
 
     async def run(self):
-        await asyncio.sleep(15)  # wait full boot
-
+        await asyncio.sleep(15)
         self.logger.info(f"🌐 KeepAlive started -> {self.url}")
 
         while True:
             try:
                 status = await self.ping()
-
                 if status == 200:
                     if self.fail_count > 0:
                         self.logger.info("✅ KeepAlive recovered")
-
                     self.fail_count = 0
                     self.logger.info("🏓 KeepAlive OK")
-
                     await asyncio.sleep(self.normal_interval)
-
                 else:
                     raise Exception(f"Bad status {status}")
-
             except Exception as e:
                 self.fail_count += 1
-
-                self.logger.warning(
-                    f"⚠️ KeepAlive failed ({self.fail_count}) -> {e}"
-                )
-
-                # adaptive retry
+                self.logger.warning(f"⚠️ KeepAlive failed ({self.fail_count}) -> {e}")
                 if self.fail_count >= self.max_fail:
                     self.logger.error("🚨 KeepAlive multiple failures")
-
                 await asyncio.sleep(self.fail_interval)
+
+
 # ================================================================
 # DATABASE
 # ================================================================
@@ -148,7 +136,8 @@ sessions_col = db[COLLECTION_NAME]
 # ACTIVE CLIENTS (MULTI SESSION SAFE)
 # ================================================================
 active_clients: Dict[str, TelegramClient] = {}
-started_sessions = set()   # prevents re-start
+started_sessions = set()
+
 
 # ================================================================
 # ADMIN NOTIFY + DELETE BROKEN SESSION
@@ -177,6 +166,7 @@ async def notify_admin_and_delete(name, error, doc_id=None):
         except Exception as e:
             logger.error(f"Delete failed: {e}")
 
+
 # ================================================================
 # SESSION STARTER (SAFE)
 # ================================================================
@@ -185,7 +175,6 @@ async def start_session(doc):
     session_str = doc.get("session_string")
     doc_id = doc.get("_id")
 
-    # invalid or already started
     if not session_str or name in started_sessions:
         return
 
@@ -198,29 +187,21 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
+        client.session_name = name  # 🔹 برای چک پاور
 
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
-        # -------------------------------
-        # register handlers safely
-        # -------------------------------
         register(client)
         create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client, me.id)  # ✅ owner_id safe
+        register_group_handlers(client, me.id)
         register_clock(client)
         self_tools(client)
 
-        # -------------------------------
-        # Status bot async
-        # -------------------------------
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
-        # -------------------------------
-        # register active session
-        # -------------------------------
         active_clients[name] = client
         started_sessions.add(name)
 
@@ -228,8 +209,9 @@ async def start_session(doc):
         logger.error(f"❌ Broken session {name}: {e}")
         await notify_admin_and_delete(name, str(e), doc_id)
 
+
 # ================================================================
-# HANDLERS (NO .خاموش / .روشن)
+# HANDLERS (POWER SAFE)
 # ================================================================
 def create_handlers(client: TelegramClient):
     @client.on(events.NewMessage)
@@ -237,6 +219,11 @@ def create_handlers(client: TelegramClient):
         try:
             uid = event.sender_id
             text = (event.raw_text or "").strip()
+
+            # 🔹 چک پاور قبل از پردازش
+            doc = sessions_col.find_one({"session_name": getattr(client, "session_name", None)})
+            if doc and doc.get("power", "on") == "off":
+                return  # هیچ کاری نکن
 
             # admin status
             if uid == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
@@ -254,6 +241,7 @@ def create_handlers(client: TelegramClient):
         except Exception as e:
             await notify_admin_and_delete("Handler", str(e), None)
 
+
 # ================================================================
 # SESSION WATCHER
 # ================================================================
@@ -269,22 +257,21 @@ async def session_watcher():
         except Exception as e:
             logger.error(f"Watcher error: {e}")
 
-        # anti-sleep loop (render safe)
         await asyncio.sleep(15)
+
 
 # ================================================================
 # MAIN
 # ================================================================
 async def main():
     logger.info("🚀 Self Nix Bot started")
-
     asyncio.create_task(session_watcher())
-
     keep_alive = SelfKeepAlive(logger)
     asyncio.create_task(keep_alive.run())
 
     while True:
         await asyncio.sleep(60)
+
 
 # ================================================================
 # ENTRY POINT
