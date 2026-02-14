@@ -7,22 +7,22 @@ import uuid
 OWNER_ID = 8588914809
 DB_FILE = "buttons.json"
 
-
 class PanelManager:
 
     def __init__(self, bot):
         self.bot = bot
         self.buttons_db = self.load_buttons()
-        self.user_state = {}
-        self.temp_button = {}
+        self.admin_preview_message = None
+        self.waiting_name = False
+        self.waiting_text = False
+        self.temp_name = ""
         self.register_handlers()
 
-    # ---------------- ذخیره ----------------
+    # ---------------- storage ----------------
     def save_buttons(self):
         with open(DB_FILE, "w", encoding="utf-8") as f:
             json.dump(self.buttons_db, f, ensure_ascii=False, indent=4)
 
-    # ---------------- لود ----------------
     def load_buttons(self):
         if os.path.exists(DB_FILE):
             try:
@@ -32,7 +32,7 @@ class PanelManager:
                 pass
         return []
 
-    # ---------------- پیدا کردن دکمه ----------------
+    # ---------------- helpers ----------------
     def find_button(self, btn_id):
         for r, row in enumerate(self.buttons_db):
             for c, btn in enumerate(row):
@@ -40,10 +40,9 @@ class PanelManager:
                     return r, c, btn
         return None, None, None
 
-    # ---------------- پنل کاربر ----------------
+    # ---------------- user panel ----------------
     def main_panel(self, user_id):
         markup = types.InlineKeyboardMarkup()
-
         for row in self.buttons_db:
             btns = []
             for btn in row:
@@ -52,10 +51,8 @@ class PanelManager:
                     callback_data=f"btn_{user_id}_{btn['id']}"
                 ))
             markup.row(*btns)
-
         return markup
 
-    # ---------------- پنل بازگشت ----------------
     def back_panel(self, user_id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton(
@@ -64,78 +61,62 @@ class PanelManager:
         ))
         return markup
 
-    # ---------------- لیست ادمین ----------------
-    def admin_buttons(self):
-        markup = types.InlineKeyboardMarkup()
-        for row in self.buttons_db:
-            for btn in row:
-                markup.add(types.InlineKeyboardButton(
-                    f"⚙️ {btn['name']}",
-                    callback_data=f"admin_{btn['id']}"
-                ))
-        return markup
-
-    # ---------------- پنل کنترل ----------------
-    def admin_control(self, btn_id):
-        markup = types.InlineKeyboardMarkup()
-
-        markup.row(
-            types.InlineKeyboardButton("⬆️", callback_data=f"up_{btn_id}"),
-            types.InlineKeyboardButton("⬇️", callback_data=f"down_{btn_id}")
-        )
-
-        markup.row(
-            types.InlineKeyboardButton("⬅️", callback_data=f"left_{btn_id}"),
-            types.InlineKeyboardButton("➡️", callback_data=f"right_{btn_id}")
-        )
-
-        markup.add(types.InlineKeyboardButton("➕ ردیف جدید", callback_data=f"newrow_{btn_id}"))
-        markup.add(types.InlineKeyboardButton("❌ حذف", callback_data=f"del_{btn_id}"))
-
-        return markup
+    # ---------------- realtime preview ----------------
+    def update_admin_preview(self):
+        if not self.admin_preview_message:
+            return
+        chat_id, msg_id = self.admin_preview_message
+        try:
+            self.bot.edit_message_reply_markup(
+                chat_id,
+                msg_id,
+                reply_markup=self.main_panel(OWNER_ID)
+            )
+        except:
+            pass
 
     # ================= handlers =================
     def register_handlers(self):
 
-        # ---------- start ----------
-        
-        # ---------- add ----------
-        @self.bot.message_handler(commands=["add"])
-        def add(message):
-            if message.from_user.id != OWNER_ID:
-                return
-            self.user_state[OWNER_ID] = "name"
-            self.bot.reply_to(message, "اسم دکمه؟")
-
-        # ---------- admin ----------
+        # -------- show preview --------
         @self.bot.message_handler(commands=["admin"])
         def admin(message):
             if message.from_user.id != OWNER_ID:
                 return
-            self.bot.send_message(
-                message.chat.id,
-                "مدیریت دکمه‌ها",
-                reply_markup=self.admin_buttons()
-            )
 
-        # ---------- text ----------
+            preview = self.bot.send_message(
+                message.chat.id,
+                "📋 پیش نمایش پنل کاربر",
+                reply_markup=self.main_panel(OWNER_ID)
+            )
+            self.admin_preview_message = (preview.chat.id, preview.message_id)
+            self.bot.reply_to(message, "✅ آماده")
+
+        # -------- add button --------
+        @self.bot.message_handler(commands=["add"])
+        def add(message):
+            if message.from_user.id != OWNER_ID:
+                return
+            self.bot.reply_to(message, "اسم دکمه؟")
+            self.waiting_name = True
+
+        # -------- text handler --------
         @self.bot.message_handler(content_types=["text"])
         def text_handler(message):
-
             if message.from_user.id != OWNER_ID:
                 return
 
-            if self.user_state.get(OWNER_ID) == "name":
-                self.temp_button["name"] = message.text
-                self.user_state[OWNER_ID] = "text"
+            if self.waiting_name:
+                self.temp_name = message.text
+                self.waiting_name = False
+                self.waiting_text = True
                 self.bot.reply_to(message, "متن دکمه؟")
                 return
 
-            if self.user_state.get(OWNER_ID) == "text":
-
+            if self.waiting_text:
                 new_btn = {
                     "id": str(uuid.uuid4()),
-                    "name": self.temp_button["name"],
+                    "name": self.temp_name,
                     "text": message.text
                 }
 
@@ -145,30 +126,39 @@ class PanelManager:
                     self.buttons_db[0].append(new_btn)
 
                 self.save_buttons()
-                self.user_state.clear()
-                self.temp_button.clear()
+                self.update_admin_preview()
 
-                self.bot.reply_to(message, "✅ اضافه شد")
+                self.waiting_text = False
+                self.bot.reply_to(message, "✅ دکمه اضافه شد")
+                return
 
-        # ---------- callback ----------
+        # -------- inline query --------
+        @self.bot.inline_query_handler(func=lambda q: True)
+        def inline_query(query):
+            results = [
+                types.InlineQueryResultArticle(
+                    id="panel",
+                    title="📋 باز کردن پنل",
+                    input_message_content=types.InputTextMessageContent("پنل 👇"),
+                    reply_markup=self.main_panel(query.from_user.id)
+                )
+            ]
+            self.bot.answer_inline_query(query.id, results, cache_time=1)
+
+        # -------- callbacks --------
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback(call):
-
             data = call.data
             uid = call.from_user.id
 
-            # ===== کلیک کاربر =====
+            # ===== user button =====
             if data.startswith("btn_"):
-
                 _, user_id, btn_id = data.split("_")
-
                 if str(uid) != user_id:
                     return
-
-                r, c, btn = self.find_button(btn_id)
-                if r is None:
+                _, _, btn = self.find_button(btn_id)
+                if not btn:
                     return
-
                 self.bot.edit_message_text(
                     btn["text"],
                     call.message.chat.id,
@@ -177,14 +167,11 @@ class PanelManager:
                 )
                 return
 
-            # ===== بازگشت =====
+            # ===== back =====
             if data.startswith("back_"):
-
                 user_id = data.split("_")[1]
-
                 if str(uid) != user_id:
                     return
-
                 self.bot.edit_message_text(
                     "پنل 👇",
                     call.message.chat.id,
@@ -193,138 +180,99 @@ class PanelManager:
                 )
                 return
 
-            # ===== انتخاب دکمه ادمین =====
-            if data.startswith("admin_") and uid == OWNER_ID:
-
-                btn_id = data.split("_")[1]
-
-                self.bot.edit_message_reply_markup(
-                    call.message.chat.id,
-                    call.message.message_id,
-                    reply_markup=self.admin_control(btn_id)
-                )
+            # ===== delete, move, newrow (admin only) =====
+            if uid != OWNER_ID:
                 return
 
-            # ===== حذف =====
-            if data.startswith("del_") and uid == OWNER_ID:
-
+            # delete
+            if data.startswith("del_"):
                 btn_id = data.split("_")[1]
                 r, c, _ = self.find_button(btn_id)
-
                 if r is None:
                     return
-
                 self.buttons_db[r].pop(c)
-
                 if not self.buttons_db[r]:
                     self.buttons_db.pop(r)
-
                 self.save_buttons()
-
-                self.bot.edit_message_text(
-                    "حذف شد",
-                    call.message.chat.id,
-                    call.message.message_id
-                )
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "✅ حذف شد")
                 return
 
-            # ===== حرکت افقی =====
-            if data.startswith("left_") and uid == OWNER_ID:
-
+            # left
+            if data.startswith("left_"):
                 btn_id = data.split("_")[1]
                 r, c, _ = self.find_button(btn_id)
-
-                if r is None:
+                if r is None or c == 0:
                     return
-
-                if c > 0:
-                    self.buttons_db[r][c], self.buttons_db[r][c-1] = \
-                        self.buttons_db[r][c-1], self.buttons_db[r][c]
-
-                    self.save_buttons()
-
+                self.buttons_db[r][c], self.buttons_db[r][c-1] = self.buttons_db[r][c-1], self.buttons_db[r][c]
+                self.save_buttons()
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "جابجا شد")
                 return
 
-            if data.startswith("right_") and uid == OWNER_ID:
-
+            # right
+            if data.startswith("right_"):
                 btn_id = data.split("_")[1]
                 r, c, _ = self.find_button(btn_id)
-
-                if r is None:
+                if r is None or c >= len(self.buttons_db[r]) - 1:
                     return
-
-                if c < len(self.buttons_db[r]) - 1:
-                    self.buttons_db[r][c], self.buttons_db[r][c+1] = \
-                        self.buttons_db[r][c+1], self.buttons_db[r][c]
-
-                    self.save_buttons()
-
+                self.buttons_db[r][c], self.buttons_db[r][c+1] = self.buttons_db[r][c+1], self.buttons_db[r][c]
+                self.save_buttons()
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "جابجا شد")
                 return
 
-            # ===== حرکت عمودی =====
-            if data.startswith("up_") and uid == OWNER_ID:
-
+            # up
+            if data.startswith("up_"):
                 btn_id = data.split("_")[1]
                 r, c, btn = self.find_button(btn_id)
-
                 if r is None or r == 0:
                     return
-
                 self.buttons_db[r].pop(c)
-
-                target_row = self.buttons_db[r-1]
-
-                if c <= len(target_row):
-                    target_row.insert(c, btn)
+                target = self.buttons_db[r-1]
+                if c <= len(target):
+                    target.insert(c, btn)
                 else:
-                    target_row.append(btn)
-
+                    target.append(btn)
                 if not self.buttons_db[r]:
                     self.buttons_db.pop(r)
-
                 self.save_buttons()
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "جابجا شد")
                 return
 
-            if data.startswith("down_") and uid == OWNER_ID:
-
+            # down
+            if data.startswith("down_"):
                 btn_id = data.split("_")[1]
                 r, c, btn = self.find_button(btn_id)
-
                 if r is None or r >= len(self.buttons_db) - 1:
                     return
-
                 self.buttons_db[r].pop(c)
-
-                target_row = self.buttons_db[r+1]
-
-                if c <= len(target_row):
-                    target_row.insert(c, btn)
+                target = self.buttons_db[r+1]
+                if c <= len(target):
+                    target.insert(c, btn)
                 else:
-                    target_row.append(btn)
-
+                    target.append(btn)
                 if not self.buttons_db[r]:
                     self.buttons_db.pop(r)
-
                 self.save_buttons()
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "جابجا شد")
                 return
 
-            # ===== ردیف جدید =====
-            if data.startswith("newrow_") and uid == OWNER_ID:
-
+            # new row
+            if data.startswith("newrow_"):
                 btn_id = data.split("_")[1]
                 r, c, btn = self.find_button(btn_id)
-
                 if r is None:
                     return
-
                 self.buttons_db[r].pop(c)
                 self.buttons_db.append([btn])
-
                 if not self.buttons_db[r]:
                     self.buttons_db.pop(r)
-
                 self.save_buttons()
+                self.update_admin_preview()
+                self.bot.answer_callback_query(call.id, "ردیف جدید ساخته شد")
                 return
-
 
 print("PanelManager Ready")
