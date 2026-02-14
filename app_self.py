@@ -1,7 +1,7 @@
 # ================================================================
 # Telegram Session Builder - Flask + Telethon + MongoDB
 # Self-ping every 4 minutes to stay alive
-# Power flag added to each session
+# Stores user_id and username in MongoDB
 # By: Tiam
 # ================================================================
 
@@ -63,23 +63,27 @@ def home():
 def ping():
     return jsonify({"status":"ok","message":"alive"})
 
+# ---------- Step 1: Send Phone ----------
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
     phone = request.json.get("phone")
     if not phone:
         return jsonify({"status":"error","message":"شماره وارد نشده"})
+    
     async def task():
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
         await client.send_code_request(phone)
         clients[phone] = client
         return True
+
     try:
         run_async(task())
         return jsonify({"status":"ok","message":"کد OTP ارسال شد"})
     except Exception as e:
         return jsonify({"status":"error","message":str(e)})
 
+# ---------- Step 2: Send OTP Code ----------
 @app.route("/send_code", methods=["POST"])
 def send_code():
     data = request.json
@@ -88,28 +92,34 @@ def send_code():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
+    
     async def task():
         try:
             await client.sign_in(phone=phone, code=code)
+            me = await client.get_me()
             session_str = client.session.save()
-            # ذخیره در MongoDB با power: "on"
             doc = {
                 "phone": phone,
+                "user_id": me.id,
+                "username": me.username if me.username else None,
                 "created_at": datetime.utcnow(),
                 "enabled": True,
                 "power": "on",
                 "session_string": session_str
             }
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد"}
+            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+
         except SessionPasswordNeededError:
             return {"status":"2fa","message":"رمز دو مرحله‌ای لازم است"}
         except PhoneCodeInvalidError:
             return {"status":"error","message":"کد OTP اشتباه است"}
         except Exception as e:
             return {"status":"error","message":str(e)}
+
     return jsonify(run_async(task()))
 
+# ---------- Step 3: 2FA Password ----------
 @app.route("/send_2fa", methods=["POST"])
 def send_2fa():
     data = request.json
@@ -118,21 +128,27 @@ def send_2fa():
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
+    
     async def task():
         try:
             await client.sign_in(password=password)
+            me = await client.get_me()
             session_str = client.session.save()
             doc = {
                 "phone": phone,
+                "user_id": me.id,
+                "username": me.username if me.username else None,
                 "created_at": datetime.utcnow(),
                 "enabled": True,
                 "power": "on",
                 "session_string": session_str
             }
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد و ورود کامل شد"}
+            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+
         except Exception as e:
             return {"status":"error","message":str(e)}
+
     return jsonify(run_async(task()))
 
 # ================= Self Ping =================
