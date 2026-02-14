@@ -1,42 +1,37 @@
 import telebot
 from telebot import types
-import json
-import os
+from pymongo import MongoClient
+import certifi
 
-MAIN_TEXT = "📖 پنل سلف:"
+MAIN_TEXT = "📖  ⦁ Self Nix پنل راهنما ربات  :"
 OWNER_ID = 8588914809
-DB_FILE = "buttons.json"
+
+# ================= Mongo =================
+mongo_uri = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@" \
+            "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017," \
+            "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017," \
+            "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017" \
+            "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+
+client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+db = client["self_panel_db"]
+buttons_col = db["buttons"]
+
+buttons_col.create_index("name", unique=True)
 
 
 class PanelManager:
 
     def __init__(self, bot):
         self.bot = bot
-        self.buttons_db = self.load_buttons()
-
         self.waiting_position = {}
         self.history = {}
 
         self.register_handlers()
 
-    # ---------- ذخیره ----------
-    def save_buttons(self):
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.buttons_db, f, ensure_ascii=False, indent=4)
-
-    # ---------- لود ----------
-    def load_buttons(self):
-        if os.path.exists(DB_FILE):
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return []
-
     # ---------- گرفتن دکمه ----------
     def get_button(self, name):
-        for btn in self.buttons_db:
-            if btn["name"] == name:
-                return btn
-        return None
+        return buttons_col.find_one({"name": name})
 
     # ---------- ساخت پنل ----------
     def main_panel(self, user_id, show_back=False):
@@ -44,7 +39,9 @@ class PanelManager:
         markup = types.InlineKeyboardMarkup()
         rows = {}
 
-        for btn in self.buttons_db:
+        buttons = list(buttons_col.find())
+
+        for btn in buttons:
             r = btn.get("row", 0)
             rows.setdefault(r, []).append(btn)
 
@@ -69,7 +66,7 @@ class PanelManager:
 
         return markup
 
-# ---------- پنل فقط بازگشت ----------
+    # ---------- فقط بازگشت ----------
     def back_only_panel(self, user_id):
         markup = types.InlineKeyboardMarkup()
         markup.row(
@@ -79,12 +76,12 @@ class PanelManager:
             )
         )
         return markup
-    
+
     # ---------- پنل حذف ----------
     def remove_panel(self):
         markup = types.InlineKeyboardMarkup()
 
-        for btn in self.buttons_db:
+        for btn in buttons_col.find():
             markup.add(
                 types.InlineKeyboardButton(
                     f"❌ {btn['name']}",
@@ -98,7 +95,7 @@ class PanelManager:
     def admin_panel(self):
         markup = types.InlineKeyboardMarkup()
 
-        for btn in self.buttons_db:
+        for btn in buttons_col.find():
             markup.add(
                 types.InlineKeyboardButton(
                     f"{btn['name']} ({btn.get('row',0)},{btn.get('col',0)})",
@@ -145,15 +142,16 @@ class PanelManager:
                 msg2 = self.bot.send_message(m.chat.id, "متن دکمه را بفرست")
 
                 def get_text(t):
-                    self.buttons_db.append({
-                        "name": name,
-                        "text": t.text,
-                        "row": 0,
-                        "col": len(self.buttons_db)
-                    })
-
-                    self.save_buttons()
-                    self.bot.send_message(t.chat.id, "✅ اضافه شد")
+                    try:
+                        buttons_col.insert_one({
+                            "name": name,
+                            "text": t.text,
+                            "row": 0,
+                            "col": buttons_col.count_documents({})
+                        })
+                        self.bot.send_message(t.chat.id, "✅ اضافه شد")
+                    except:
+                        self.bot.send_message(t.chat.id, "❌ دکمه با این نام وجود دارد")
 
                 self.bot.register_next_step_handler(msg2, get_text)
 
@@ -166,7 +164,7 @@ class PanelManager:
             if message.from_user.id != OWNER_ID:
                 return
 
-            if not self.buttons_db:
+            if buttons_col.count_documents({}) == 0:
                 self.bot.send_message(message.chat.id, "هیچ دکمه‌ای نیست")
                 return
 
@@ -227,6 +225,7 @@ class PanelManager:
                 self.history.setdefault(uid, []).append(btn["text"])
 
                 self.safe_edit(call, btn["text"], self.back_only_panel(uid))
+
             # ---------- بازگشت ----------
             elif data.startswith("back_"):
 
@@ -250,12 +249,12 @@ class PanelManager:
                     return
 
                 name = data.replace("remove_", "")
-                self.buttons_db = [b for b in self.buttons_db if b["name"] != name]
-                self.save_buttons()
+
+                buttons_col.delete_one({"name": name})
 
                 self.bot.answer_callback_query(call.id, "حذف شد")
 
-                if self.buttons_db:
+                if buttons_col.count_documents({}) > 0:
                     self.bot.edit_message_reply_markup(
                         call.message.chat.id,
                         call.message.message_id,
@@ -297,14 +296,11 @@ class PanelManager:
         try:
             row, col = map(int, message.text.split())
 
-            btn = self.get_button(name)
-            if not btn:
-                return
+            buttons_col.update_one(
+                {"name": name},
+                {"$set": {"row": row, "col": col}}
+            )
 
-            btn["row"] = row
-            btn["col"] = col
-
-            self.save_buttons()
             self.bot.send_message(message.chat.id, "✅ جابه‌جا شد")
 
         except:
