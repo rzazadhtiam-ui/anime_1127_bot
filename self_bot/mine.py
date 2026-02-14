@@ -1,6 +1,6 @@
 import telebot
 from update1 import PanelManager
-from update1_1 import run_bot
+from update1_1 import setup_self_bot
 from flask import Flask
 import threading
 import os
@@ -12,7 +12,7 @@ RENDER_URL = "https://anime-1127-bot-1-edmd.onrender.com"  # لینک سایت �
 
 bot = telebot.TeleBot(TOKEN)
 panel = PanelManager(bot)
-run_bot()
+setup_self_bot(bot, TOKEN)
 
 # -------- Flask Server --------
 app = Flask(__name__)
