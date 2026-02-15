@@ -34,7 +34,7 @@ temp_data = {}
 # ================= ماژول قابل import =================
 def setup_self_bot(bot, TOKEN):
 
-    # ================= Helper Functions =================
+    # --- Helper Functions ---
     def add_coins(user_id: int, amount: int):
         user = users_col.find_one({"user_id": user_id}) or {"user_id": user_id, "coins": 0}
         new_total = user.get("coins", 0) + amount
@@ -53,14 +53,6 @@ def setup_self_bot(bot, TOKEN):
                 if session and session.get("power") == "on":
                     sessions_col.update_one({"phone": phone}, {"$set": {"power": "off"}})
 
-    def add_referral(inviter_id: int, invited_id: int):
-        invited = users_col.find_one({"user_id": invited_id})
-        if invited and invited.get("referrer"):
-            return
-        users_col.update_one({"user_id": invited_id}, {"$set": {"referrer": inviter_id}}, upsert=True)
-        add_coins(inviter_id, REFERRAL_REWARD)
-        add_coins(invited_id, INVITED_REWARD)
-
     def start_trial_expiration(uid):
         """غیر فعال کردن trial بعد از 1 روز"""
         def remove_trial():
@@ -69,28 +61,8 @@ def setup_self_bot(bot, TOKEN):
                 bot.send_message(uid, "⚡ سلف تست یک روزه شما منقضی شد!")
             except:
                 pass
-        delay = TRIAL_DURATION * 24 * 3600
-        threading.Timer(delay, remove_trial).start()
+        threading.Timer(TRIAL_DURATION * 24 * 3600, remove_trial).start()
 
-    # ================= Keyboards =================
-    def get_main_panel():
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("💎 فعال سازی سلف ✨️", callback_data="start_self"))
-        markup.add(types.InlineKeyboardButton("⚡️ سلف تست(یک روزه)⚡️", callback_data="start_trial"))
-        markup.row(
-            types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="account_info"),
-            types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="referral")
-        )
-        markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="buy_coins"))
-        markup.add(types.InlineKeyboardButton("🗣گپ 💬", url="https://t.me/+UFkNow4CYBNmZGY8"))
-        return markup
-
-    def get_back_panel():
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="main_panel"))
-        return markup
-
-    # ================= User Registration =================
     def register_user(user):
         """ذخیره اطلاعات کاربر هنگام اولین ورود"""
         uid = user.id
@@ -105,7 +77,25 @@ def setup_self_bot(bot, TOKEN):
                 "trial_used": False
             })
 
-    # ================= Handlers =================
+    # --- Keyboards ---
+    def get_main_panel():
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💎 فعال سازی سلف ✨️", callback_data="selfbot_start_self"))
+        markup.add(types.InlineKeyboardButton("⚡️ سلف تست(یک روزه)⚡️", callback_data="selfbot_start_trial"))
+        markup.row(
+            types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="selfbot_account_info"),
+            types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
+        )
+        markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="selfbot_buy_coins"))
+        markup.add(types.InlineKeyboardButton("🗣گپ 💬", url="https://t.me/+UFkNow4CYBNmZGY8"))
+        return markup
+
+    def get_back_panel():
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel"))
+        return markup
+
+    # --- Handlers ---
     @bot.message_handler(commands=["start"])
     def start_panel(message):
         register_user(message.from_user)
@@ -114,43 +104,41 @@ def setup_self_bot(bot, TOKEN):
             uid,
             """✨ سلام و درود 🌹
 به ربات ⦁ Self Nix خوش اومدید 🙌🔥
-
 با این ربات می‌تونید امکانات اکانتتون رو بیشتر و خاص‌تر کنید 💎🚀""",
             reply_markup=get_main_panel()
         )
 
-    @bot.callback_query_handler(func=lambda c: True)
+    @bot.callback_query_handler(func=lambda c: c.data.startswith("selfbot_"))
     def handle_callbacks(call):
         uid = call.from_user.id
         data = call.data
         bot.answer_callback_query(call.id)
 
-        # ---------- پنل اصلی ----------
-        if data == "main_panel":
+        # پنل اصلی
+        if data == "selfbot_main_panel":
             bot.edit_message_text("پنل اصلی:", uid, call.message.message_id, reply_markup=get_main_panel())
-            return
 
-        # ---------- سلف واقعی ----------
-        if data == "start_self":
-            user = users_col.find_one({"user_id": uid})
-            coins = user.get("coins", 0) if user else 0
+        # سلف واقعی
+        elif data == "selfbot_start_self":
+            user = users_col.find_one({"user_id": uid}) or {}
+            coins = user.get("coins", 0)
             if coins < MIN_COINS:
                 bot.answer_callback_query(call.id, f"💎 حداقل {MIN_COINS} سکه نیاز دارید! شما {coins} دارید.")
-                return
-            bot.edit_message_text("📱 شماره خود را وارد کنید (+98...)", uid, call.message.message_id)
-            user_state[uid] = "await_phone_self"
+            else:
+                bot.edit_message_text("📱 شماره خود را وارد کنید (+98...)", uid, call.message.message_id)
+                user_state[uid] = "await_phone_self"
 
-        # ---------- سلف تست ----------
-        elif data == "start_trial":
-            user = users_col.find_one({"user_id": uid})
-            if user and user.get("trial_used"):
+        # سلف تست
+        elif data == "selfbot_start_trial":
+            user = users_col.find_one({"user_id": uid}) or {}
+            if user.get("trial_used"):
                 bot.answer_callback_query(call.id, "⚡ شما قبلاً سلف تست گرفتید!")
-                return
-            bot.edit_message_text("📱 شماره خود را وارد کنید (+98...) برای سلف تست", uid, call.message.message_id)
-            user_state[uid] = "await_phone_trial"
+            else:
+                bot.edit_message_text("📱 شماره خود را وارد کنید (+98...) برای سلف تست", uid, call.message.message_id)
+                user_state[uid] = "await_phone_trial"
 
-        # ---------- حساب کاربری ----------
-        elif data == "account_info":
+        # حساب کاربری
+        elif data == "selfbot_account_info":
             user = users_col.find_one({"user_id": uid})
             if not user:
                 bot.answer_callback_query(call.id, "❌ شما هنوز هیچ سلفی فعال نکرده‌اید!")
@@ -172,8 +160,8 @@ def setup_self_bot(bot, TOKEN):
 تاریخ عضویت: {created_str}"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
-        # ---------- زیر مجموعه ----------
-        elif data == "referral":
+        # زیر مجموعه
+        elif data == "selfbot_referral":
             referral_link = f"https://t.me/self_nix_bot?start={uid}"
             msg = f"""🌟 لینک اختصاصی زیر مجموعه شما:
 {referral_link}
@@ -181,8 +169,8 @@ def setup_self_bot(bot, TOKEN):
 هر زیر مجموعه: {REFERRAL_REWARD} سکه✨️"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
-        # ---------- خرید سکه ----------
-        elif data == "buy_coins":
+        # خرید سکه
+        elif data == "selfbot_buy_coins":
             msg = f"""به ربات ⦁ Self Nix خوش آمدید
 
 با خرید سکه می‌توانید سلف داشته باشید
@@ -192,13 +180,13 @@ def setup_self_bot(bot, TOKEN):
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
             user_state[uid] = "await_buy_amount"
 
-    # ================= Message Handler =================
+    # --- Message Handler ---
     @bot.message_handler(func=lambda m: True)
     def handle_messages(message):
         uid = message.from_user.id
         text = message.text.strip()
 
-        # ---------- خرید سکه ----------
+        # خرید سکه
         if user_state.get(uid) == "await_buy_amount":
             try:
                 amount = int(text)
@@ -209,21 +197,21 @@ def setup_self_bot(bot, TOKEN):
                 bot.send_message(uid, "❌ لطفاً فقط عدد وارد کنید.")
             return
 
-        # ---------- شماره سلف واقعی ----------
+        # شماره سلف واقعی
         if user_state.get(uid) == "await_phone_self":
             temp_data[uid] = {"phone": text}
             bot.send_message(uid, "✅ شماره دریافت شد. لطفاً کد OTP تلگرام را وارد کنید:")
             user_state[uid] = "await_otp_self"
             return
 
-        # ---------- شماره سلف تست ----------
+        # شماره سلف تست
         if user_state.get(uid) == "await_phone_trial":
             temp_data[uid] = {"phone": text}
             bot.send_message(uid, "✅ شماره دریافت شد. لطفاً کد OTP تلگرام را وارد کنید:")
             user_state[uid] = "await_otp_trial"
             return
 
-        # ---------- OTP و 2FA ----------
+        # OTP و 2FA
         if user_state.get(uid) in ["await_otp_self", "await_otp_trial", "await_2fa_self", "await_2fa_trial"]:
             phone = temp_data[uid]["phone"]
             code_or_pass = text
@@ -260,4 +248,4 @@ def setup_self_bot(bot, TOKEN):
                 bot.send_message(uid, f"❌ خطا در ارتباط با سایت: {str(e)}")
             return
 
-    print("update1_1.py")
+    print("update1_1.py آماده و هماهنگ با پنل PanelManager")
