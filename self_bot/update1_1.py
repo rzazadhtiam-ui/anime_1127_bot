@@ -14,11 +14,13 @@ TRIAL_DURATION = 1  # مدت سلف تست یک روزه
 PRICE_PER_50 = 1000  # قیمت هر ۵۰ سکه برای خرید
 
 # ================= MongoDB =================
-mongo_uri = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@" \
-            "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017," \
-            "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017," \
-            "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017" \
-            "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+mongo_uri = (
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+)
 
 mongo = MongoClient(mongo_uri)
 db = mongo.telegram_sessions
@@ -75,7 +77,7 @@ def setup_self_bot(bot, TOKEN):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("💎 فعال سازی سلف ✨️", callback_data="start_self"))
         markup.add(types.InlineKeyboardButton("⚡️ سلف تست(یک روزه)⚡️", callback_data="start_trial"))
-        markup.add(
+        markup.row(
             types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="account_info"),
             types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="referral")
         )
@@ -110,7 +112,7 @@ def setup_self_bot(bot, TOKEN):
         uid = message.from_user.id
         bot.send_message(
             uid,
-            """ ✨ سلام و درود 🌹
+            """✨ سلام و درود 🌹
 به ربات ⦁ Self Nix خوش اومدید 🙌🔥
 
 با این ربات می‌تونید امکانات اکانتتون رو بیشتر و خاص‌تر کنید 💎🚀""",
@@ -121,7 +123,9 @@ def setup_self_bot(bot, TOKEN):
     def handle_callbacks(call):
         uid = call.from_user.id
         data = call.data
+        bot.answer_callback_query(call.id)
 
+        # ---------- پنل اصلی ----------
         if data == "main_panel":
             bot.edit_message_text("پنل اصلی:", uid, call.message.message_id, reply_markup=get_main_panel())
             return
@@ -158,7 +162,6 @@ def setup_self_bot(bot, TOKEN):
             referrals = users_col.count_documents({"referrer": uid})
             created_at = user.get("created_at")
             created_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "ثبت نشده"
-            referral_link = f"https://t.me/YourBotUsername?start={uid}"
 
             msg = f"""اطلاعات شما:
 اسم: {first_name} {last_name}
@@ -166,8 +169,7 @@ def setup_self_bot(bot, TOKEN):
 ایدی عددی: {uid}
 تعداد زیر مجموعه: {referrals}
 تعداد سکه: {coins}
-تاریخ عضویت: {created_str}
- """
+تاریخ عضویت: {created_str}"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
         # ---------- زیر مجموعه ----------
@@ -179,9 +181,9 @@ def setup_self_bot(bot, TOKEN):
 هر زیر مجموعه: {REFERRAL_REWARD} سکه✨️"""
             bot.edit_message_text(msg, uid, call.message.message_id, reply_markup=get_back_panel())
 
-        # ---------- خرید الماس ----------
+        # ---------- خرید سکه ----------
         elif data == "buy_coins":
-            msg = f"""به ربات   ⦁ Self Nix خوش آمدید
+            msg = f"""به ربات ⦁ Self Nix خوش آمدید
 
 با خرید سکه می‌توانید سلف داشته باشید
 قیمت هر ۵۰ سکه: {PRICE_PER_50} تومان
@@ -196,7 +198,7 @@ def setup_self_bot(bot, TOKEN):
         uid = message.from_user.id
         text = message.text.strip()
 
-        # ---------- خرید الماس ----------
+        # ---------- خرید سکه ----------
         if user_state.get(uid) == "await_buy_amount":
             try:
                 amount = int(text)
@@ -225,24 +227,13 @@ def setup_self_bot(bot, TOKEN):
         if user_state.get(uid) in ["await_otp_self", "await_otp_trial", "await_2fa_self", "await_2fa_trial"]:
             phone = temp_data[uid]["phone"]
             code_or_pass = text
-            route = ""
-            next_state = ""
-            if user_state[uid] == "await_otp_self":
-                route = "send_code"
-                next_state = "await_2fa_self"
-            elif user_state[uid] == "await_otp_trial":
-                route = "send_code"
-                next_state = "await_2fa_trial"
-            elif user_state[uid] == "await_2fa_self":
-                route = "send_2fa"
-            elif user_state[uid] == "await_2fa_trial":
-                route = "send_2fa"
-
+            route = "send_code" if "otp" in user_state[uid] else "send_2fa"
             try:
                 res = requests.post(
                     f"{SITE_URL}/{route}",
-                    json={"phone": phone, "code" if "otp" in route else "password": code_or_pass}
+                    json={"phone": phone, "code" if route=="send_code" else "password": code_or_pass}
                 ).json()
+
                 if res.get("status") == "ok":
                     if "trial" in user_state[uid]:
                         users_col.update_one({"user_id": uid}, {"$set": {
@@ -256,17 +247,17 @@ def setup_self_bot(bot, TOKEN):
                     else:
                         users_col.update_one({"user_id": uid}, {"$set": {"phone": phone}}, upsert=True)
                         bot.send_message(uid, "✅ سشن ساخته شد و ورود کامل شد!")
+
                     user_state.pop(uid)
                     temp_data.pop(uid)
+
                 elif res.get("status") == "2fa":
                     bot.send_message(uid, "🔐 نیاز به رمز دو مرحله‌ای (2FA). لطفاً رمز را وارد کنید:")
-                    user_state[uid] = next_state
+                    user_state[uid] = "await_2fa_trial" if "trial" in user_state[uid] else "await_2fa_self"
                 else:
                     bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
             except Exception as e:
                 bot.send_message(uid, f"❌ خطا در ارتباط با سایت: {str(e)}")
             return
-
-# ================= فقط وقتی import شد اجرا شود =================
 
     print("update1_1.py")
