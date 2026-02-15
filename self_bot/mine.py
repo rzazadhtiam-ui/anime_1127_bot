@@ -11,7 +11,7 @@ TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 RENDER_URL = "https://anime-1127-bot-1-p5ff.onrender.com"  # لینک سایت رندر
 
 bot = telebot.TeleBot(TOKEN)
-panel = PanelManager(bot)
+
 setup_self_bot(bot, TOKEN)
 
 # -------- Flask Server --------
