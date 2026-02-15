@@ -15,6 +15,7 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
+from Update1 import register_update1 
 
 # ------------------------------------------------
 # PATH FIX
@@ -196,6 +197,7 @@ async def start_session(doc):
         create_handlers(client)
         register_handlers(client)
         register_group_handlers(client, me.id)
+        register_update1(client)
         register_clock(client)
         self_tools(client)
 
