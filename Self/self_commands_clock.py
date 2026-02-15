@@ -9,18 +9,22 @@ import pytz
 from telethon import events
 from telethon.tl.functions.account import UpdateProfileRequest
 from self_config import self_config, city_timezones
-from self_storage import Storage
-import json
+from pymongo import MongoClient
 
+
+
+mongo = MongoClient(
+    "mongodb://jinx:titi_jinx@ac-yjpvg6o-shard-00-00.35gzto0.mongodb.net:27017,"
+    "ac-yjpvg6o-shard-00-01.35gzto0.mongodb.net:27017,"
+    "ac-yjpvg6o-shard-00-02.35gzto0.mongodb.net:27017/?replicaSet=atlas-fzmhnh-shard-0&ssl=true&authSource=admin"
+)
+
+db = mongo["selfbot_default"]
+clock_col = db["clock_users"]
 # ==========================================
 # دیتابیس و فایل ذخیره‌سازی
 # ==========================================
-db = Storage()
-DATA_FILE = "self_storage_data.json"
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
 
 # ==========================================
 # هر کاربر یک تسک مخصوص ساعت زنده دارد
@@ -31,21 +35,39 @@ active_clock_tasks = {}
 # گرفتن پروفایل ساعت کاربر (ساخت در صورت نبود)
 # ==========================================
 def get_clock(user_id):
-    data = db.data.setdefault("users", {}).setdefault(str(user_id), {})
-    clock = data.setdefault("clock", {})
-    clock.setdefault("enabled", False)
-    clock.setdefault("timezone", "Asia/Tehran")
-    clock.setdefault("bio_enabled", False)
-    clock.setdefault("name_enabled", False)
-    clock.setdefault("font_id", None)
-    clock.setdefault("prev_state", {})  # وضعیت قبل از خاموش
-    clock.setdefault("original_profile", {})  # ذخیره بیو و نام اصلی
-    clock.setdefault("original_saved", False)
-    return clock
+
+    doc = clock_col.find_one({"_id": user_id})
+
+    if not doc:
+        doc = {
+            "_id": user_id,
+            "clock": {
+                "timezone": "Asia/Tehran",
+                "bio_enabled": False,
+                "name_enabled": False,
+                "font_id": None,
+                "prev_state": {},
+                "original_profile": {},
+                "original_saved": False
+            }
+        }
+        clock_col.insert_one(doc)
+
+    return doc["clock"]
+
+def save_clock(user_id, clock):
+
+    clock_col.update_one(
+        {"_id": user_id},
+        {"$set": {"clock": clock}},
+        upsert=True
+    )
 
 def set_clock(user_id, key, value):
-    get_clock(user_id)[key] = value
-    save_data(db.data)
+
+    clock = get_clock(user_id)
+    clock[key] = value
+    save_clock(user_id, clock)
 
 # ==========================================
 # ذخیره بیو و اسم اصلی
@@ -70,7 +92,7 @@ async def save_original_profile(client, user_id):
         "last_name": me.last_name or ""
     }
     clock["original_saved"] = True
-    save_data(db.data)
+    save_clock(user_id, clock)
 
 # ==========================================
 # ساعت زنده
@@ -127,7 +149,40 @@ FONT_TABLE = {
     1: ["0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"],
     2: ["𝟬","𝟭","𝟮","𝟯","𝟰","𝟱","𝟲","𝟳","𝟴","𝟵"],
     3: ["⓿","①","②","③","④","⑤","⑥","⑦","⑧","⑨"],
-    4: ["🄀","🄁","🄂","🄃","🄄","🄅","🄆","🄇","🄈","🄉"]
+    4: ["🄀","🄁","🄂","🄃","🄄","🄅","🄆","🄇","🄈","🄉"],
+
+    # بولد ریاضی
+    5: ["𝟎","𝟏","𝟐","𝟑","𝟒","𝟓","𝟔","𝟕","𝟖","𝟗"],
+
+    # دابل استراک
+    6: ["𝟘","𝟙","𝟚","𝟛","𝟜","𝟝","𝟞","𝟟","𝟠","𝟡"],
+
+    # سوپراسکریپت
+    7: ["⁰","¹","²","³","⁴","⁵","⁶","⁷","⁸","⁹"],
+
+    # ساب‌اسکریپت
+    8: ["₀","₁","₂","₃","₄","₅","₆","₇","₈","₉"],
+
+    # دایره مشکی
+    9: ["⓪","❶","❷","❸","❹","❺","❻","❼","❽","❾"],
+
+    # مربع
+    10: ["🟦0","🟦1","🟦2","🟦3","🟦4","🟦5","🟦6","🟦7","🟦8","🟦9"],
+
+    # استایل خاص
+    11: ["𝟶","𝟷","𝟸","𝟹","𝟺","𝟻","𝟼","𝟽","𝟾","𝟿"],
+
+    # استایل کلاسیک
+    12: ["０","１","２","３","４","５","６","７","８","９"],
+
+    # استایل باریک
+    13: ["𝟢","𝟣","𝟤","𝟥","𝟦","𝟧","𝟨","𝟩","𝟪","𝟫"],
+
+    # استایل تزئینی
+    14: ["➀","➁","➂","➃","➄","➅","➆","➇","➈","➉"],
+
+    # استایل فانتزی گرد
+    15: ["🄌","➊","➋","➌","➍","➎","➏","➐","➑","➒"]
 }
 
 # ==========================================
@@ -135,15 +190,7 @@ FONT_TABLE = {
 # ==========================================
 def register_clock(client):
 
-    async def start_active_clocks():
-        for user_id_str, udata in db.data.get("users", {}).items():
-            clock = udata.get("clock", {})
-            if clock.get("bio_enabled") or clock.get("name_enabled"):
-                uid = int(user_id_str)
-                if uid not in active_clock_tasks:
-                    active_clock_tasks[uid] = asyncio.create_task(
-                        live_clock_user(client, uid)
-                    )
+    
 
     asyncio.create_task(start_active_clocks())
 
@@ -207,7 +254,7 @@ def register_clock(client):
             return await event.edit("✅ ساعت روی اسم فعال شد.")
 
         # فونت
-        if arg.startswith("فنت"):
+        if arg.startswith("فونت"):
             parts = arg.split()
             if len(parts) < 2:
                 return await event.edit("❌ فرمت درست: `.ساعت فنت <شماره>`")
@@ -245,7 +292,7 @@ def register_clock(client):
             clock["original_saved"] = False
             clock["original_profile"] = {}
             clock["prev_state"] = {}
-            save_data(db.data)
+            save_clock(user_id, clock)
             return await event.edit("🛑 ساعت خاموش شد و پروفایل به حالت قبل برگشت.")
 
         # روشن کردن ساعت (وضعیت قبل)
