@@ -1,169 +1,251 @@
-# ================================================================
-# Telegram Session Builder - Flask + Telethon + MongoDB
-# Self-ping every 4 minutes to stay alive
-# Stores user_id and username in MongoDB
-# By: Tiam
-# ================================================================
-
-import os
-import asyncio
+import telebot
+from telebot import types
+from datetime import datetime, timedelta
 import threading
-import time
 import requests
-from flask import Flask, request, jsonify
-from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
-from telethon.sessions import StringSession
 from pymongo import MongoClient
-from datetime import datetime
 
 # ================= CONFIG =================
-API_ID = 24645053
-API_HASH = "88c0167b74a24fac0a85c26c1f6d1991"
+SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
+MIN_COINS = 10
+REFERRAL_REWARD = 25
+INVITED_REWARD = 5
+TRIAL_DURATION = 1
+PRICE_PER_50 = 1000
 
 # ================= MongoDB =================
-mongo = MongoClient(
+mongo_uri = (
     "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
     "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
     "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
-    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017"
     "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 )
+
+mongo = MongoClient(mongo_uri)
 db = mongo.telegram_sessions
+users_col = db.users
 sessions_col = db.sessions
 
-# ================= Flask =================
-app = Flask(__name__)
+# ================= حافظه موقت =================
+user_state = {}
+temp_data = {}
 
-# ================= Async Loop =================
-class LoopThread(threading.Thread):
-    def __init__(self):
-        super().__init__(daemon=True)
-        self.loop = asyncio.new_event_loop()
-    def run(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
+# ================= ماژول =================
+def setup_self_bot(bot, TOKEN):
 
-async_loop_thread = LoopThread()
-async_loop_thread.start()
-
-def run_async(coro):
-    future = asyncio.run_coroutine_threadsafe(coro, async_loop_thread.loop)
-    return future.result()
-
-# ================= Clients =================
-clients = {}  # phone: TelegramClient
-
-# ================= Routes =================
-@app.route("/", methods=["GET"])
-def home():
-    return "Server is running", 200
-
-@app.route("/ping", methods=["GET"])
-def ping():
-    return jsonify({"status":"ok","message":"alive"})
-
-# ---------- Step 1: Send Phone ----------
-@app.route("/send_phone", methods=["POST"])
-def send_phone():
-    phone = request.json.get("phone")
-    if not phone:
-        return jsonify({"status":"error","message":"شماره وارد نشده"})
-    
-    async def task():
-        client = TelegramClient(StringSession(), API_ID, API_HASH)
-        await client.connect()
-        await client.send_code_request(phone)
-        clients[phone] = client
-        return True
-
-    try:
-        run_async(task())
-        return jsonify({"status":"ok","message":"کد OTP ارسال شد"})
-    except Exception as e:
-        return jsonify({"status":"error","message":str(e)})
-
-# ---------- Step 2: Send OTP Code ----------
-@app.route("/send_code", methods=["POST"])
-def send_code():
-    data = request.json
-    phone = data.get("phone")
-    code = data.get("code")
-    client = clients.get(phone)
-    if not client:
-        return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-    
-    async def task():
+    # ---------- Safe Edit ----------
+    def safe_edit(call, text, markup=None):
         try:
-            await client.sign_in(phone=phone, code=code)
-            me = await client.get_me()
-            session_str = client.session.save()
-            doc = {
-                "phone": phone,
-                "user_id": me.id,
-                "username": me.username if me.username else None,
+            bot.edit_message_text(text, call.from_user.id, call.message.message_id, reply_markup=markup)
+        except Exception:
+            bot.send_message(call.from_user.id, text, reply_markup=markup)
+
+    # ---------- Helper ----------
+    def add_coins(user_id: int, amount: int):
+        user = users_col.find_one({"user_id": user_id}) or {"coins": 0}
+        new_total = user.get("coins", 0) + amount
+        users_col.update_one({"user_id": user_id}, {"$set": {"coins": new_total}}, upsert=True)
+        check_coins(user_id)
+
+    def check_coins(user_id: int):
+        user = users_col.find_one({"user_id": user_id})
+        if not user:
+            return
+        coins = user.get("coins", 0)
+        if coins < MIN_COINS:
+            phone = user.get("phone")
+            if phone:
+                session = sessions_col.find_one({"phone": phone})
+                if session and session.get("power") == "on":
+                    sessions_col.update_one({"phone": phone}, {"$set": {"power": "off"}})
+
+    def start_trial_expiration(uid):
+        def remove_trial():
+            users_col.update_one({"user_id": uid}, {"$set": {"trial_active": False}})
+            try:
+                bot.send_message(uid, "⚡ سلف تست یک روزه شما منقضی شد!")
+            except Exception:
+                pass
+        threading.Timer(TRIAL_DURATION * 86400, remove_trial).start()
+
+    def register_user(user):
+        uid = user.id
+        if not users_col.find_one({"user_id": uid}):
+            users_col.insert_one({
+                "user_id": uid,
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+                "username": user.username or "",
+                "coins": 0,
                 "created_at": datetime.utcnow(),
-                "enabled": True,
-                "power": "on",
-                "session_string": session_str
-            }
-            sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+                "trial_used": False
+            })
 
-        except SessionPasswordNeededError:
-            return {"status":"2fa","message":"رمز دو مرحله‌ای لازم است"}
-        except PhoneCodeInvalidError:
-            return {"status":"error","message":"کد OTP اشتباه است"}
-        except Exception as e:
-            return {"status":"error","message":str(e)}
+    # ---------- Keyboards ----------
+    def get_main_panel():
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💎 فعال سازی سلف ✨️", callback_data="selfbot_start_self"))
+        markup.add(types.InlineKeyboardButton("⚡️ سلف تست(یک روزه)⚡️", callback_data="selfbot_start_trial"))
+        markup.row(
+            types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="selfbot_account_info"),
+            types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
+        )
+        markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="selfbot_buy_coins"))
+        markup.add(types.InlineKeyboardButton("🗣گپ 💬", url="https://t.me/+UFkNow4CYBNmZGY8"))
+        return markup
 
-    return jsonify(run_async(task()))
+    def get_back_panel():
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel"))
+        return markup
 
-# ---------- Step 3: 2FA Password ----------
-@app.route("/send_2fa", methods=["POST"])
-def send_2fa():
-    data = request.json
-    phone = data.get("phone")
-    password = data.get("password")
-    client = clients.get(phone)
-    if not client:
-        return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
-    
-    async def task():
+    # ---------- Start ----------
+    @bot.message_handler(commands=["start"])
+    def start_panel(message):
+        register_user(message.from_user)
+        uid = message.from_user.id
+        bot.send_message(
+            uid,
+            """✨ سلام و درود 🌹
+به ربات ⦁ Self Nix خوش اومدید 🙌🔥
+با این ربات می‌تونید امکانات اکانتتون رو بیشتر و خاص‌تر کنید 💎🚀""",
+            reply_markup=get_main_panel()
+        )
+
+    # ---------- Callbacks ----------
+    @bot.callback_query_handler(func=lambda c: c.data.startswith("selfbot_"))
+    def handle_callbacks(call):
+        uid = call.from_user.id
+        data = call.data
+        bot.answer_callback_query(call.id)
+
+        if data == "selfbot_main_panel":
+            safe_edit(call, "پنل اصلی:", get_main_panel())
+
+        elif data == "selfbot_start_self":
+            user = users_col.find_one({"user_id": uid}) or {}
+            coins = user.get("coins", 0)
+            if coins < MIN_COINS:
+                bot.answer_callback_query(call.id, f"💎 حداقل {MIN_COINS} سکه نیاز دارید! شما {coins} دارید.")
+                return
+            safe_edit(call, "📱 شماره خود را وارد کنید (+98...)")
+            user_state[uid] = "await_phone_self"
+
+        elif data == "selfbot_start_trial":
+            user = users_col.find_one({"user_id": uid}) or {}
+            if user.get("trial_used"):
+                bot.answer_callback_query(call.id, "⚡ شما قبلاً سلف تست گرفتید!")
+                return
+            safe_edit(call, "📱 شماره خود را وارد کنید (+98...) برای سلف تست")
+            user_state[uid] = "await_phone_trial"
+
+        elif data == "selfbot_account_info":
+            user = users_col.find_one({"user_id": uid})
+            if not user:
+                safe_edit(call, "❌ شما هنوز هیچ سلفی فعال نکرده‌اید!", get_back_panel())
+                return
+            first_name = user.get("first_name", "")
+            last_name = user.get("last_name", "")
+            username = user.get("username", "ثبت نشده")
+            coins = user.get("coins", 0)
+            referrals = users_col.count_documents({"referrer": uid})
+            created_at = user.get("created_at")
+            created_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "ثبت نشده"
+            msg = f"""اطلاعات شما:
+اسم: {first_name} {last_name}
+یوزرنیم: @{username}
+ایدی عددی: {uid}
+تعداد زیر مجموعه: {referrals}
+تعداد سکه: {coins}
+تاریخ عضویت: {created_str}"""
+            safe_edit(call, msg, get_back_panel())
+
+        elif data == "selfbot_referral":
+            referral_link = f"https://t.me/self_nix_bot?start={uid}"
+            msg = f"""🌟 لینک اختصاصی زیر مجموعه شما:
+{referral_link}
+با دعوت افراد سکه رایگان بگیرید!
+هر زیر مجموعه: {REFERRAL_REWARD} سکه✨️"""
+            safe_edit(call, msg, get_back_panel())
+
+        elif data == "selfbot_buy_coins":
+            msg = f"""به ربات ⦁ Self Nix خوش آمدید
+
+با خرید سکه می‌توانید سلف داشته باشید
+قیمت هر ۵۰ سکه: {PRICE_PER_50} تومان
+
+تعداد سکه مورد نظر خود را ارسال کنید:"""
+            safe_edit(call, msg, get_back_panel())
+            user_state[uid] = "await_buy_amount"
+
+    # ---------- Messages ----------
+    @bot.message_handler(func=lambda m: True)
+    def handle_messages(message):
+        uid = message.from_user.id
+        text = message.text.strip()
+
+        state = user_state.get(uid)
+        if not state:
+            return
+
         try:
-            await client.sign_in(password=password)
-            me = await client.get_me()
-            session_str = client.session.save()
-            doc = {
-                "phone": phone,
-                "user_id": me.id,
-                "username": me.username if me.username else None,
-                "created_at": datetime.utcnow(),
-                "enabled": True,
-                "power": "on",
-                "session_string": session_str
-            }
-            sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+            # خرید سکه
+            if state == "await_buy_amount":
+                if not text.isdigit():
+                    bot.send_message(uid, "❌ لطفاً فقط عدد وارد کنید.")
+                    return
+                amount = int(text)
+                if amount <= 0:
+                    bot.send_message(uid, "❌ عدد معتبر نیست.")
+                    return
+                total = int((amount / 50) * PRICE_PER_50)
+                bot.send_message(uid, f"💰 تعداد {amount} سکه برابر است با {total} تومان")
+                user_state.pop(uid, None)
+                return
 
+            # شماره سلف
+            if state in ["await_phone_self", "await_phone_trial"]:
+                temp_data[uid] = {"phone": text}
+                bot.send_message(uid, "✅ شماره دریافت شد. لطفاً کد OTP تلگرام را وارد کنید:")
+                user_state[uid] = "await_otp_self" if state == "await_phone_self" else "await_otp_trial"
+                return
+
+            # OTP و 2FA
+            if state in ["await_otp_self", "await_otp_trial", "await_2fa_self", "await_2fa_trial"]:
+                phone = temp_data.get(uid, {}).get("phone")
+                if not phone:
+                    user_state.pop(uid, None)
+                    return
+                route = "send_code" if "otp" in state else "send_2fa"
+                payload = {"phone": phone, "code" if route == "send_code" else "password": text}
+
+                try:
+                    res = requests.post(f"{SITE_URL}/{route}", json=payload, timeout=15).json()
+                except Exception as e:
+                    bot.send_message(uid, f"❌ خطا در ارتباط با سایت: {str(e)}")
+                    return
+
+                status = res.get("status")
+                if status == "ok":
+                    if "trial" in state:
+                        users_col.update_one({"user_id": uid}, {"$set": {
+                            "phone": phone,
+                            "trial_active": True,
+                            "trial_end": datetime.utcnow() + timedelta(days=TRIAL_DURATION),
+                            "trial_used": True
+                        }}, upsert=True)
+                        start_trial_expiration(uid)
+                        bot.send_message(uid, "✅ سلف تست یک روزه ساخته شد و ورود کامل شد!")
+                    else:
+                        users_col.update_one({"user_id": uid}, {"$set": {"phone": phone}}, upsert=True)
+                        bot.send_message(uid, "✅ سشن ساخته شد و ورود کامل شد!")
+                    user_state.pop(uid, None)
+                    temp_data.pop(uid, None)
+                elif status == "2fa":
+                    bot.send_message(uid, "🔐 نیاز به رمز دو مرحله‌ای (2FA). لطفاً رمز را وارد کنید:")
+                    user_state[uid] = "await_2fa_trial" if "trial" in state else "await_2fa_self"
+                else:
+                    bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
         except Exception as e:
-            return {"status":"error","message":str(e)}
-
-    return jsonify(run_async(task()))
-
-# ================= Self Ping =================
-def self_ping(url):
-    while True:
-        try:
-            requests.get(url)
-        except:
-            pass
-        time.sleep(240)  # هر ۴ دقیقه یکبار
-
-# ================= RUN APP =================
-if __name__ == "__main__":
-    PORT = int(os.environ.get("PORT", 8000))
-    url = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{PORT}")
-    threading.Thread(target=self_ping, args=(url,), daemon=True).start()
-    print(f"Server running on {url}")
-    app.run(host="0.0.0.0", port=PORT)
+            bot.send_message(uid, f"❌ خطا: {str(e)}")
