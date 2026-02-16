@@ -1,5 +1,5 @@
 # ================================================================
-# self_userbot_render.py — FIXED & POWER SAFE (LIVE ERRORS + FULL POWER CHECK)
+# self_userbot_render_fixed.py — FIXED & POWER SAFE (LIVE ERRORS + FULL POWER CHECK)
 # ================================================================
 
 import os
@@ -51,7 +51,6 @@ DB_NAME = "telegram_sessions"
 COLLECTION_NAME = "sessions"
 
 ADMIN_ID = 6433381392
-ADMIN_SESSION_STRING = os.environ.get("ADMIN_SESSION_STRING")
 
 SESSION_DIR = "sessions"
 USER_DATA_DIR = "user_data"
@@ -180,25 +179,24 @@ async def start_session(doc):
     session_str = doc.get("session_string")
     created_at = doc.get("created_at") or datetime.now()
 
-    # بررسی power قبل از استارت
     if doc.get("power", "on") == "off":
         logger.info(f"⏹ Session {name} is OFF (power flag)")
         return
 
     if not session_str or name in started_sessions:
+        logger.info(f"⏹ Skipping {name}, already started or no session_string")
         return
 
     try:
+        logger.info(f"🌐 Trying to start session: {name}")
         client = TelegramClient(
             StringSession(session_str),
             cfg.api_id,
             cfg.api_hash,
         )
-
         await client.start()
         me = await client.get_me()
         client.session_name = name
-
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
@@ -217,6 +215,13 @@ async def start_session(doc):
 
         active_clients[name] = client
         started_sessions.add(name)
+
+        # آپدیت MongoDB
+        sessions_col.update_one(
+            {"session_name": name},
+            {"$set": {"enabled": True, "power": "on", "last_start": datetime.now()}},
+            upsert=True
+        )
 
     except Exception as e:
         reason = ""
@@ -271,7 +276,7 @@ async def session_watcher():
     logger.info("🔄 Session watcher started")
     while True:
         try:
-            docs = list(sessions_col.find({"enabled": True}))
+            docs = list(sessions_col.find({"enabled": {"$ne": False}, "session_string": {"$exists": True}}))
             for doc in docs:
                 await start_session(doc)
         except PyMongoError as e:
@@ -297,4 +302,7 @@ async def main():
 # ================================================================
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.error(f"Fatal error in main loop: {e}")
