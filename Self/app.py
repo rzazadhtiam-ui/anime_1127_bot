@@ -1,7 +1,7 @@
 # ================================================================
 # Telegram Session Builder – FULL FINAL VERSION
 # Admin Panel + Free & Paid + Accurate Session Storage
-# By: Tiam.
+# By: Tiam..
 # ================================================================
 
 import os, asyncio, threading, secrets, time, shutil
