@@ -201,8 +201,7 @@ def register_clock(client):
 
     
 
-    asyncio.create_task(start_active_clocks())
-
+    asyncio.create_task(start_active_clocks(client))
     @client.on(events.NewMessage(pattern=r"\.ساعت(.*)"))
     async def handle_clock(event):
         sender = await event.get_sender()
