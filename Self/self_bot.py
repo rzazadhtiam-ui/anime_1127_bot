@@ -1,5 +1,5 @@
 # ================================================================
-# self_userbot_render.py — FIXED & PRODUCTION SAFE (POWER SAFE + LIVE ERRORS)
+# self_userbot_render.py — FIXED & POWER SAFE (LIVE ERRORS + FULL POWER CHECK)
 # ================================================================
 
 import os
@@ -63,7 +63,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SELF-NIX")
 
 # ================================================================
-# FLASK (KEEP ALIVE + LIVE ERRORS + DELETE SESSION ON ERROR)
+# FLASK (KEEP ALIVE + LIVE ERRORS + CLEAR BUTTON)
 # ================================================================
 app = Flask(__name__)
 live_errors = []
@@ -128,13 +128,7 @@ class SelfKeepAlive:
         self.logger = logger
         self.fail_count = 0
         self.max_fail = 3
-
-        self.url = (
-            os.environ.get("RENDER_EXTERNAL_URL")
-            or os.environ.get("APP_URL")
-            or "http://localhost:5000"
-        )
-
+        self.url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("APP_URL") or "http://localhost:5000"
         self.normal_interval = 240
         self.fail_interval = 60
 
@@ -147,7 +141,6 @@ class SelfKeepAlive:
     async def run(self):
         await asyncio.sleep(15)
         self.logger.info(f"🌐 KeepAlive started -> {self.url}")
-
         while True:
             try:
                 status = await self.ping()
@@ -180,12 +173,17 @@ active_clients: Dict[str, TelegramClient] = {}
 started_sessions = set()
 
 # ================================================================
-# SESSION STARTER
+# SESSION STARTER (POWER CHECK ADDED)
 # ================================================================
 async def start_session(doc):
     name = doc.get("session_name") or doc.get("phone")
     session_str = doc.get("session_string")
     created_at = doc.get("created_at") or datetime.now()
+
+    # بررسی power قبل از استارت
+    if doc.get("power", "on") == "off":
+        logger.info(f"⏹ Session {name} is OFF (power flag)")
+        return
 
     if not session_str or name in started_sessions:
         return
@@ -247,7 +245,7 @@ def create_handlers(client: TelegramClient):
 
             doc = sessions_col.find_one({"session_name": getattr(client, "session_name", None)})
             if doc and doc.get("power", "on") == "off":
-                return
+                return  # خاموش بودن power فقط پیام‌ها را نادیده می‌گیرد
 
             if uid == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
                 msg = "📊 سشن‌های فعال:\n"
