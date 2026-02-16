@@ -1,7 +1,5 @@
 # ================================================================
-
 # self_userbot_render.py — FIXED & PRODUCTION SAFE (POWER SAFE + LIVE ERRORS)
-
 # ================================================================
 
 import os
@@ -65,16 +63,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SELF-NIX")
 
 # ================================================================
-# FLASK (KEEP ALIVE + LIVE ERRORS)
+# FLASK (KEEP ALIVE + LIVE ERRORS + DELETE SESSION ON ERROR)
 # ================================================================
 app = Flask(__name__)
+live_errors = []
 
 @app.route("/")
 def home():
     return "Self Nix Bot is running ✅"
-
-# لیست زنده خطاها
-live_errors = []
 
 @app.route("/errors")
 def show_errors():
@@ -83,7 +79,14 @@ def show_errors():
     html = "<h2>لیست خطاهای سشن‌ها</h2>"
     for e in live_errors:
         html += f"<b>{e['session_name']}</b> | ساخته شده: {e['created_at']} | مشکل: {e['reason']}<br>"
+    html += '<br><a href="/errors/clear">پاک کردن خطاها</a>'
     return html
+
+@app.route("/errors/clear")
+def clear_errors():
+    global live_errors
+    live_errors = []
+    return "تمام خطاها پاک شدند ✅"
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
@@ -98,6 +101,21 @@ async def notify_error_fa(session_name, created_at, reason):
     live_errors.append(entry)
     if len(live_errors) > 50:
         live_errors.pop(0)
+
+    # پاک کردن سشن خراب از active_clients و MongoDB
+    if session_name in active_clients:
+        client = active_clients[session_name]
+        try:
+            await client.disconnect()
+        except:
+            pass
+        del active_clients[session_name]
+        started_sessions.discard(session_name)
+
+    sessions_col.update_one(
+        {"session_name": session_name},
+        {"$set": {"enabled": False}}
+    )
 
 # ================================================================
 # ADVANCED SELF KEEP ALIVE (PRODUCTION SAFE)
@@ -117,7 +135,6 @@ class SelfKeepAlive:
             or "http://localhost:5000"
         )
 
-        # interval config (seconds)
         self.normal_interval = 240
         self.fail_interval = 60
 
@@ -157,18 +174,17 @@ db = mongo[DB_NAME]
 sessions_col = db[COLLECTION_NAME]
 
 # ================================================================
-# ACTIVE CLIENTS (MULTI SESSION SAFE)
+# ACTIVE CLIENTS
 # ================================================================
 active_clients: Dict[str, TelegramClient] = {}
 started_sessions = set()
 
 # ================================================================
-# SESSION STARTER (SAFE + LIVE ERRORS)
+# SESSION STARTER
 # ================================================================
 async def start_session(doc):
     name = doc.get("session_name") or doc.get("phone")
     session_str = doc.get("session_string")
-    doc_id = doc.get("_id")
     created_at = doc.get("created_at") or datetime.now()
 
     if not session_str or name in started_sessions:
@@ -188,6 +204,7 @@ async def start_session(doc):
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
+        # ثبت هندلرها و ابزارها
         register(client)
         create_handlers(client)
         register_handlers(client)
@@ -196,6 +213,7 @@ async def start_session(doc):
         register_clock(client)
         self_tools(client)
 
+        # استارت status bot
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
@@ -218,7 +236,7 @@ async def start_session(doc):
         logger.error(f"❌ Broken session {name}: {reason}")
 
 # ================================================================
-# HANDLERS (POWER SAFE)
+# HANDLERS
 # ================================================================
 def create_handlers(client: TelegramClient):
     @client.on(events.NewMessage)
@@ -262,7 +280,6 @@ async def session_watcher():
             logger.error(f"Mongo error: {e}")
         except Exception as e:
             logger.error(f"Watcher error: {e}")
-
         await asyncio.sleep(15)
 
 # ================================================================
