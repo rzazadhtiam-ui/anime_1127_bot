@@ -837,8 +837,7 @@ def auto_save_videos(message):
 # Keep-alive (Professional Version)
 
 KEEP_ALIVE_URLS = [
-    "https://anime-1127-bot.onrender.com/",
-    "https://anime-1127-bot-3.onrender.com/"
+    "https://anime-1127-bot-b1s2.onrender.com"
 ] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
