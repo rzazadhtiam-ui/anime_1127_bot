@@ -179,7 +179,7 @@ def self_ping(url):
         except:
             pass
         time.sleep(240)
-
+print("rune")
 # ================= RUN APP =================
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 8000))
