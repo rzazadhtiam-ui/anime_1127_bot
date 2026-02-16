@@ -21,7 +21,7 @@ CONFIG = {
     "admin_username": "tiam",
     "admin_password": "tiam_khorshid",
     "save_path": "sessions",
-    "base_url": "https://anime-1127-bot-2.onrender.com",
+    "base_url": "https://self_nix_app.onrender.com",
     "device_name": "⦁ 𝑺𝒆𝒍𝒇 𝑵𝒊𝒙",
     "secret_key": secrets.token_urlsafe(16)
 }
