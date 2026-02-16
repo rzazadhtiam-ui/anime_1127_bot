@@ -914,7 +914,7 @@ app = Flask(__name__)
 @app.route("/")
 def home():
     template = """
-    <h2>Bot is alive ✅</h2>
+    <h2>Bot is alive ✅, tiam</h2>
     <h3>آخرین لاگ‌ها:</h3>
     <ul>
     {% for log in logs %}
