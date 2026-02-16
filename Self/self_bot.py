@@ -1,5 +1,5 @@
 # ================================================================
-# self_userbot_render.py — FIXED & PRODUCTION SAFE (POWER SAFE)
+# self_userbot_render.py — FIXED & PRODUCTION SAFE (POWER SAFE + LIVE ERRORS)
 # ================================================================
 
 import os
@@ -9,13 +9,14 @@ import asyncio
 import logging
 import threading
 from typing import Dict
+from datetime import datetime
 
 from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
-from Update1 import register_update1 
+from Update1 import register_update1
 
 # ------------------------------------------------
 # PATH FIX
@@ -62,7 +63,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SELF-NIX")
 
 # ================================================================
-# FLASK (KEEP ALIVE ONLY)
+# FLASK (KEEP ALIVE + LIVE ERRORS)
 # ================================================================
 app = Flask(__name__)
 
@@ -70,10 +71,31 @@ app = Flask(__name__)
 def home():
     return "Self Nix Bot is running ✅"
 
+# لیست زنده خطاها
+live_errors = []
+
+@app.route("/errors")
+def show_errors():
+    if not live_errors:
+        return "هیچ خطایی ثبت نشده ✅"
+    html = "<h2>لیست خطاهای سشن‌ها</h2>"
+    for e in live_errors:
+        html += f"<b>{e['session_name']}</b> | ساخته شده: {e['created_at']} | مشکل: {e['reason']}<br>"
+    return html
+
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+async def notify_error_fa(session_name, created_at, reason):
+    entry = {
+        "session_name": session_name,
+        "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "reason": reason
+    }
+    live_errors.append(entry)
+    if len(live_errors) > 50:
+        live_errors.pop(0)
 
 # ================================================================
 # ADVANCED SELF KEEP ALIVE (PRODUCTION SAFE)
@@ -125,7 +147,6 @@ class SelfKeepAlive:
                     self.logger.error("🚨 KeepAlive multiple failures")
                 await asyncio.sleep(self.fail_interval)
 
-
 # ================================================================
 # DATABASE
 # ================================================================
@@ -139,42 +160,14 @@ sessions_col = db[COLLECTION_NAME]
 active_clients: Dict[str, TelegramClient] = {}
 started_sessions = set()
 
-
 # ================================================================
-# ADMIN NOTIFY + DELETE BROKEN SESSION
-# ================================================================
-async def notify_admin_and_delete(name, error, doc_id=None):
-    try:
-        if ADMIN_SESSION_STRING:
-            admin = TelegramClient(
-                StringSession(ADMIN_SESSION_STRING),
-                cfg.api_id,
-                cfg.api_hash,
-            )
-            await admin.start()
-            await admin.send_message(
-                ADMIN_ID,
-                f"⚠️ سشن خراب و حذف شد:\n{name}\n\n{error}"
-            )
-            await admin.disconnect()
-    except Exception as e:
-        logger.error(f"Admin notify failed: {e}")
-
-    if doc_id:
-        try:
-            sessions_col.delete_one({"_id": doc_id})
-            logger.info(f"🗑 Deleted broken session: {name}")
-        except Exception as e:
-            logger.error(f"Delete failed: {e}")
-
-
-# ================================================================
-# SESSION STARTER (SAFE)
+# SESSION STARTER (SAFE + LIVE ERRORS)
 # ================================================================
 async def start_session(doc):
     name = doc.get("session_name") or doc.get("phone")
     session_str = doc.get("session_string")
     doc_id = doc.get("_id")
+    created_at = doc.get("created_at") or datetime.now()
 
     if not session_str or name in started_sessions:
         return
@@ -188,7 +181,7 @@ async def start_session(doc):
 
         await client.start()
         me = await client.get_me()
-        client.session_name = name  # 🔹 برای چک پاور
+        client.session_name = name
 
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
@@ -208,9 +201,19 @@ async def start_session(doc):
         started_sessions.add(name)
 
     except Exception as e:
-        logger.error(f"❌ Broken session {name}: {e}")
-        await notify_admin_and_delete(name, str(e), doc_id)
+        reason = ""
+        err_str = str(e)
+        if "PhoneCode" in err_str:
+            reason = "کد تایید منقضی شده یا اشتباه است"
+        elif "Auth" in err_str:
+            reason = "مشکل احراز هویت"
+        elif "Connection" in err_str:
+            reason = "مشکل اتصال به سرور تلگرام"
+        else:
+            reason = f"خطای نامشخص: {err_str}"
 
+        await notify_error_fa(name, created_at, reason)
+        logger.error(f"❌ Broken session {name}: {reason}")
 
 # ================================================================
 # HANDLERS (POWER SAFE)
@@ -222,12 +225,10 @@ def create_handlers(client: TelegramClient):
             uid = event.sender_id
             text = (event.raw_text or "").strip()
 
-            # 🔹 چک پاور قبل از پردازش
             doc = sessions_col.find_one({"session_name": getattr(client, "session_name", None)})
             if doc and doc.get("power", "on") == "off":
-                return  # هیچ کاری نکن
+                return
 
-            # admin status
             if uid == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
                 msg = "📊 سشن‌های فعال:\n"
                 for k in active_clients:
@@ -241,8 +242,9 @@ def create_handlers(client: TelegramClient):
                 await m.edit(f"🏓 {int((time.time() - t)*1000)}ms")
 
         except Exception as e:
-            await notify_admin_and_delete("Handler", str(e), None)
-
+            created_at = datetime.now()
+            await notify_error_fa(getattr(client, "session_name", "Handler"), created_at, f"خطای هندلر: {str(e)}")
+            logger.error(f"Handler error: {e}")
 
 # ================================================================
 # SESSION WATCHER
@@ -261,7 +263,6 @@ async def session_watcher():
 
         await asyncio.sleep(15)
 
-
 # ================================================================
 # MAIN
 # ================================================================
@@ -273,7 +274,6 @@ async def main():
 
     while True:
         await asyncio.sleep(60)
-
 
 # ================================================================
 # ENTRY POINT
