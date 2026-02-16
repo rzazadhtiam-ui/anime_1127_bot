@@ -24,8 +24,17 @@ clock_col = db["clock_users"]
 # ==========================================
 # دیتابیس و فایل ذخیره‌سازی
 # ==========================================
-
-
+async def start_active_clocks(client):
+    users = clock_col.find({
+        "$or": [
+            {"clock.bio_enabled": True},
+            {"clock.name_enabled": True}
+        ]
+    })
+    for user in users:  # بدون async
+        uid = user["_id"]
+        if uid not in active_clock_tasks:
+            active_clock_tasks[uid] = asyncio.create_task(live_clock_user(client, uid))
 # ==========================================
 # هر کاربر یک تسک مخصوص ساعت زنده دارد
 # ==========================================
