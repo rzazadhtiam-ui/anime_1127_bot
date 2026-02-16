@@ -764,43 +764,18 @@ def handle_next_message(message):
         all_chats.add(OWNER_ID)
 
         # تابع ارسال محتوا
-        def send_content(cid, message):
-            ct = message.content_type
-            caption = getattr(message, "caption", "") or ""
+def send_content(cid, message):
+    try:
+        bot.copy_message(
+            chat_id=cid,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+        return True
 
-            try:
-                if ct == "text":
-                    bot.send_message(cid, message.text)
-
-                elif ct == "photo":
-                    bot.send_photo(cid, message.photo[-1].file_id, caption=caption)
-
-                elif ct == "video":
-                    bot.send_video(cid, message.video.file_id, caption=caption)
-
-                elif ct == "document":
-                    bot.send_document(cid, message.document.file_id, caption=caption)
-
-                elif ct == "animation":
-                    bot.send_animation(cid, message.animation.file_id, caption=caption)
-
-                elif ct == "voice":
-                    bot.send_voice(cid, message.voice.file_id)
-
-                elif ct == "video_note":
-                    bot.send_video_note(cid, message.video_note.file_id)
-
-                elif ct == "sticker":
-                    bot.send_sticker(cid, message.sticker.file_id)
-
-                else:
-                    return False
-
-                return True
-
-            except Exception as e:
-                print(f"Echo send error to {cid}: {e}")
-                return False
+    except Exception as e:
+        print(f"Echo send error to {cid}: {e}")
+        return False
 
         # ارسال به همه
         for cid in all_chats:
@@ -862,9 +837,9 @@ def auto_save_videos(message):
 # Keep-alive (Professional Version)
 
 KEEP_ALIVE_URLS = [
-    "https://anime-1127-bot-1.onrender.com/",
+    "https://anime-1127-bot.onrender.com/",
     "https://anime-1127-bot-3.onrender.com/"
-]
+] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
 
