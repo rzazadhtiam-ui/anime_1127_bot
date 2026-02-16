@@ -838,6 +838,7 @@ def auto_save_videos(message):
 
 KEEP_ALIVE_URLS = [
     "https://anime-1128-bot.onrender.com"
+    "https://self-nix-bot.onrender.com"
 ] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
