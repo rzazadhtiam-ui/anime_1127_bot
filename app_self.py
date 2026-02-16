@@ -1,10 +1,3 @@
-# ================================================================
-# Telegram Session Builder - Flask + Telethon + MongoDB
-# Self-ping every 4 minutes to stay alive
-# Stores user_id and username in MongoDB
-# By: Tiam
-# ================================================================
-
 import os
 import asyncio
 import threading
@@ -15,11 +8,12 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 from telethon.sessions import StringSession
 from pymongo import MongoClient
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ================= CONFIG =================
 API_ID = 24645053
 API_HASH = "88c0167b74a24fac0a85c26c1f6d1991"
+TRIAL_DURATION = 1  # 1 day for trial
 
 # ================= MongoDB =================
 mongo = MongoClient(
@@ -67,6 +61,7 @@ def ping():
 @app.route("/send_phone", methods=["POST"])
 def send_phone():
     phone = request.json.get("phone")
+    trial = request.json.get("trial", False)  # False = main, True = trial
     if not phone:
         return jsonify({"status":"error","message":"شماره وارد نشده"})
     
@@ -79,7 +74,7 @@ def send_phone():
 
     try:
         run_async(task())
-        return jsonify({"status":"ok","message":"کد OTP ارسال شد"})
+        return jsonify({"status":"ok","message":"کد OTP ارسال شد","trial":trial})
     except Exception as e:
         return jsonify({"status":"error","message":str(e)})
 
@@ -89,6 +84,7 @@ def send_code():
     data = request.json
     phone = data.get("phone")
     code = data.get("code")
+    trial = data.get("trial", False)
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
@@ -105,10 +101,15 @@ def send_code():
                 "created_at": datetime.utcnow(),
                 "enabled": True,
                 "power": "on",
+                "trial": trial,
                 "session_string": session_str
             }
+            if trial:
+                doc["trial_end"] = datetime.utcnow() + timedelta(days=TRIAL_DURATION)
+
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+
+            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد","user_id": me.id,"trial": trial}
 
         except SessionPasswordNeededError:
             return {"status":"2fa","message":"رمز دو مرحله‌ای لازم است"}
@@ -125,6 +126,7 @@ def send_2fa():
     data = request.json
     phone = data.get("phone")
     password = data.get("password")
+    trial = data.get("trial", False)
     client = clients.get(phone)
     if not client:
         return jsonify({"status":"error","message":"کلاینت پیدا نشد"})
@@ -141,15 +143,33 @@ def send_2fa():
                 "created_at": datetime.utcnow(),
                 "enabled": True,
                 "power": "on",
+                "trial": trial,
                 "session_string": session_str
             }
+            if trial:
+                doc["trial_end"] = datetime.utcnow() + timedelta(days=TRIAL_DURATION)
+
             sessions_col.update_one({"phone": phone}, {"$set": doc}, upsert=True)
-            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد", "user_id": me.id}
+
+            return {"status":"ok","message":"سشن ساخته شد و آیدی ذخیره شد","user_id": me.id,"trial": trial}
 
         except Exception as e:
             return {"status":"error","message":str(e)}
 
     return jsonify(run_async(task()))
+
+# ================= Background Expiration =================
+def trial_expiration_worker():
+    while True:
+        now = datetime.utcnow()
+        expired = sessions_col.find({"trial": True, "power": "on", "trial_end": {"$lte": now}})
+        for session in expired:
+            sessions_col.update_one({"_id": session["_id"]}, {"$set": {"power": "off"}})
+            sessions_col.update_one({"_id": session["_id"]}, {"$unset": {"trial_end": ""}})
+            print(f"[Trial Expired] Phone: {session['phone']}")
+        time.sleep(60)  # check every minute
+
+threading.Thread(target=trial_expiration_worker, daemon=True).start()
 
 # ================= Self Ping =================
 def self_ping(url):
@@ -158,7 +178,7 @@ def self_ping(url):
             requests.get(url)
         except:
             pass
-        time.sleep(240)  # هر ۴ دقیقه یکبار
+        time.sleep(240)
 
 # ================= RUN APP =================
 if __name__ == "__main__":
