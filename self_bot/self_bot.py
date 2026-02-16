@@ -158,7 +158,43 @@ def is_user_joined(user_id):
 
     return missing
 
+import threading
+import time
 
+
+import threading
+import time
+
+HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
+MIN_COINS_FOR_SESSION = 10  # حداقل سکه برای ادامه سشن
+
+def deduct_hourly_silent():
+    """کاهش سکه کاربران با سشن فعال، پیام فقط یک بار وقتی سکه کم شد"""
+    users = users_col.find({"active_session": True})
+    for user in users:
+        uid = user["user_id"]
+        current_coins = user.get("coins", 0)
+        new_coins = max(current_coins - HOURLY_DEDUCT, 0)
+        
+        # بروزرسانی سکه‌ها
+        users_col.update_one({"user_id": uid}, {"$set": {"coins": new_coins}})
+
+        # بررسی حداقل سکه
+        if new_coins <= MIN_COINS_FOR_SESSION:
+            # فقط اگر پیام قبلاً ارسال نشده باشد
+            if not user.get("session_disabled_msg_sent", False):
+                users_col.update_one(
+                    {"user_id": uid},
+                    {"$set": {
+                        "active_session": False,
+                        "session_disabled_msg_sent": True  # فلگ فرستادن پیام
+                    }}
+                )
+                try:
+                    bot.send_message(uid, "⚡ ربات شما به دلیل کم بودن سکه خاموش شد")
+                except Exception:
+                    pass
+                print(f"[INFO] User {uid} session stopped due to low coins.")
 
 # ================= Handlers =================
 @bot.message_handler(commands=["start"])
@@ -210,7 +246,7 @@ def give_coins_admin(message):
     except:
         pass
 
-@bot.message_handler(commands=["add"])
+@bot.message_handler(commands=["add_baton"])
 def add_required_chat(message):
     if message.from_user.id not in ADMINS:
         bot.send_message(message.from_user.id, "❌ دسترسی ندارید!")
@@ -324,7 +360,7 @@ def handle_messages(message):
     text = message.text.strip()
     state = user_state.get(uid)
 
-    # خرید سکه
+    # ---------------- خرید سکه ----------------
     if state == "await_buy_amount":
         if not text.isdigit():
             bot.send_message(uid, "❌ لطفاً عدد وارد کنید.")
@@ -335,45 +371,63 @@ def handle_messages(message):
         user_state.pop(uid, None)
         return
 
-    # شماره
+    # ---------------- مرحله شماره ----------------
     if state in ["await_phone_self", "await_phone_trial"]:
+        # پاک کردن پیام کاربر و پیام قبلی ربات
+        try: bot.delete_message(uid, message.message_id)
+        except: pass
+        prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
+        if prev_msg_id:
+            try: bot.delete_message(uid, prev_msg_id)
+            except: pass
+
         temp_data[uid] = {"phone": text}
         try:
-            res = requests.post(f"{SITE_URL}/send_phone", json={"phone": text, "trial": state=="await_phone_trial"}, timeout=15).json()
+            res = requests.post(
+                f"{SITE_URL}/send_phone",
+                json={"phone": text, "trial": state=="await_phone_trial"},
+                timeout=15
+            ).json()
         except Exception as e:
-            bot.send_message(uid, f"❌ خطا در ارسال شماره: {e}")
+            msg = bot.send_message(uid, f"❌ خطا در ارسال شماره: {e}")
+            temp_data[uid]["last_msg_id"] = msg.message_id
             return
 
         if res.get("status") == "ok":
-            bot.send_message(uid, "✅ شماره ثبت شد. لطفاً کد OTP را وارد کنید:")
+            msg = bot.send_message(uid, "✅ شماره تایید شد. لطفاً کد OTP را با . وارد کنید\nمثال:1.2.3.4.5")
+            temp_data[uid]["last_msg_id"] = msg.message_id
             user_state[uid] = "await_otp_self" if state == "await_phone_self" else "await_otp_trial"
         else:
-            bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            msg = bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            temp_data[uid]["last_msg_id"] = msg.message_id
         return
 
-    # OTP و 2FA
-    if state in ["await_otp_self", "await_otp_trial", "await_2fa_self", "await_2fa_trial"]:
+    # ---------------- مرحله OTP ----------------
+    if state in ["await_otp_self", "await_otp_trial"]:
+        # پاک کردن پیام کاربر و پیام قبلی ربات
+        try: bot.delete_message(uid, message.message_id)
+        except: pass
+        prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
+        if prev_msg_id:
+            try: bot.delete_message(uid, prev_msg_id)
+            except: pass
+
         phone = temp_data.get(uid, {}).get("phone")
         if not phone:
-            bot.send_message(uid, "❌ شماره پیدا نشد. دوباره /start بزنید.")
             user_state.pop(uid, None)
             return
 
         trial = "trial" in state
-        if "otp" in state:
-            # ارسال کد OTP
-            try:
-                res = requests.post(f"{SITE_URL}/send_code", json={"phone": phone, "code": text, "trial": trial}, timeout=15).json()
-            except Exception as e:
-                bot.send_message(uid, f"❌ خطا در ارسال کد: {e}")
-                return
-        else:
-            # ارسال 2FA
-            try:
-                res = requests.post(f"{SITE_URL}/send_2fa", json={"phone": phone, "password": text, "trial": trial}, timeout=15).json()
-            except Exception as e:
-                bot.send_message(uid, f"❌ خطا در ارسال 2FA: {e}")
-                return
+        try:
+            res = requests.post(
+                f"{SITE_URL}/send_code",
+                json={"phone": phone, "code": text, "trial": trial},
+                timeout=15
+            ).json()
+        except Exception as e:
+            msg = bot.send_message(uid, f"❌ خطا در ارسال کد OTP: {e}")
+            temp_data[uid]["last_msg_id"] = msg.message_id
+            return
 
         if res.get("status") == "ok":
             users_col.update_one({"user_id": uid}, {"$set": {
@@ -384,17 +438,62 @@ def handle_messages(message):
             }})
             if trial:
                 start_trial_expiration(uid)
-                bot.send_message(uid, "✅ سلف تست یک روزه ساخته شد و ورود کامل شد!")
-            else:
-                bot.send_message(uid, "✅ سلف اصلی ساخته شد و ورود کامل شد!")
+            msg = bot.send_message(uid, f"✅ {'سلف تست' if trial else 'سلف اصلی'} ساخته شد و ورود کامل شد!")
+            temp_data[uid]["last_msg_id"] = msg.message_id
             user_state.pop(uid, None)
             temp_data.pop(uid, None)
-
         elif res.get("status") == "2fa":
-            bot.send_message(uid, "🔐 نیاز به رمز دو مرحله‌ای (2FA). لطفاً وارد کنید:")
+            msg = bot.send_message(uid, "🔐 نیاز به رمز دو مرحله‌ای (2FA). لطفاً وارد کنید:")
+            temp_data[uid]["last_msg_id"] = msg.message_id
             user_state[uid] = "await_2fa_trial" if trial else "await_2fa_self"
         else:
-            bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            msg = bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            temp_data[uid]["last_msg_id"] = msg.message_id
+
+    # ---------------- مرحله 2FA ----------------
+    if state in ["await_2fa_self", "await_2fa_trial"]:
+        # پاک کردن پیام کاربر و پیام قبلی ربات
+        try: bot.delete_message(uid, message.message_id)
+        except: pass
+        prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
+        if prev_msg_id:
+            try: bot.delete_message(uid, prev_msg_id)
+            except: pass
+
+        phone = temp_data.get(uid, {}).get("phone")
+        if not phone:
+            user_state.pop(uid, None)
+            return
+
+        trial = "trial" in state
+        try:
+            res = requests.post(
+                f"{SITE_URL}/send_2fa",
+                json={"phone": phone, "password": text, "trial": trial},
+                timeout=15
+            ).json()
+        except Exception as e:
+            msg = bot.send_message(uid, f"❌ خطا در ارسال 2FA: {e}")
+            temp_data[uid]["last_msg_id"] = msg.message_id
+            return
+
+        if res.get("status") == "ok":
+            users_col.update_one({"user_id": uid}, {"$set": {
+                "phone": phone,
+                "trial_active": trial,
+                "trial_used": trial or users_col.find_one({"user_id": uid}).get("trial_used", False),
+                "trial_end": datetime.utcnow() + timedelta(days=TRIAL_DURATION) if trial else None
+            }})
+            if trial:
+                start_trial_expiration(uid)
+            msg = bot.send_message(uid, f"✅ {'سلف تست' if trial else 'سلف اصلی'} ساخته شد و ورود کامل شد!")
+            temp_data[uid]["last_msg_id"] = msg.message_id
+            user_state.pop(uid, None)
+            temp_data.pop(uid, None)
+        elif res.get("status") == "2fa":
+            msg = bot.send_message(uid, "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:")
+            temp_data[uid]["last_msg_id"] = msg.message_id
+    
 
 # ================= Keep-Alive + Web Server =================
 from flask import Flask
