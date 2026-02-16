@@ -396,6 +396,42 @@ def handle_messages(message):
         else:
             bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
 
+# ================= Keep-Alive + Web Server =================
+from flask import Flask
+import threading
+import requests
+import os
+
+# لینک سایت شما
+KEEP_ALIVE_URL = "https://self-bot-tv3l.onrender.com"
+
+# ساخت سرور Flask
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "🤖 Bot is alive ✅"
+
+# تابع پینگ خودکار
+def keep_alive():
+    try:
+        requests.get(KEEP_ALIVE_URL, timeout=10)
+        print("✅ Ping sent to self")
+    except Exception as e:
+        print("❌ Ping failed:", e)
+    # هر 5 دقیقه دوباره اجرا میشه
+    threading.Timer(300, keep_alive).start()
+
+# شروع Keep-Alive
+keep_alive()
+
+# اجرای Flask سرور در یک Thread جداگانه
+def run_flask():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_flask, daemon=True).start()
+
 # ================= RUN BOT =================
 print("Self Bot is running...")
 bot.infinity_polling()
