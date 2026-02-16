@@ -2,6 +2,7 @@
 # self_userbot_render_fixed.py — FIXED & POWER SAFE (LIVE ERRORS + FULL POWER CHECK)
 # ================================================================
 
+
 import os
 import sys
 import time
