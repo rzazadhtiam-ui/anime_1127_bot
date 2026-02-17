@@ -8,10 +8,12 @@ from update1 import PanelManager
 # ================= CONFIG =================
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
-MIN_COINS = 1
 REFERRAL_REWARD = 25
 PRICE_PER_50 = 1000
 TRIAL_DURATION = 1  # روز
+HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
+MIN_COINS_FOR_SESSION = 1 # حداقل سکه برای ادامه سشن
+
 
 # ================= MongoDB =================
 mongo_uri = (
@@ -165,37 +167,97 @@ import time
 import threading
 import time
 
-HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
-MIN_COINS_FOR_SESSION = 10  # حداقل سکه برای ادامه سشن
 
-def deduct_hourly_silent():
-    """کاهش سکه کاربران با سشن فعال، پیام فقط یک بار وقتی سکه کم شد"""
-    users = users_col.find({"active_session": True})
-    for user in users:
-        uid = user["user_id"]
+def manage_user_coins(uid):
+    """
+    کاهش سکه هر ساعت و مدیریت خاموش/روشن شدن سشن‌ها به صورت خودکار.
+    """
+    try:
+        user = users_col.find_one({"user_id": uid})
+        if not user:
+            return
+
+        # پیدا کردن سشن‌های فعال
+        active_sessions = list(sessions_col.find({
+            "user_id": uid,
+            "enabled": True,
+            "power": "on"
+        }))
+
+        session_count = len(active_sessions)
         current_coins = user.get("coins", 0)
-        new_coins = max(current_coins - HOURLY_DEDUCT, 0)
-        
-        # بروزرسانی سکه‌ها
-        users_col.update_one({"user_id": uid}, {"$set": {"coins": new_coins}})
 
-        # بررسی حداقل سکه
-        if new_coins <= MIN_COINS_FOR_SESSION:
-            # فقط اگر پیام قبلاً ارسال نشده باشد
-            if not user.get("session_disabled_msg_sent", False):
-                users_col.update_one(
-                    {"user_id": uid},
-                    {"$set": {
-                        "active_session": False,
-                        "session_disabled_msg_sent": True  # فلگ فرستادن پیام
-                    }}
-                )
+        # کاهش سکه فقط اگر سشن فعال وجود داشته باشد
+        if session_count > 0 and current_coins > 0:
+            deduct_amount = HOURLY_DEDUCT * session_count
+            new_coins = max(current_coins - deduct_amount, 0)
+
+            # بروزرسانی سکه و ثبت زمان آخرین کاهش
+            users_col.update_one(
+                {"user_id": uid},
+                {"$set": {"coins": new_coins, "last_coin_deduct": datetime.utcnow()}}
+            )
+
+            print(f"[COIN ENGINE] User {uid} used {deduct_amount} coins | Active Sessions: {session_count} | Remaining: {new_coins}")
+
+            # اگر سکه کم شد → خاموش کردن سشن‌ها
+            if new_coins < MIN_COINS_FOR_SESSION:
+                for session in active_sessions:
+                    sessions_col.update_one(
+                        {"_id": session["_id"]},
+                        {"$set": {"power": "off", "disabled_reason": "low_coins", "disabled_at": datetime.utcnow()}}
+                    )
+
+                if not user.get("low_coin_warned"):
+                    users_col.update_one(
+                        {"user_id": uid},
+                        {"$set": {"low_coin_warned": True}}
+                    )
+                    try:
+                        bot.send_message(
+                            uid,
+                            "⚠️ کاربر گرامی\n"
+                            f"سکه‌های شما برای ادامه فعالیت سلف کافی نمی‌باشد.\n"
+                            f"تمام سشن‌ها خاموش شدند."
+                        )
+                    except Exception as e:
+                        print(f"[COIN ENGINE MESSAGE ERROR] User {uid}: {e}")
+
+            else:
+                # اگر سکه شارژ شد و فلگ فعال بود → ریست فلگ
+                if user.get("low_coin_warned"):
+                    users_col.update_one(
+                        {"user_id": uid},
+                        {"$set": {"low_coin_warned": False}}
+                    )
+
+        # بررسی سشن‌های خاموش برای Auto Resume
+        coins = users_col.find_one({"user_id": uid}).get("coins", 0)
+        if coins >= MIN_COINS_FOR_SESSION:
+            # پیدا کردن سشن‌هایی که Power=off و به دلیل کمبود سکه خاموش شده‌اند
+            sessions_to_resume = list(sessions_col.find({
+                "user_id": uid,
+                "power": "off",
+                "disabled_reason": "low_coins"
+            }))
+            if sessions_to_resume:
+                for session in sessions_to_resume:
+                    sessions_col.update_one(
+                        {"_id": session["_id"]},
+                        {"$set": {"power": "on"}, "$unset": {"disabled_reason": "", "disabled_at": ""}}
+                    )
                 try:
-                    bot.send_message(uid, "⚡ ربات شما به دلیل کم بودن سکه خاموش شد")
-                except Exception:
-                    pass
-                print(f"[INFO] User {uid} session stopped due to low coins.")
+                    bot.send_message(
+                        uid,
+                        "✅ سکه‌های شما شارژ شد!\n"
+                        "سشن‌هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
+                    )
+                except Exception as e:
+                    print(f"[AUTO RESUME MESSAGE ERROR] User {uid}: {e}")
 
+    except Exception as e:
+        print("[COIN ENGINE ERROR]", e)
+            
 # ================= Handlers =================
 @bot.message_handler(commands=["start"])
 def start_panel(message):
@@ -275,9 +337,15 @@ def handle_callbacks(call):
 
     elif data == "selfbot_start_self":
         coins = user.get("coins", 0)
-        if coins < MIN_COINS:
-            bot.answer_callback_query(call.id, f"💎 حداقل {MIN_COINS} سکه نیاز دارید! شما {coins} دارید.")
+        required = MIN_COINS  # مقدار حداقل مورد نیاز برای فعال سازی
+        if coins < required:
+            missing = required - coins
+            bot.answer_callback_query(
+            call.id, 
+            f"⚠️ سکه‌های شما برای فعال‌سازی سلف کافی نیست!\nسکه مورد نیاز: {missing} سکه"
+        )
             return
+    # اگر سکه کافی بود ادامه بده
         safe_edit(call, "📱 شماره خود را وارد کنید (+98...) برای سلف اصلی")
         user_state[uid] = "await_phone_self"
 
@@ -498,14 +566,11 @@ def handle_messages(message):
 def hourly_loop():
     while True:
         try:
-            deduct_hourly_silent()
+            for user in users_col.find({}):
+                manage_user_coins(user["user_id"])
         except Exception as e:
             print("Hourly deduct error:", e)
-
-        time.sleep(3600)  # هر 1 ساعت اجرا
-
-threading.Thread(target=hourly_loop, daemon=True).start()
-
+        time.sleep(3600)
 
 # ================= Keep-Alive + Web Server =================
 from flask import Flask
