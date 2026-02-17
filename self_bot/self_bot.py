@@ -6,13 +6,14 @@ import requests
 from pymongo import MongoClient
 from update1 import PanelManager
 # ================= CONFIG =================
-TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
+TOKEN = "8289197053:AAFYt5w2LdQ5OCyo9RW1Thogmh164-_v8j8"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
+MIN_COINS = 10
 REFERRAL_REWARD = 25
 PRICE_PER_50 = 1000
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
-MIN_COINS_FOR_SESSION = 1 # حداقل سکه برای ادامه سشن
+MIN_COINS_FOR_SESSION = 10 # حداقل سکه برای ادامه سشن
 
 
 # ================= MongoDB =================
@@ -170,7 +171,7 @@ import time
 
 def manage_user_coins(uid):
     """
-    کاهش سکه هر ساعت و مدیریت خاموش/روشن شدن سشن‌ها به صورت خودکار.
+    کاهش سکه هر ساعت و مدیریت خودکار سشن‌ها.
     """
     try:
         user = users_col.find_one({"user_id": uid})
@@ -188,7 +189,7 @@ def manage_user_coins(uid):
         current_coins = user.get("coins", 0)
 
         # کاهش سکه فقط اگر سشن فعال وجود داشته باشد
-        if session_count > 0 and current_coins > 0:
+        if session_count > 0:
             deduct_amount = HOURLY_DEDUCT * session_count
             new_coins = max(current_coins - deduct_amount, 0)
 
@@ -216,9 +217,7 @@ def manage_user_coins(uid):
                     try:
                         bot.send_message(
                             uid,
-                            "⚠️ کاربر گرامی\n"
-                            f"سکه‌های شما برای ادامه فعالیت سلف کافی نمی‌باشد.\n"
-                            f"تمام سشن‌ها خاموش شدند."
+                            "⚠️ سکه‌های شما برای ادامه فعالیت سلف کافی نیست.\nتمام سشن‌ها خاموش شدند."
                         )
                     except Exception as e:
                         print(f"[COIN ENGINE MESSAGE ERROR] User {uid}: {e}")
@@ -244,20 +243,38 @@ def manage_user_coins(uid):
                 for session in sessions_to_resume:
                     sessions_col.update_one(
                         {"_id": session["_id"]},
-                        {"$set": {"power": "on"}, "$unset": {"disabled_reason": "", "disabled_at": ""}}
+                        {"$set": {"power": "on"}, "$unset": {"disabled_reason": 1, "disabled_at": 1}}
                     )
                 try:
                     bot.send_message(
                         uid,
-                        "✅ سکه‌های شما شارژ شد!\n"
-                        "سشن‌هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
+                        "✅ سکه‌های شما شارژ شد!\nسشن‌هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
                     )
                 except Exception as e:
                     print(f"[AUTO RESUME MESSAGE ERROR] User {uid}: {e}")
 
     except Exception as e:
         print("[COIN ENGINE ERROR]", e)
-            
+
+
+def hourly_loop():
+    """
+    اجرای مدیریت سکه‌ها هر ساعت روی همه کاربران فعال.
+    """
+    while True:
+        try:
+            # فقط کاربران با سشن فعال و سکه بیشتر از صفر
+            active_users = users_col.find({"coins": {"$gte": 0}})
+            for user in active_users:
+                manage_user_coins(user["user_id"])
+        except Exception as e:
+            print("Hourly deduct error:", e)
+
+        time.sleep(3600)
+
+
+
+
 # ================= Handlers =================
 @bot.message_handler(commands=["start"])
 def start_panel(message):
@@ -337,13 +354,18 @@ def handle_callbacks(call):
 
     elif data == "selfbot_start_self":
         coins = user.get("coins", 0)
-        required = MIN_COINS  # مقدار حداقل مورد نیاز برای فعال سازی
+        required = MIN_COINS
         if coins < required:
             missing = required - coins
-            bot.answer_callback_query(
-            call.id, 
-            f"⚠️ سکه‌های شما برای فعال‌سازی سلف کافی نیست!\nسکه مورد نیاز: {missing} سکه"
+
+        # پیام هشدار موقت
+            msg = bot.send_message(
+            uid,
+            f"⚠️ سکه‌های شما کافی نیست!\nمقدار مورد نیاز: {missing} سکه"
         )
+
+        # حذف خودکار پیام بعد 3 ثانیه
+            threading.Timer(3, lambda: bot.delete_message(uid, msg.message_id)).start()
             return
     # اگر سکه کافی بود ادامه بده
         safe_edit(call, "📱 شماره خود را وارد کنید (+98...) برای سلف اصلی")
@@ -563,6 +585,9 @@ def handle_messages(message):
             temp_data[uid]["last_msg_id"] = msg.message_id
   #===========================  
 
+import threading
+import time
+
 def hourly_loop():
     while True:
         try:
@@ -570,7 +595,10 @@ def hourly_loop():
                 manage_user_coins(user["user_id"])
         except Exception as e:
             print("Hourly deduct error:", e)
-        time.sleep(3600)
+        time.sleep(3600)  # اجرای واقعی هر ۱ ساعت
+
+# اجرای loop در thread جداگانه
+threading.Thread(target=hourly_loop, daemon=True).start()
 
 # ================= Keep-Alive + Web Server =================
 from flask import Flask
