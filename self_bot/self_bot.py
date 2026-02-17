@@ -8,7 +8,7 @@ from update1 import PanelManager
 # ================= CONFIG =================
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
-MIN_COINS = 10
+MIN_COINS = 1
 REFERRAL_REWARD = 25
 PRICE_PER_50 = 1000
 TRIAL_DURATION = 1  # روز
@@ -493,7 +493,19 @@ def handle_messages(message):
         elif res.get("status") == "2fa":
             msg = bot.send_message(uid, "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:")
             temp_data[uid]["last_msg_id"] = msg.message_id
-    
+  #===========================  
+
+def hourly_loop():
+    while True:
+        try:
+            deduct_hourly_silent()
+        except Exception as e:
+            print("Hourly deduct error:", e)
+
+        time.sleep(3600)  # هر 1 ساعت اجرا
+
+threading.Thread(target=hourly_loop, daemon=True).start()
+
 
 # ================= Keep-Alive + Web Server =================
 from flask import Flask
