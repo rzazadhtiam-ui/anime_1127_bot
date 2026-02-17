@@ -6,6 +6,7 @@ import requests
 from pymongo import MongoClient
 from update1 import PanelManager
 # ================= CONFIG =================
+
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
 MIN_COINS = 10
