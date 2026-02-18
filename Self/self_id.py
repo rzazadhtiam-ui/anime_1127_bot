@@ -16,7 +16,7 @@ from telethon.errors import (
     AboutTooLongError,
     FloodWaitError
 )
-
+from multi_lang import multi_lang, reply_auto, edit_auto
 # ============================================================
 # Helper functions
 # ============================================================
@@ -45,7 +45,8 @@ def register(client):
     # ==============================
     # .ایدی
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.ایدی$'))
+    @client.on(events.NewMessage)
+    @multi_lang([".ایدی", ".id"])
     async def user_info_handler(event):
         if not is_self(event):
             return
@@ -68,7 +69,7 @@ def register(client):
                     f"ایدی عددی: {user_id}"
                 )
                 # ارسال پیام داخل بلوک تا فایل پاک نشه قبل از ارسال
-                await event.edit(text, file=photo_path)
+                await edit_auto(event, text, file=photo_path)
             return
 
         # اگر عکس نداشت فقط متن
@@ -78,12 +79,13 @@ def register(client):
             f"یوزرنیم: {username}\n"
             f"ایدی عددی: {user_id}"
         )
-        await event.edit(text)
+        await edit_auto(event, text)
 
     # ==============================
     # .تنظیم اسم
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.تنظیم اسم (.+)'))
+    @client.on(events.NewMessage)
+    @multi_lang([".تنظیم اسم", ".set name"])
     async def set_first_name(event):
         if not is_self(event):
             return
@@ -94,18 +96,19 @@ def register(client):
 
         try:
             await client(functions.account.UpdateProfileRequest(first_name=new_name))
-            await event.edit(
+            await edit_auto(event, 
                 f"⚠️ اسم عوض شد\n"
                 f"اسم قبلی: {old_name}\n"
                 f"اسم فعلی: {new_name}"
             )
         except Exception:
-            await event.edit("⚠️ خطا در تغییر اسم")
+            await edit_auto(event, "⚠️ خطا در تغییر اسم")
 
     # ==============================
     # .تنظیم فامیل
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.تنظیم فامیل (.+)'))
+    @client.on(events.NewMessage)
+    @multi_lang([".تنظیم فامیل", ".set last names"])
     async def set_last_name(event):
         if not is_self(event):
             return
@@ -116,18 +119,19 @@ def register(client):
 
         try:
             await client(functions.account.UpdateProfileRequest(last_name=new_last))
-            await event.edit(
+            await edit_auto(event, 
                 f"⚠️ فامیل عوض شد\n"
                 f"فامیل قبلی: {old_last}\n"
                 f"فامیل فعلی: {new_last}"
             )
         except Exception:
-            await event.edit("⚠️ خطا در تغییر فامیل")
+            await edit_auto(event, "⚠️ خطا در تغییر فامیل")
 
     # ==============================
     # .تنظیم بیو
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.تنظیم بیو (.+)'))
+    @client.on(events.NewMessage)
+    @multi_lang([".تنظیم بیو", ".set bio"])
     async def set_bio(event):
         if not is_self(event):
             return
@@ -138,20 +142,21 @@ def register(client):
 
         try:
             await client(functions.account.UpdateProfileRequest(about=new_bio))
-            await event.edit(
+            await edit_auto(event, 
                 f"⚠️ بیو عوض شد\n"
                 f"بیو قبلی: {old_bio}\n"
                 f"بیو فعلی: {new_bio}"
             )
         except AboutTooLongError:
-            await event.edit("⚠️ بیو بیش از حد مجاز است")
+            await edit_auto(event, "⚠️ بیو بیش از حد مجاز است")
         except Exception:
-            await event.edit("⚠️ خطا در تغییر بیو")
+            await edit_auto(event, "⚠️ خطا در تغییر بیو")
 
     # ==============================
     # .تنظیم یوزرنیم
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.تنظیم یوزرنیم (.+)'))
+    @client.on(events.NewMessage)
+    @multi_lang([".تنظیم یوزرنیم", ".set username"])
     async def set_username(event):
         if not is_self(event):
             return
@@ -162,33 +167,34 @@ def register(client):
 
         try:
             await client(functions.account.UpdateUsernameRequest(username=new_username))
-            await event.edit(
+            await edit_auto(event, 
                 f"⚠️ یوزرنیم عوض شد\n"
                 f"یوزرنیم قبلی: {old_username}\n"
                 f"یوزرنیم فعلی: @{new_username}"
             )
         except UsernameOccupiedError:
-            await event.edit("⚠️ یوزرنیم قبلا گرفته شده")
+            await edit_auto(event, "⚠️ یوزرنیم قبلا گرفته شده")
         except UsernameInvalidError:
-            await event.edit("⚠️ یوزرنیم نامعتبر است")
+            await edit_auto(event, "⚠️ یوزرنیم نامعتبر است")
         except Exception:
-            await event.edit("⚠️ خطا در تغییر یوزرنیم")
+            await edit_auto(event, "⚠️ خطا در تغییر یوزرنیم")
 
     # ==============================
     # .تنظیم عکس (ریپلای)
     # ==============================
-    @client.on(events.NewMessage(pattern=r'^\.تنظیم عکس$'))
+    @client.on(events.NewMessage)
+    @multi_lang([".تنظیم عکس", ".set photo"])
     async def set_profile_photo(event):
         if not is_self(event):
             return
 
         if not event.is_reply:
-            await event.edit("⚠️ باید روی عکس ریپلای شود")
+            await edit_auto(event, "⚠️ باید روی عکس ریپلای شود")
             return
 
         reply = await event.get_reply_message()
         if not reply.photo:
-            await event.edit("⚠️ پیام ریپلای‌شده عکس نیست")
+            await edit_auto(event, "⚠️ پیام ریپلای‌شده عکس نیست")
             return
 
         try:
@@ -199,14 +205,14 @@ def register(client):
                     file=await client.upload_file(photo_file)
                 ))
                 # ارسال پیام داخل بلوک تا فایل هنوز موجود باشه
-                await event.edit(
+                await edit_auto(event, 
                     "⚠️ عکس پروفایل عوض شد\n"
                     "عکس قبلی و عکس جدید ثبت شد"
                 )
         except FloodWaitError:
-            await event.edit("⚠️ محدودیت زمانی تلگرام")
+            await edit_auto(event, "⚠️ محدودیت زمانی تلگرام")
         except Exception:
-            await event.edit("⚠️ خطا در تغییر عکس پروفایل")
+            await edit_auto(event, "⚠️ خطا در تغییر عکس پروفایل")
 
 # ============================================================
 # End of file
