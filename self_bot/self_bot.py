@@ -1,6 +1,6 @@
 import telebot
 from telebot import types
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import threading
 import requests
 from pymongo import MongoClient
@@ -48,6 +48,8 @@ panel_text = (
 )
 ADMINS = [6433381392, 8588914809, 8277911482] 
 
+
+    
 # ================= Helper =================
 def safe_edit(call, text, markup=None):
     try:
@@ -73,7 +75,7 @@ def register_user(user):
             "last_name": user.last_name or "",
             "username": user.username or "",
             "coins": 0,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(UTC),
             "trial_used": False
         })
 
@@ -197,7 +199,7 @@ def manage_user_coins(uid):
             # بروزرسانی سکه و ثبت زمان آخرین کاهش
             users_col.update_one(
                 {"user_id": uid},
-                {"$set": {"coins": new_coins, "last_coin_deduct": datetime.utcnow()}}
+                {"$set": {"coins": new_coins, "last_coin_deduct": datetime.now(UTC)}}
             )
 
             print(f"[COIN ENGINE] User {uid} used {deduct_amount} coins | Active Sessions: {session_count} | Remaining: {new_coins}")
@@ -207,7 +209,7 @@ def manage_user_coins(uid):
                 for session in active_sessions:
                     sessions_col.update_one(
                         {"_id": session["_id"]},
-                        {"$set": {"power": "off", "disabled_reason": "low_coins", "disabled_at": datetime.utcnow()}}
+                        {"$set": {"power": "off", "disabled_reason": "low_coins", "disabled_at": datetime.now(UTC)}}
                     )
 
                 if not user.get("low_coin_warned"):
@@ -261,6 +263,112 @@ def manage_user_coins(uid):
 
 
 # ================= Handlers =================
+
+import threading
+import time
+import requests
+from flask import Flask
+import os
+
+# ================= CONFIG =================
+KEEP_ALIVE_URLS = [
+    "https://anime-1128-bot.onrender.com",
+    "https://self-nix-bot.onrender.com",
+    "https://self-nix-app.onrender.com",
+    "https://self-bot-tv3l.onrender.com"
+]
+KEEP_ALIVE_INTERVAL = 150  # ثانیه
+keep_alive_running = False
+keep_alive_thread = None
+keep_alive_lock = threading.Lock()
+
+# ================= LOGGER =================
+def log_event(text):
+    print(f"[KEEP-ALIVE] {text}")
+
+# ================= PING FUNCTION =================
+def ping_site(url):
+    try:
+        res = requests.get(url, timeout=15)
+        if res.status_code == 200:
+            log_event(f"SUCCESS -> {url}")
+        else:
+            log_event(f"WARNING -> {url} | Status: {res.status_code}")
+    except Exception as e:
+        log_event(f"ERROR -> {url} | {e}")
+
+# ================= LOOP =================
+def keep_alive_loop():
+    log_event("Keep-Alive Loop started")
+    while True:
+        with keep_alive_lock:
+            if not keep_alive_running:
+                log_event("Keep-Alive Loop stopped")
+                break
+
+        for url in KEEP_ALIVE_URLS:
+            ping_site(url)
+
+        # Sleep امن (چک کردن stop هر ثانیه)
+        for _ in range(KEEP_ALIVE_INTERVAL):
+            with keep_alive_lock:
+                if not keep_alive_running:
+                    return
+            time.sleep(1)
+
+# ================= START / STOP =================
+def start_keep_alive():
+    global keep_alive_running, keep_alive_thread
+    with keep_alive_lock:
+        if keep_alive_running:
+            return False
+        keep_alive_running = True
+        keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
+        keep_alive_thread.start()
+    return True
+
+def stop_keep_alive():
+    global keep_alive_running
+    with keep_alive_lock:
+        if not keep_alive_running:
+            return False
+        keep_alive_running = False
+    return True
+
+# ================= Flask =================
+app = Flask(__name__)
+@app.route("/")
+def home():
+    return "🤖 Bot is alive ✅"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_flask, daemon=True).start()
+
+# ================= TeleBot Handlers =================
+@bot.message_handler(commands=["ping"])
+def awake_bot(message):
+    if message.from_user.id not in ADMINS:
+        print("paaaaa")
+        return
+    started = start_keep_alive()
+    if started:
+        bot.reply_to(message, "سیستم Keep-Alive فعال شد 🔥")
+    else:
+        bot.reply_to(message, "قبلاً فعال بوده 👁")
+
+@bot.message_handler(commands=["sleep"])
+def sleep_bot(message):
+    if message.from_user.id not in ADMINS:
+        return
+    stopped = stop_keep_alive()
+    if stopped:
+        bot.reply_to(message, "سیستم Keep-Alive خاموش شد 😴")
+    else:
+        bot.reply_to(message, "قبلاً خاموش بوده")
+
 @bot.message_handler(commands=["start"])
 def start_panel(message):
 
@@ -509,7 +617,7 @@ def handle_messages(message):
                 "phone": phone,
                 "trial_active": trial,
                 "trial_used": trial or users_col.find_one({"user_id": uid}).get("trial_used", False),
-                "trial_end": datetime.utcnow() + timedelta(days=TRIAL_DURATION) if trial else None
+                "trial_end": datetime.now(UTC) + timedelta(days=TRIAL_DURATION) if trial else None
             }})
             if trial:
                 start_trial_expiration(uid)
@@ -557,7 +665,7 @@ def handle_messages(message):
                 "phone": phone,
                 "trial_active": trial,
                 "trial_used": trial or users_col.find_one({"user_id": uid}).get("trial_used", False),
-                "trial_end": datetime.utcnow() + timedelta(days=TRIAL_DURATION) if trial else None
+                "trial_end": datetime.now(UTC) + timedelta(days=TRIAL_DURATION) if trial else None
             }})
             if trial:
                 start_trial_expiration(uid)
@@ -585,36 +693,7 @@ def hourly_loop():
 # اجرای loop در thread جداگانه
 threading.Thread(target=hourly_loop, daemon=True).start()
 
-# ================= Keep-Alive + Web Server =================
-from flask import Flask
-import threading
-import requests
-import os
 
-# لینک سایت شما
-KEEP_ALIVE_URL = "https://self-bot-tv3l.onrender.com"
-
-# ساخت سرور Flask
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "🤖 Bot is alive ✅"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
-
-threading.Thread(target=run_flask, daemon=True).start()
-# تابع پینگ خودکار
-
-def keep_alive():
-    while True:
-        try:
-            requests.get(KEEP_ALIVE_URL, timeout=10)
-        except:
-            pass
-        time.sleep(300)
 
 # ================= RUN BOT =================
 print("Self Bot is running...")
