@@ -8,6 +8,7 @@ from typing import Dict
 
 from telethon import TelegramClient, events, functions
 from pymongo import MongoClient
+from multi_lang import multi_lang, reply_auto, edit_auto
 
 # ================================================================
 # MONGO SETUP
@@ -213,28 +214,53 @@ def register_handlers(client, owner_check_fn=None):
                     if uid != me: await client.delete_messages(event.chat_id, [event.id])
                 except: pass
 
-    @client.on(events.NewMessage(pattern=r"\.اسپم\s+(\w+)\s+(\d+)\s*(.*)"))
-    async def spam_cmd(event):
-        if owner_check_fn and not owner_check_fn(event.sender_id): return
-        owner_id = await get_owner_id(client)
-        ensure_owner(owner_id)
-        tp = event.pattern_match.group(1)
-        cnt = int(event.pattern_match.group(2))
-        txt = event.pattern_match.group(3).strip()
-        if not txt and event.is_reply: txt = (await event.get_reply_message()).message or ""
-        if not txt: txt = "سلام"
-        await start_spam(event.client, event, owner_id, tp, cnt, txt)
-        await event.edit(f"⚡ اسپم {tp} در حال انجام است (تعداد: {cnt})")
 
-    @client.on(events.NewMessage(pattern=r"\.توقف اسپم$"))
+    # -------- اسپم --------
+    @client.on(events.NewMessage)
+    @multi_lang([".اسپم", ".spam"])
+    async def spam_handler(event):
+        owner_id = await get_owner_id(client)
+        # بررسی مالک
+        if not await owner_only(event):
+            return
+
+        # گرفتن آرگومان‌ها از متن
+        args = event.ml_args.split(maxsplit=2)  # تفکیک به tp, cnt, متن
+        if len(args) < 2:
+            await edit_auto(event, "❌ لطفاً نوع اسپم و تعداد را وارد کنید\nمثال: `.اسپم متن 5 سلام`")
+            return
+
+        tp = args[0]                     # نوع اسپم
+        try:
+            cnt = int(args[1])           # تعداد
+        except ValueError:
+            await edit_auto(event, "❌ تعداد باید عدد باشد")
+            return
+
+        txt = args[2] if len(args) > 2 else ""  # متن اسپم
+        if not txt and event.is_reply:
+            reply_msg = await event.get_reply_message()
+            txt = reply_msg.message if reply_msg else ""
+        if not txt:
+            txt = "سلام"
+
+        # اجرای اسپم
+        await start_spam(event.client, event, tp, cnt, txt)
+
+        # پیام نتیجه
+        await edit_auto(event, f"⚡ اسپم {tp} در حال انجام است (تعداد: {cnt})")
+
+    @client.on(events.NewMessage)
+    @multi_lang([".توف اسپم", ".Stop spam"])
     async def stop_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         await stop_chat_spams(owner_id, event.chat_id)
-        await event.edit("اسپم متوقف شد.")
+        await edit_auto(event, "اسپم متوقف شد.")
 
     # MUTE / UNMUTE
-    @client.on(events.NewMessage(pattern=r"\.سکوت$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".سکوت", ".mute"])
     async def mute_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
@@ -243,9 +269,10 @@ def register_handlers(client, owner_check_fn=None):
             uid = await get_me_id()
             name = await get_name(client, uid)
         mute_user(owner_id, uid, name)
-        await event.edit(f"کاربر {name} ({uid}) سکوت شد.")
+        await edit_auto(event, f"کاربر {name} ({uid}) سکوت شد.")
 
-    @client.on(events.NewMessage(pattern=r"\.حذف سکوت$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".حذف سکوت", ".unmute"])
     async def unmute_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
@@ -254,58 +281,65 @@ def register_handlers(client, owner_check_fn=None):
             uid = await get_me_id()
             name = await get_name(client, uid)
         unmute_user(owner_id, uid)
-        await event.edit(f"{name} ({uid}) از سکوت خارج شد.")
+        await edit_auto(event, f"{name} ({uid}) از سکوت خارج شد.")
 
     # BLOCK / UNBLOCK
-    @client.on(events.NewMessage(pattern=r"\.بلاک"))
+    @client.on(events.NewMessage)
+    @multi_lang([".بلاک", ".block"])
     async def block_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         uid, name = await resolve_target(client, event)
-        if not uid: return await event.edit("کاربر پیدا نشد.")
+        if not uid: return await edit_auto(event, "کاربر پیدا نشد.")
         ok = await block_user(event.client, owner_id, uid, name)
-        if ok: await event.edit(f"{name} ({uid}) بلاک شد.")
-        else: await event.edit("❌ خطا در بلاک کردن.")
+        if ok: await edit_auto(event, f"{name} ({uid}) بلاک شد.")
+        else: await edit_auto(event, "❌ خطا در بلاک کردن.")
 
-    @client.on(events.NewMessage(pattern=r"\.انبلاک"))
+    
+    @client.on(events.NewMessage)
+    @multi_lang([".آنبلاک", ".unblock"])
     async def unblock_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         uid, name = await resolve_target(client, event)
-        if not uid: return await event.edit("کاربر پیدا نشد.")
+        if not uid: return await edit_auto(event, "کاربر پیدا نشد.")
         ok = await unblock_user(event.client, owner_id, uid)
-        if ok: await event.edit(f"{name} ({uid}) از بلاک خارج شد.")
-        else: await event.edit("❌ خطا در آن‌بلاک کردن.")
+        if ok: await edit_auto(event, f"{name} ({uid}) از بلاک خارج شد.")
+        else: await edit_auto(event, "❌ خطا در آن‌بلاک کردن.")
 
     # LIST
-    @client.on(events.NewMessage(pattern=r"\.لیست سکوت$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".لیست سکوت", ".mute list"])
     async def list_mute_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         m = list_muted(owner_id)
-        if not m: return await event.edit("هیچ کاربری در سکوت نیست.")
+        if not m: return await edit_auto(event, "هیچ کاربری در سکوت نیست.")
         txt = "👤 لیست سکوت :\n\n" + "\n".join(f"{n} : {u}" for u, n in m.items())
         await event.edit(txt)
 
-    @client.on(events.NewMessage(pattern=r"\.لیست بلاک$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".لیست بلاک", ".block list"])
     async def list_block_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         b = list_blocked(owner_id)
-        if not b: return await event.edit("هیچ کاربری بلاک نیست.")
+        if not b: return await edit_auto(event, "هیچ کاربری بلاک نیست.")
         txt = "⛔ لیست بلاک:\n\n" + "\n".join(f"{n} : {u}" for u, n in b.items())
         await event.edit(txt)
 
     # CLEAR ALL
-    @client.on(events.NewMessage(pattern=r"\.پاکسازی سکوت$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".پاکسازی سکوت", ".celar mute"])
     async def clear_all_mute(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         for uid in list(list_muted(owner_id).keys()):
             unmute_user(owner_id, int(uid))
-        await event.edit("تمام کاربران از سکوت خارج شدند ✔️")
+        await edit_auto(event, "تمام کاربران از سکوت خارج شدند ✔️")
 
-    @client.on(events.NewMessage(pattern=r"\.پاکسازی بلاک$"))
+    @client.on(events.NewMessage)
+    @multi_lang([".پاکسازی بلاک", ".celar block"])
     async def clear_all_block(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
@@ -313,4 +347,5 @@ def register_handlers(client, owner_check_fn=None):
         for uid in list(list_blocked(owner_id).keys()):
             ok = await unblock_user(event.client, owner_id, int(uid))
             if ok: success_count += 1
-        await event.edit(f"{success_count} کاربر از بلاک خارج شدند ✔️")
+        await edit_auto(event, f"{success_count} کاربر از بلاک خارج شدند ✔️")
+    
