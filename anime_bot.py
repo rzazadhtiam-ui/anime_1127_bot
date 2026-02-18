@@ -839,6 +839,8 @@ def auto_save_videos(message):
 KEEP_ALIVE_URLS = [
     "https://anime-1128-bot.onrender.com"
     "https://self-nix-bot.onrender.com"
+    "https://self-nix-app.onrender.com"
+    "https://self-bot-tv3l.onrender.com"
 ] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
@@ -874,7 +876,7 @@ def awake_bot(message):
 
     global keep_alive_running
 
-    if message.from_user.id != OWNER_ID:
+    if not is_admin(user_id):
         return
 
     if keep_alive_running:
@@ -898,7 +900,7 @@ def sleep_bot(message):
 
     global keep_alive_running
 
-    if message.from_user.id != OWNER_ID:
+    if not is_admin(user_id):
         return
 
     keep_alive_running = False
