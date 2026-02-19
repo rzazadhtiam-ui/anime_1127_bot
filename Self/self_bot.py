@@ -2,6 +2,7 @@
 # self_userbot_render_fixed.py — FIXED & POWER SAFE (LIVE ERRORS + FULL POWER CHECK)
 # ================================================================
 
+
 import os
 import sys
 import time
@@ -16,10 +17,8 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
-
 from Update1 import register_update1
 from multi_lang import register_language_commands
-
 # ------------------------------------------------
 # PATH FIX
 # ------------------------------------------------
@@ -51,7 +50,8 @@ MONGO_URI = (
 
 DB_NAME = "telegram_sessions"
 COLLECTION_NAME = "sessions"
-ADMIN_ID = 6433381392  # فقط این ادمین می‌تواند دستور وضعیت را بزند
+
+ADMIN_ID = 6433381392
 
 SESSION_DIR = "sessions"
 USER_DATA_DIR = "user_data"
@@ -102,6 +102,7 @@ async def notify_error_fa(session_name, created_at, reason):
     if len(live_errors) > 50:
         live_errors.pop(0)
 
+    # پاک کردن سشن خراب از active_clients و MongoDB
     if session_name in active_clients:
         client = active_clients[session_name]
         try:
@@ -117,7 +118,7 @@ async def notify_error_fa(session_name, created_at, reason):
     )
 
 # ================================================================
-# ADVANCED SELF KEEP ALIVE
+# ADVANCED SELF KEEP ALIVE (PRODUCTION SAFE)
 # ================================================================
 import aiohttp
 
@@ -144,6 +145,8 @@ class SelfKeepAlive:
             try:
                 status = await self.ping()
                 if status == 200:
+                    if self.fail_count > 0:
+                        self.logger.info("✅ KeepAlive recovered")
                     self.fail_count = 0
                     self.logger.info("🏓 KeepAlive OK")
                     await asyncio.sleep(self.normal_interval)
@@ -152,6 +155,8 @@ class SelfKeepAlive:
             except Exception as e:
                 self.fail_count += 1
                 self.logger.warning(f"⚠️ KeepAlive failed ({self.fail_count}) -> {e}")
+                if self.fail_count >= self.max_fail:
+                    self.logger.error("🚨 KeepAlive multiple failures")
                 await asyncio.sleep(self.fail_interval)
 
 # ================================================================
@@ -168,75 +173,88 @@ active_clients: Dict[str, TelegramClient] = {}
 started_sessions = set()
 
 # ================================================================
-# SESSION STARTER (FIXED)
+# SESSION STARTER (POWER CHECK ADDED)
 # ================================================================
-
-
 async def start_session(doc):
-    """
-    doc: داکیومنت از دیتابیس که شامل 'session_string' و 'session_name' و 'power' است
-    """
+    name = doc.get("session_name") or doc.get("phone")
+    session_str = doc.get("session_string")
+    created_at = doc.get("created_at") or datetime.now()
+
+    if doc.get("power", "on") == "off":
+        logger.info(f"⏹ Session {name} is OFF (power flag)")
+        return
+
+    if not session_str or name in started_sessions:
+        logger.info(f"⏹ Skipping {name}, already started or no session_string")
+        return
 
     try:
-        session_string = doc.get("session_string")
-        if not session_string:
-            logger.warning(f"No session string for {doc.get('session_name')}")
-            return
-
-        client = TelegramClient(StringSession(session_string), cfg.api_id, cfg.api_hash)
+        logger.info(f"🌐 Trying to start session: {name}")
+        client = TelegramClient(
+            StringSession(session_str),
+            cfg.api_id,
+            cfg.api_hash,
+        )
         await client.start()
-
         me = await client.get_me()
-        owner_id = me.id
-
-        client.session_name = str(me.id)
+        client.session_name = name
+        logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         # ثبت هندلرها و ابزارها
         register(client)
-        create_handlers(client, owner_id)
+        create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client, owner_id)
+        register_group_handlers(client, me.id)
+        register_language_commands(client)
         register_update1(client)
         register_clock(client)
         self_tools(client)
-        register_language_commands(client)
 
         # استارت status bot
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
-        # ذخیره در active_clients
-        active_clients[str(me.id)] = client
-        started_sessions.add(str(me.id))
-        logger.info(f"✅ Session Started: {me.first_name} ({me.id})")
+        active_clients[name] = client
+        started_sessions.add(name)
+
+        # آپدیت MongoDB
+        sessions_col.update_one(
+            {"session_name": name},
+            {"$set": {"enabled": True, "power": "on", "last_start": datetime.now()}},
+            upsert=True
+        )
 
     except Exception as e:
-        session_name = doc.get("session_name", "unknown")
-        await notify_error_fa(session_name, datetime.now(), str(e))
-        logger.error(f"❌ Failed to start session ({session_name}): {e}")
+        reason = ""
+        err_str = str(e)
+        if "PhoneCode" in err_str:
+            reason = "کد تایید منقضی شده یا اشتباه است"
+        elif "Auth" in err_str:
+            reason = "مشکل احراز هویت"
+        elif "Connection" in err_str:
+            reason = "مشکل اتصال به سرور تلگرام"
+        else:
+            reason = f"خطای نامشخص: {err_str}"
 
+        await notify_error_fa(name, created_at, reason)
+        logger.error(f"❌ Broken session {name}: {reason}")
 
 # ================================================================
-# HANDLERS (USER SAFE + POWER SAFE)
+# HANDLERS
 # ================================================================
-def create_handlers(client: TelegramClient, me_id: int):
-
+def create_handlers(client: TelegramClient):
     @client.on(events.NewMessage)
     async def router(event):
         try:
+            uid = event.sender_id
             text = (event.raw_text or "").strip()
 
-            doc = sessions_col.find_one({"session_name": client.session_name})
-            if not doc or doc.get("power", "on") == "off":
-                return
+            doc = sessions_col.find_one({"session_name": getattr(client, "session_name", None)})
+            if doc and doc.get("power", "on") == "off":
+                return  # خاموش بودن power فقط پیام‌ها را نادیده می‌گیرد
 
-            # هر اکانت فقط دستورات خودش
-            if event.sender_id != me_id and event.sender_id != ADMIN_ID:
-                return
-
-            # دستور وضعیت فقط برای ADMIN_ID
-            if event.sender_id == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
+            if uid == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
                 msg = "📊 سشن‌های فعال:\n"
                 for k in active_clients:
                     msg += f"• {k}\n"
@@ -247,10 +265,10 @@ def create_handlers(client: TelegramClient, me_id: int):
                 t = time.time()
                 m = await event.reply("⏳")
                 await m.edit(f"🏓 {int((time.time() - t)*1000)}ms")
-                return
 
         except Exception as e:
-            await notify_error_fa(client.session_name, datetime.now(), f"خطای هندلر: {str(e)}")
+            created_at = datetime.now()
+            await notify_error_fa(getattr(client, "session_name", "Handler"), created_at, f"خطای هندلر: {str(e)}")
             logger.error(f"Handler error: {e}")
 
 # ================================================================
