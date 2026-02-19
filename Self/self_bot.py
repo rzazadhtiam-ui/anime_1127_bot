@@ -192,6 +192,9 @@ async def start_session(doc):
             cfg.api_hash,
         )
 
+        me = await client.get_me()
+        owner_id = me.id   # ⭐ اینجا تعریف کن
+
         await client.start()
         me = await client.get_me()
 
