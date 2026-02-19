@@ -170,46 +170,51 @@ started_sessions = set()
 # ================================================================
 # SESSION STARTER (FIXED)
 # ================================================================
-register_group_handlers(client)  # بدون owner_id
-async def start_session():
-    if not os.path.exists(SESSION_FILE):
-        await create_session_interactive()
-        await asyncio.sleep(2)
+
+
+async def start_session(doc):
+    """
+    doc: داکیومنت از دیتابیس که شامل 'session_string' و 'session_name' و 'power' است
+    """
 
     try:
-        client = TelegramClient(SESSION_FILE, cfg.api_id, cfg.api_hash)
+        session_string = doc.get("session_string")
+        if not session_string:
+            logger.warning(f"No session string for {doc.get('session_name')}")
+            return
+
+        client = TelegramClient(StringSession(session_string), cfg.api_id, cfg.api_hash)
         await client.start()
 
         me = await client.get_me()
-        owner_id = me.id   # ⭐ اینجا تعریف کن
-
-        
+        owner_id = me.id
 
         client.session_name = str(me.id)
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         # ثبت هندلرها و ابزارها
         register(client)
-        create_handlers(client)
+        create_handlers(client, owner_id)
         register_handlers(client)
         register_group_handlers(client, owner_id)
         register_update1(client)
         register_clock(client)
         self_tools(client)
-        
         register_language_commands(client)
 
         # استارت status bot
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
+        # ذخیره در active_clients
         active_clients[str(me.id)] = client
         started_sessions.add(str(me.id))
         logger.info(f"✅ Session Started: {me.first_name} ({me.id})")
 
     except Exception as e:
-        await notify_error_fa("session", str(e))
-        logger.error(f"❌ Failed to start session: {e}")
+        session_name = doc.get("session_name", "unknown")
+        await notify_error_fa(session_name, datetime.now(), str(e))
+        logger.error(f"❌ Failed to start session ({session_name}): {e}")
 
 
 # ================================================================
