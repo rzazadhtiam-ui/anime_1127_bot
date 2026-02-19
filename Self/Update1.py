@@ -1,62 +1,73 @@
 from telethon import events
 import asyncio
+from multi_lang import multi_lang, reply_auto
 
 INLINE_BOT = "anime_1127_bot"
 pm_locked = False
+
 
 def register_update1(client):
 
     # =========================
     # سرچ اینلاین
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.سرچ (.+)"))
+    @client.on(events.NewMessage)
+    @multi_lang([".سرچ ", ".search"])
     async def anime_search(event):
-        if not event.out:
-            return
-        query = event.pattern_match.group(1)
+
+        query = event.ml_args
+
         try:
             results = await client.inline_query(INLINE_BOT, query)
+
             if not results:
-                await event.reply("❌ نتیجه‌ای پیدا نشد")
-                return
-            await event.reply(f"🔍 {len(results)} نتیجه پیدا شد")
+                return await reply_auto(event, "❌ نتیجه‌ای پیدا نشد")
+
+            await reply_auto(event, f"🔍 {len(results)} نتیجه پیدا شد")
+
             for res in results[:3]:
                 await res.click(event.chat_id)
                 await asyncio.sleep(1)
+
         except Exception as e:
-            await event.reply(f"⚠️ خطا در سرچ: {e}")
+            await reply_auto(event, f"⚠️ خطا در سرچ: {e}")
 
     # =========================
     # قفل پیوی
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.پیوی قفل"))
+    @client.on(events.NewMessage)
+    @multi_lang([".پیوی قفل", ".Pm lock", ".Pv lock"])
     async def lock_pm(event):
+
         global pm_locked
-        if not event.out:
-            return
         pm_locked = True
-        await event.reply("🔒 پیوی شما قفل شد")
+
+        await reply_auto(event, "🔒 پیوی شما قفل شد")
 
     # =========================
     # باز کردن پیوی
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.پیوی باز"))
+    @client.on(events.NewMessage)
+    @multi_lang([".پیوی باز", ".Pm unlock"])
     async def unlock_pm(event):
+
         global pm_locked
-        if not event.out:
-            return
         pm_locked = False
-        await event.reply("🔓 پیوی شما باز شد")
+
+        await reply_auto(event, "🔓 پیوی شما باز شد")
 
     # =========================
     # گارد پیوی
     # =========================
     @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
     async def pm_guard(event):
+
         if not pm_locked:
             return
+
         if event.out:
             return
+
         try:
             await event.delete()
         except:
@@ -65,87 +76,102 @@ def register_update1(client):
     # =========================
     # دستور آهنگ
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.آهنگ (.+)"))
+    @client.on(events.NewMessage)
+    @multi_lang([".آهنگ ", ".Music "])
     async def music_search(event):
-        if not event.out:
-            return
-        query = event.pattern_match.group(1)
+
+        query = event.ml_args
+
         try:
             results = await client.inline_query("Anoser_bot", query)
+
             if not results:
-                await event.reply("❌ آهنگی پیدا نشد")
-                return
-            await event.reply("🎵 آهنگ پیدا شد")
+                return await reply_auto(event, "❌ آهنگی پیدا نشد")
+
+            await reply_auto(event, "🎵 آهنگ پیدا شد")
             await results[0].click(event.chat_id)
+
         except Exception as e:
-            await event.reply(f"⚠️ خطا در جستجوی آهنگ: {e}")
+            await reply_auto(event, f"⚠️ خطا در جستجوی آهنگ: {e}")
 
     # =========================
     # دستور بازی
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.بازی (.+)"))
+    @client.on(events.NewMessage)
+    @multi_lang([".بازی ", ".Game "])
     async def game_search(event):
-        if not event.out:
-            return
-        query = event.pattern_match.group(1).strip().lower()
+
+        query = event.ml_args.strip().lower()
+
         try:
             results = await client.inline_query("bodobazibot", query)
+
             if not results:
-                await event.reply("❌ بازی پیدا نشد")
-                return
+                return await reply_auto(event, "❌ بازی پیدا نشد")
+
             matched_game = None
+
             for res in results:
                 if res.title and res.title.strip().lower() == query:
                     matched_game = res
                     break
+
             if not matched_game:
-                await event.reply("❌ بازی با این نام دقیق پیدا نشد")
-                return
+                return await reply_auto(event, "❌ بازی با این نام دقیق پیدا نشد")
+
             await matched_game.click(event.chat_id)
+
         except Exception as e:
-            await event.reply(f"⚠️ خطا در جستجوی بازی: {e}")
+            await reply_auto(event, f"⚠️ خطا در جستجوی بازی: {e}")
 
     # =========================
     # لیست بازی ها
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.لیست بازی"))
+    @client.on(events.NewMessage)
+    @multi_lang([".لیست بازی", ".Game list"])
     async def game_list(event):
-        if not event.out:
-            return
+
         try:
             results = await client.inline_query("bodobazibot", "")
+
             if not results:
-                await event.reply("❌ هیچ بازی‌ای پیدا نشد")
-                return
+                return await reply_auto(event, "❌ هیچ بازی‌ای پیدا نشد")
+
             games = []
+
             for res in results:
                 name = res.title or res.description
                 if name:
                     games.append(name)
+
             if not games:
-                await event.reply("❌ نام بازی‌ها پیدا نشد")
-                return
+                return await reply_auto(event, "❌ نام بازی‌ها پیدا نشد")
+
             text = "🎮 لیست بازی‌ها:\n\n"
-            for i, game in enumerate(games, start=1):
+
+            for i, game in enumerate(games, 1):
                 text += f"بازی {i}: {game}\n"
-            await event.reply(text)
+
+            await reply_auto(event, text)
+
         except Exception as e:
-            await event.reply(f"⚠️ خطا در گرفتن لیست بازی: {e}")
+            await reply_auto(event, f"⚠️ خطا در گرفتن لیست بازی: {e}")
 
     # =========================
     # دستور راهنما اینلاین
     # =========================
-    @client.on(events.NewMessage(pattern=r"\.راهنما"))
+    @client.on(events.NewMessage)
+    @multi_lang([".راهنما", ".Guide"])
     async def help_inline(event):
-        sender = await event.get_sender()
-        me = await client.get_me()
-        if sender.id != me.id:
-            return
+
         try:
             results = await client.inline_query("self_nix_bot", "پنل سلف")
+
             if not results:
-                return await event.edit("❌ نتیجه‌ای پیدا نشد")
+                return await reply_auto(event, "❌ نتیجه‌ای پیدا نشد")
+
             await results[0].click(event.chat_id)
             await event.delete()
+
         except Exception as e:
-            await event.edit(f"❌ خطا:\n{e}")
+            await reply_auto(event, f"❌ خطا:\n{e}")
