@@ -51,7 +51,7 @@ MONGO_URI = (
 
 DB_NAME = "telegram_sessions"
 COLLECTION_NAME = "sessions"
-ADMIN_ID = 6433381392
+ADMIN_ID = 6433381392  # فقط این ادمین می‌تواند دستور وضعیت را بزند
 
 SESSION_DIR = "sessions"
 USER_DATA_DIR = "user_data"
@@ -195,16 +195,16 @@ async def start_session(doc):
         await client.start()
         me = await client.get_me()
 
-        client.session_name = name
-        client.owner_id = me.id   # 🔥 جلوگیری از تداخل سلف‌ها
+        client.session_name = name  # هر سشن خودش
+        # owner_id حذف شد چون هر کاربر خودش دستورهاشو می‌زنه
 
         logger.info(f"✅ Session online: {me.first_name} ({me.id})")
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         register(client)
-        create_handlers(client)
+        create_handlers(client, me.id)  # ارسال id خود اکانت
         register_handlers(client)
-        register_group_handlers(client, owner_id)
+        register_group_handlers(client)  # بدون owner_id
         register_language_commands(client)
         register_update1(client)
         register_clock(client)
@@ -231,22 +231,24 @@ async def start_session(doc):
         logger.error(f"❌ Broken session {name}: {e}")
 
 # ================================================================
-# HANDLERS (OWNER SAFE + POWER SAFE)
+# HANDLERS (USER SAFE + POWER SAFE)
 # ================================================================
-def create_handlers(client: TelegramClient):
+def create_handlers(client: TelegramClient, me_id: int):
 
     @client.on(events.NewMessage)
     async def router(event):
         try:
-            if event.sender_id != client.owner_id:
-                return
-
             text = (event.raw_text or "").strip()
 
             doc = sessions_col.find_one({"session_name": client.session_name})
             if not doc or doc.get("power", "on") == "off":
                 return
 
+            # هر اکانت فقط دستورات خودش
+            if event.sender_id != me_id and event.sender_id != ADMIN_ID:
+                return
+
+            # دستور وضعیت فقط برای ADMIN_ID
             if event.sender_id == ADMIN_ID and text in (".وضعیت", ".وضغیت"):
                 msg = "📊 سشن‌های فعال:\n"
                 for k in active_clients:
