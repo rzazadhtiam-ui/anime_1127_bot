@@ -170,68 +170,47 @@ started_sessions = set()
 # ================================================================
 # SESSION STARTER (FIXED)
 # ================================================================
-async def start_session(doc):
-
-    name = doc.get("session_name") or doc.get("phone")
-    session_str = doc.get("session_string")
-    created_at = doc.get("created_at") or datetime.now()
-
-    if doc.get("power", "on") == "off":
-        logger.info(f"⏹ Session {name} is OFF (power flag)")
-        return
-
-    if not session_str or name in started_sessions:
-        return
+register_group_handlers(client)  # بدون owner_id
+async def start_session():
+    if not os.path.exists(SESSION_FILE):
+        await create_session_interactive()
+        await asyncio.sleep(2)
 
     try:
-        logger.info(f"🌐 Trying to start session: {name}")
-
-        client = TelegramClient(
-            StringSession(session_str),
-            cfg.api_id,
-            cfg.api_hash,
-        )
+        client = TelegramClient(SESSION_FILE, cfg.api_id, cfg.api_hash)
+        await client.start()
 
         me = await client.get_me()
         owner_id = me.id   # ⭐ اینجا تعریف کن
 
-        await client.start()
-        me = await client.get_me()
+        
 
-        client.session_name = name  # هر سشن خودش
-        # owner_id حذف شد چون هر کاربر خودش دستورهاشو می‌زنه
-
-        logger.info(f"✅ Session online: {me.first_name} ({me.id})")
+        client.session_name = str(me.id)
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
+        # ثبت هندلرها و ابزارها
         register(client)
-        create_handlers(client, me.id)  # ارسال id خود اکانت
+        create_handlers(client)
         register_handlers(client)
-        register_group_handlers(client)  # بدون owner_id
-        register_language_commands(client)
+        register_group_handlers(client, owner_id)
         register_update1(client)
         register_clock(client)
         self_tools(client)
+        
+        register_language_commands(client)
 
+        # استارت status bot
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
-        active_clients[name] = client
-        started_sessions.add(name)
-
-        sessions_col.update_one(
-            {"session_name": name},
-            {"$set": {
-                "enabled": True,
-                "power": "on",
-                "last_start": datetime.now()
-            }},
-            upsert=True
-        )
+        active_clients[str(me.id)] = client
+        started_sessions.add(str(me.id))
+        logger.info(f"✅ Session Started: {me.first_name} ({me.id})")
 
     except Exception as e:
-        await notify_error_fa(name, created_at, str(e))
-        logger.error(f"❌ Broken session {name}: {e}")
+        await notify_error_fa("session", str(e))
+        logger.error(f"❌ Failed to start session: {e}")
+
 
 # ================================================================
 # HANDLERS (USER SAFE + POWER SAFE)
