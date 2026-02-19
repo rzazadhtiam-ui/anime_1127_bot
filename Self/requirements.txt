@@ -32,3 +32,4 @@ rsa==4.9
 pyngrok==6.1.1
 tornado==6.3.2
 wrapt==1.15.0
+deep-translator
