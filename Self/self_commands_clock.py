@@ -10,7 +10,7 @@ from telethon import events
 from telethon.tl.functions.account import UpdateProfileRequest
 from self_config import self_config, city_timezones
 from pymongo import MongoClient
-
+from multi_lang import multi_lang, reply_auto, edit_auto
 
 
 mongo = MongoClient(
@@ -24,6 +24,16 @@ clock_col = db["clock_users"]
 # ==========================================
 # دیتابیس و فایل ذخیره‌سازی
 # ==========================================
+import pytz
+
+# ساخت دیکشنری پویا از همه timezoneها
+city_index = {}
+
+for tz in pytz.all_timezones:
+    if "/" in tz:
+        city_part = tz.split("/")[-1].replace("_", " ")
+        city_index[city_part.lower()] = tz
+
 async def start_active_clocks(client):
     users = clock_col.find({
         "$or": [
@@ -193,139 +203,303 @@ FONT_TABLE = {
     # استایل فانتزی گرد
     15: ["🄌","➊","➋","➌","➍","➎","➏","➐","➑","➒"]
 }
+# ================================
+# نگاشت پارامترها فارسی -> داخلی
+# ================================
+fa_alias = {
+    "تهران": "tehran",
+    "لندن": "london",
+    "پاریس": "paris",
+    "برلین": "berlin",
+    "رم": "rome",
+    "مادرید": "madrid",
+    "آمستردام": "amsterdam",
+    "بروکسل": "brussels",
+    "وین": "vienna",
+    "پراگ": "prague",
+    "ورشو": "warsaw",
+    "کی‌یف": "kyiv",
+    "مسکو": "moscow",
+    "استانبول": "istanbul",
+    "آنکارا": "ankara",
+    "دبی": "dubai",
+    "ابوظبی": "abu dhabi",
+    "دوحه": "doha",
+    "ریاض": "riyadh",
+    "بغداد": "baghdad",
+    "کویت": "kuwait",
+    "باکو": "baku",
+    "تاشکند": "tashkent",
+    "دهلی": "kolkata",
+    "بمبئی": "kolkata",
+    "پکن": "shanghai",
+    "شانگهای": "shanghai",
+    "توکیو": "tokyo",
+    "سئول": "seoul",
+    "بانکوک": "bangkok",
+    "سنگاپور": "singapore",
+    "کوالالامپور": "kuala lumpur",
+    "جاکارتا": "jakarta",
+    "سیدنی": "sydney",
+    "ملبورن": "melbourne",
+    "ونکوور": "vancouver",
+    "تورنتو": "toronto",
+    "نیویورک": "new york",
+    "واشنگتن": "new york",
+    "شیکاگو": "chicago",
+    "لس‌آنجلس": "los angeles",
+    "لس آنجلس": "los angeles",
+    "سان‌فرانسیسکو": "los angeles",
+    "مکزیکوسیتی": "mexico city",
+    "بوینس‌آیرس": "buenos aires",
+    "سائوپائولو": "sao paulo",
+    "قاهره": "cairo",
+    "ژوهانسبورگ": "johannesburg",
+    "نایروبی": "nairobi",
+}
+
+def resolve_city(user_input):
+    q = user_input.strip().lower()
+
+    # اگر فارسی بود تبدیل به انگلیسی کن
+    if q in fa_alias:
+        q = fa_alias[q]
+
+    return city_index.get(q)
 
 # ==========================================
 # ثبت دستورهای مدیریت ساعت
 # ==========================================
 def register_clock(client):
 
-    
-
     asyncio.create_task(start_active_clocks(client))
-    @client.on(events.NewMessage(pattern=r"\.ساعت(.*)"))
-    async def handle_clock(event):
+
+    # =========================
+    # نمایش ساعت فعلی
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت", ".clock"])
+    async def clock_show(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+
+        if sender.id != me.id:
+            return
+
+        query = getattr(event, "ml_args", "").strip()
+        is_fa = event.raw_text.startswith(".ساعت")
+
+        if not query:
+            tz = "Asia/Tehran"
+        else:
+            tz = resolve_city(query)
+            if not tz:
+                return await edit_auto(
+                    event,
+                    "❌ شهر پیدا نشد." if is_fa else "❌ City not found."
+                )
+
+        now = datetime.now(pytz.timezone(tz))
+        city_name = tz.split("/")[-1].replace("_", " ")
+
+        if is_fa:
+            await edit_auto(event, f"🕒 ساعت {city_name}: {now.strftime('%H:%M')}")
+        else:
+            await edit_auto(event, f"🕒 Time in {city_name}: {now.strftime('%H:%M')}")
+
+# =========================
+# ثبت دستورات ساعت جهانی و کلی
+# =========================
+
+    # =========================
+    # 🌐 ساعت جهانی (UTC)
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت جهانی", ".clock utc"])
+    async def clock_utc(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+
+        # فقط خود اکانت
+        if sender.id != me.id:
+            return
+
+        now = datetime.utcnow()
+        await edit_auto(event, f"🌐 UTC: {now.strftime('%H:%M')}")
+
+    # =========================
+    # 🕒 ساعت کلی (همه شهرها)
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت کلی", ".clock all"])
+    async def clock_all(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+
+        # فقط خود اکانت
+        if sender.id != me.id:
+            return
+
+        text = "🕒 لیست ساعت شهرها:\n\n"
+
+        for city, tz in city_timezones.items():
+            try:
+                now = datetime.now(pytz.timezone(tz))
+                text += f"{city}: {now.strftime('%H:%M')}\n"
+            except Exception:
+                text += f"{city}: خطا ❌\n"
+
+        await edit_auto(event, text)
+
+    # =========================
+    # فعال‌سازی بیو
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت بیو", ".clock bio"])
+    async def clock_bio(event):
         sender = await event.get_sender()
         me = await client.get_me()
         if sender.id != me.id:
             return
 
         user_id = sender.id
-        arg = event.pattern_match.group(1).strip()
+        await save_original_profile(client, user_id)
+        set_clock(user_id, "bio_enabled", True)
+
+        if user_id not in active_clock_tasks:
+            active_clock_tasks[user_id] = asyncio.create_task(
+                live_clock_user(client, user_id)
+            )
+
+        await edit_auto(event, "✅ ساعت روی بیو فعال شد.")
+
+    # =========================
+    # فعال‌سازی نام
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت اسم", ".clock name"])
+    async def clock_name(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+        if sender.id != me.id:
+            return
+
+        user_id = sender.id
+        await save_original_profile(client, user_id)
+        set_clock(user_id, "name_enabled", True)
+
+        if user_id not in active_clock_tasks:
+            active_clock_tasks[user_id] = asyncio.create_task(
+                live_clock_user(client, user_id)
+            )
+
+        await edit_auto(event, "✅ ساعت روی اسم فعال شد.")
+
+    # =========================
+    # تنظیم فونت
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت فونت", ".clock font"])
+    async def clock_font(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+        if sender.id != me.id:
+            return
+
+        user_id = sender.id
+        query = getattr(event, "ml_args", "").strip()
+        parts = query.split()
+
+        if not parts:
+            return await edit_auto(event, "❌ فرمت درست: `.ساعت فونت <شماره>`")
+
+        try:
+            fid = int(parts[0])
+        except ValueError:
+            return await edit_auto(event, "❌ شماره فونت باید عدد باشد.")
+
+        if fid not in FONT_TABLE:
+            return await edit_auto(event, "❌ این فونت وجود ندارد.")
+
+        set_clock(user_id, "font_id", fid)
+
+        await edit_auto(event, f"✅ فونت {fid} فعال شد.")
+
+    # =========================
+    # نمایش فونت‌ها
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".لیست فونت", ".font list"])
+    async def clock_show_fonts(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+        if sender.id != me.id:
+            return
+
+        msg = "📜 لیست فونت‌ها:\n"
+        for fid, digits in FONT_TABLE.items():
+            msg += f"{fid}: {''.join(digits)}\n"
+
+        await edit_auto(event, msg)
+
+    # =========================
+    # خاموش کردن ساعت
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت خاموش", ".clock off"])
+    async def clock_off(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+        if sender.id != me.id:
+            return
+
+        user_id = sender.id
         clock = get_clock(user_id)
 
-        # بدون پارامتر
-        if arg == "":
-            tz = clock.get("timezone", "Asia/Tehran")
-            now = datetime.now(pytz.timezone(tz))
-            return await event.edit(f"🕒 ساعت {tz}: {now.strftime('%H:%M')}")
+        if user_id in active_clock_tasks:
+            active_clock_tasks[user_id].cancel()
+            del active_clock_tasks[user_id]
 
-        # ساعت شهر
-        if arg in city_timezones:
-            tz = city_timezones[arg]
-            now = datetime.now(pytz.timezone(tz))
-            return await event.edit(f"🕒 ساعت {arg}: {now.strftime('%H:%M')}")
+        original = clock.get("original_profile", {})
 
-        # ساعت کلی
-        if arg == "کلی":
-            text = ""
-            for city, tz in city_timezones.items():
-                try:
-                    now = datetime.now(pytz.timezone(tz))
-                    text += f"🕒 {city}: {now.strftime('%H:%M')}\n"
-                except:
-                    text += f"❌ {city}: خطا\n"
-            return await event.edit(text)
+        await client(UpdateProfileRequest(
+            about=original.get("about", "")
+        ))
 
-        # ساعت جهانی
-        if arg == "جهانی":
-            now = datetime.utcnow()
-            return await event.edit(f"🌐 UTC: {now.strftime('%H:%M')}")
+        await client(UpdateProfileRequest(
+            first_name=original.get("first_name", ""),
+            last_name=original.get("last_name", "")
+        ))
 
-        # فعال‌سازی بیو
-        if arg == "بیو":
-            await save_original_profile(client, user_id)
-            set_clock(user_id, "bio_enabled", True)
-            if user_id not in active_clock_tasks:
-                active_clock_tasks[user_id] = asyncio.create_task(
-                    live_clock_user(client, user_id)
-                )
-            return await event.edit("✅ ساعت روی بیو فعال شد.")
+        clock["bio_enabled"] = False
+        clock["name_enabled"] = False
+        clock["font_id"] = None
+        clock["original_saved"] = False
+        clock["original_profile"] = {}
+        save_clock(user_id, clock)
 
-        # فعال‌سازی نام
-        if arg == "اسم":
-            await save_original_profile(client, user_id)
-            set_clock(user_id, "name_enabled", True)
-            if user_id not in active_clock_tasks:
-                active_clock_tasks[user_id] = asyncio.create_task(
-                    live_clock_user(client, user_id)
-                )
-            return await event.edit("✅ ساعت روی اسم فعال شد.")
+        await edit_auto(event, "🛑 ساعت خاموش شد و پروفایل بازیابی شد.")
 
-        # فونت
-        if arg.startswith("فونت"):
-            parts = arg.split()
-            if len(parts) < 2:
-                return await event.edit("❌ فرمت درست: `.ساعت فنت <شماره>`")
-            fid = int(parts[1])
-            if fid not in FONT_TABLE:
-                return await event.edit("❌ این فونت وجود ندارد.")
-            set_clock(user_id, "font_id", fid)
-            if user_id not in active_clock_tasks and (clock.get("bio_enabled") or clock.get("name_enabled")):
-                active_clock_tasks[user_id] = asyncio.create_task(
-                    live_clock_user(client, user_id)
-                )
-            return await event.edit(f"✅ فونت {fid} فعال شد.")
+    # =========================
+    # تنظیم منطقه
+    # =========================
+    @client.on(events.NewMessage)
+    @multi_lang([".ساعت منطقه", ".clock region"])
+    async def clock_region(event):
+        sender = await event.get_sender()
+        me = await client.get_me()
+        if sender.id != me.id:
+            return
 
-        # نمایش فونت‌ها
-        if arg == "نمایش":
-            msg = "📜 لیست فونت‌ها:\n"
-            for fid, digits in FONT_TABLE.items():
-                msg += f"{fid}: {''.join(digits)}\n"
-            return await event.edit(msg)
+        user_id = sender.id
+        query = getattr(event, "ml_args", "").strip()
 
-        # خاموش کردن ساعت
-        if arg == "خاموش":
-            if user_id in active_clock_tasks:
-                active_clock_tasks[user_id].cancel()
-                del active_clock_tasks[user_id]
+        if not query:
+            return await edit_auto(event, "❌ استفاده صحیح: `.ساعت منطقه <شهر>`")
 
-            original = clock.get("original_profile", {})
-            await client(UpdateProfileRequest(about=original.get("about","")))
-            await client(UpdateProfileRequest(first_name=original.get("first_name",""),
-                                              last_name=original.get("last_name","")))
+        if query not in city_timezones:
+            return await edit_auto(event, "❌ چنین شهری ثبت نشده.")
 
-            clock["bio_enabled"] = False
-            clock["name_enabled"] = False
-            clock["font_id"] = None
-            clock["original_saved"] = False
-            clock["original_profile"] = {}
-            clock["prev_state"] = {}
-            save_clock(user_id, clock)
-            return await event.edit("🛑 ساعت خاموش شد و پروفایل به حالت قبل برگشت.")
+        set_clock(user_id, "timezone", city_timezones[query])
 
-        # روشن کردن ساعت (وضعیت قبل)
-        if arg == "روشن":
-            prev = clock.get("prev_state", {})
-            set_clock(user_id, "bio_enabled", prev.get("bio_enabled", False))
-            set_clock(user_id, "name_enabled", prev.get("name_enabled", False))
-            set_clock(user_id, "font_id", prev.get("font_id"))
-            set_clock(user_id, "timezone", prev.get("timezone", "Asia/Tehran"))
-
-            if user_id not in active_clock_tasks and (clock.get("bio_enabled") or clock.get("name_enabled")):
-                active_clock_tasks[user_id] = asyncio.create_task(
-                    live_clock_user(client, user_id)
-                )
-            return await event.edit("✅ ساعت دوباره فعال شد و وضعیت قبلی بازیابی شد.")
-
-        # تنظیم منطقه
-        if arg.startswith("منطقه"):
-            parts = arg.split()
-            if len(parts) < 2:
-                return await event.edit("❌ استفاده صحیح: `.ساعت منطقه <شهر>`")
-            city = parts[1]
-            if city not in city_timezones:
-                return await event.edit("❌ چنین شهری ثبت نشده.")
-            set_clock(user_id, "timezone", city_timezones[city])
-            return await event.edit(f"🌍 منطقه روی {city} تنظیم شد.")
-
-        return await event.edit("❌ دستور اشتباه است.")
+        await edit_auto(event, f"🌍 منطقه روی {query} تنظیم شد.")
