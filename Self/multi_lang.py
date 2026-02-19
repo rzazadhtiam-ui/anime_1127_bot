@@ -1,11 +1,12 @@
+import asyncio
 from telethon import events
 from deep_translator import GoogleTranslator
 from functools import wraps
 
-BASE_LANG = "en"
+BASE_LANG = "fa"
 
 # ===============================
-# زبان‌های پشتیبانی شده
+# Supported Languages
 # ===============================
 SUPPORTED_LANGS = {
     "af": "Afrikaans", "sq": "Albanian", "am": "Amharic", "ar": "Arabic",
@@ -38,106 +39,177 @@ SUPPORTED_LANGS = {
 }
 
 _translate_cache = {}
-user_langs = {}            # زبان کاربر
-user_auto_translate = {}   # ترجمه خودکار روشن/خاموش
-user_auto_lang = {}        # زبان ترجمه خودکار
+user_langs = {}
 
 # ===============================
-# متدهای کمکی
+# Language Utils
 # ===============================
-def get_lang(user_id):
-    return user_langs.get(user_id, BASE_LANG)
+def get_lang(chat_id):
+    return user_langs.get(chat_id, BASE_LANG)
 
-def set_lang(user_id, lang):
+def set_lang(chat_id, lang):
     lang = lang.lower()
+
     if lang not in SUPPORTED_LANGS:
         return False
-    user_langs[user_id] = lang
+
+    user_langs[chat_id] = lang
     return True
 
 def get_lang_list_text():
-    text = "🌐 لطفا زبان خود را انتخاب کنید / Please choose your language:\n\n"
+    txt = "🌐 Choose Language:\n\n"
     for code, name in SUPPORTED_LANGS.items():
-        text += f"{code} → {name}\n"
-    return text
+        txt += f"{code} → {name}\n"
+    return txt
 
+# ===============================
+# Translation Core
+# ===============================
 async def translate(text, target):
+
+    if not text:
+        return text
+
     key = f"{text}:{target}"
+
     if key in _translate_cache:
         return _translate_cache[key]
+
     try:
-        translated = GoogleTranslator(source="auto", target=target).translate(text)
-        _translate_cache[key] = translated
-        return translated
+        result = await asyncio.to_thread(
+            lambda: GoogleTranslator(source="auto", target=target).translate(text)
+        )
+
+        _translate_cache[key] = result
+        return result
+
     except:
         return text
 
-async def reply_auto(event, text):
-    lang = get_lang(event.sender_id)
-    if lang == BASE_LANG:
-        return await event.reply(text)
-    translated = await translate(text, lang)
-    return await event.reply(translated)
-
 # ===============================
-# دکوراتور چندزبانه
+# Auto Reply
+# ===============================
+# ===============================
+# Multi Language Decorator
 # ===============================
 def multi_lang(patterns):
+
     if isinstance(patterns, str):
         patterns = [patterns]
+
     def decorator(func):
+
         @wraps(func)
         async def wrapper(event):
+
             if not event.out:
                 return
-            text = (event.raw_text or "").strip().lower()
-            user_lang = get_lang(event.sender_id)
+
+            raw_text = (event.raw_text or "").strip()
+            user_lang = get_lang(event.chat_id)
+
+            # ==========================
+            # ترجمه ورودی به انگلیسی برای اجرا
+            # ==========================
+            if user_lang != "en":
+                normalized = await translate(raw_text, "en")
+            else:
+                normalized = raw_text
+
+            text = normalized.lower()
+
             for pattern in patterns:
+
                 if text.startswith(pattern.lower()):
                     event.ml_text = text
                     event.ml_args = text[len(pattern):].strip()
+                    # ذخیره زبان کاربر برای استفاده بعدی در پاسخ
+                    event.user_lang = user_lang
                     return await func(event)
+
         return wrapper
     return decorator
 
 # ===============================
-# ثبت دستورات
+# Auto Reply (ترجمه پاسخ به زبان کاربر)
+# ===============================
+async def reply_auto(event, text):
+
+    lang = getattr(event, "user_lang", get_lang(event.chat_id))
+
+    if lang == BASE_LANG:
+        return await event.reply(text)
+
+    # خروجی فارسی ربات به زبان کاربر ترجمه میشه
+    translated = await translate(text, lang)
+    return await event.reply(translated)
+
+# ===============================
+# Auto Edit (ترجمه پاسخ به زبان کاربر)
+# ===============================
+async def edit_auto(event, text):
+
+    lang = getattr(event, "user_lang", get_lang(event.chat_id))
+
+    if lang == BASE_LANG:
+        return await event.edit(text)
+
+    # خروجی فارسی ربات به زبان کاربر ترجمه میشه
+    translated = await translate(text, lang)
+    return await event.edit(translated)
+# ===============================
+# Register Commands
 # ===============================
 def register_language_commands(client):
 
-    # درخواست انتخاب زبان هنگام فعال شدن ربات
-    @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and "ربات ⦁ Self Nix برای شما فعال شد" in (e.raw_text or "")))
-    async def ask_language_on_activation(event):
-        if event.sender_id not in user_langs:
+    # ask language on activation
+    @client.on(events.NewMessage(
+        incoming=True,
+        func=lambda e: e.is_private and "Self Nix" in (e.raw_text or "")
+    ))
+    async def ask_language(event):
+
+        if event.chat_id not in user_langs:
             await event.reply(get_lang_list_text())
 
-    # تغییر زبان دستی
-    @client.on(events.NewMessage(pattern=r"\.(?:زبان|language) (.+)"))
+    # change language
+    @client.on(events.NewMessage(
+        outgoing=True,
+        pattern=r"\.(?:زبان|language)\s+(\w+)"
+    ))
     async def change_lang(event):
+
         lang = event.pattern_match.group(1).lower()
-        if not set_lang(event.sender_id, lang):
-            return await reply_auto(event, "❌ این زبان پشتیبانی نمی‌شود / Unsupported language")
-        await reply_auto(event, f"✅ زبان به {SUPPORTED_LANGS[lang]} تغییر کرد / Language set to {SUPPORTED_LANGS[lang]}")
 
-    # نمایش لیست زبان‌ها
-    @client.on(events.NewMessage(pattern=r"\.(?:زبان|language)$"))
+        if not set_lang(event.chat_id, lang):
+            return await reply_auto(event, "Unsupported language")
+
+        await edit_auto(
+            event,
+            f"Language changed to {SUPPORTED_LANGS[lang]}"
+        )
+
+    # show language list
+    @client.on(events.NewMessage(
+        outgoing=True,
+        pattern=r"\.(?:لیست زبان|language list)$"
+    ))
     async def show_lang(event):
-        await event.reply(get_lang_list_text())
 
-    # ===============================
-    # ترجمه دستی
-    # ===============================
-    @client.on(events.NewMessage(pattern=r"\.(?:ترجمه|translate) (\w+) (.+)"))
+        await event.edit(get_lang_list_text())
+
+    # manual translate
+    @client.on(events.NewMessage(
+        outgoing=True,
+        pattern=r"\.(?:ترجمه|translate)\s+(\w+)\s+(.+)"
+    ))
     async def translate_command(event):
+
         lang = event.pattern_match.group(1).lower()
         text = event.pattern_match.group(2)
-        try:
-            translated = await translate(text, lang)
-            await event.reply(translated)
-        except Exception as e:
-            await event.reply(f"⚠️ خطا در ترجمه: {e}")
 
-    # ===============================
-    # ترجمه خودکار
-    # ===============================
-    
+        if lang not in SUPPORTED_LANGS:
+            return await event.edit("Invalid language")
+
+        result = await translate(text, lang)
+        await event.edit(result)
