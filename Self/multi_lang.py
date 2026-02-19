@@ -9,32 +9,14 @@ BASE_LANG = "fa"
 # Supported Languages
 # ===============================
 SUPPORTED_LANGS = {
-    "af": "Afrikaans", "sq": "Albanian", "am": "Amharic", "ar": "Arabic",
-    "hy": "Armenian", "az": "Azerbaijani", "eu": "Basque", "be": "Belarusian",
-    "bn": "Bengali", "bs": "Bosnian", "bg": "Bulgarian", "ca": "Catalan",
-    "ceb": "Cebuano", "ny": "Chichewa", "zh-cn": "Chinese (Simplified)",
-    "zh-tw": "Chinese (Traditional)", "co": "Corsican", "hr": "Croatian",
-    "cs": "Czech", "da": "Danish", "nl": "Dutch", "en": "English",
-    "eo": "Esperanto", "et": "Estonian", "tl": "Filipino", "fi": "Finnish",
-    "fr": "French", "fy": "Frisian", "gl": "Galician", "ka": "Georgian",
-    "de": "German", "el": "Greek", "gu": "Gujarati", "ht": "Haitian Creole",
-    "ha": "Hausa", "haw": "Hawaiian", "iw": "Hebrew", "hi": "Hindi",
-    "hmn": "Hmong", "hu": "Hungarian", "is": "Icelandic", "ig": "Igbo",
-    "id": "Indonesian", "ga": "Irish", "it": "Italian", "ja": "Japanese",
-    "jw": "Javanese", "kn": "Kannada", "kk": "Kazakh", "km": "Khmer",
-    "ko": "Korean", "ku": "Kurdish (Kurmanji)", "ky": "Kyrgyz", "lo": "Lao",
-    "la": "Latin", "lv": "Latvian", "lt": "Lithuanian", "lb": "Luxembourgish",
-    "mk": "Macedonian", "mg": "Malagasy", "ms": "Malay", "ml": "Malayalam",
-    "mt": "Maltese", "mi": "Maori", "mr": "Marathi", "mn": "Mongolian",
-    "my": "Myanmar (Burmese)", "ne": "Nepali", "no": "Norwegian", "ps": "Pashto",
-    "fa": "Persian", "pl": "Polish", "pt": "Portuguese", "pa": "Punjabi",
-    "ro": "Romanian", "ru": "Russian", "sm": "Samoan", "gd": "Scots Gaelic",
-    "sr": "Serbian", "st": "Sesotho", "sn": "Shona", "sd": "Sindhi",
-    "si": "Sinhala", "sk": "Slovak", "sl": "Slovenian", "so": "Somali",
-    "es": "Spanish", "su": "Sundanese", "sw": "Swahili", "sv": "Swedish",
-    "tg": "Tajik", "ta": "Tamil", "te": "Telugu", "th": "Thai", "tr": "Turkish",
-    "uk": "Ukrainian", "ur": "Urdu", "uz": "Uzbek", "vi": "Vietnamese",
-    "cy": "Welsh", "xh": "Xhosa", "yi": "Yiddish", "yo": "Yoruba", "zu": "Zulu",
+    "en": "English",
+    "fa": "Persian",
+    "tr": "Turkish",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
     "ja": "Japanese"
 }
 
@@ -112,7 +94,7 @@ def multi_lang(patterns):
             # ترجمه ورودی به انگلیسی برای اجرا
             # ==========================
             if user_lang != "en":
-                normalized = await translate(raw_text, "en")
+                normalized = await translate(raw_text, "fa")
             else:
                 normalized = raw_text
 
@@ -184,7 +166,7 @@ def register_language_commands(client):
         if not set_lang(event.chat_id, lang):
             return await reply_auto(event, "Unsupported language")
 
-        await edit_auto(
+        await reply_auto(
             event,
             f"Language changed to {SUPPORTED_LANGS[lang]}"
         )
@@ -192,11 +174,11 @@ def register_language_commands(client):
     # show language list
     @client.on(events.NewMessage(
         outgoing=True,
-        pattern=r"\.(?:لیست زبان|language list)$"
+        pattern=r"\.(?:زبان|language)$"
     ))
     async def show_lang(event):
 
-        await event.edit(get_lang_list_text())
+        await event.reply(get_lang_list_text())
 
     # manual translate
     @client.on(events.NewMessage(
@@ -209,7 +191,7 @@ def register_language_commands(client):
         text = event.pattern_match.group(2)
 
         if lang not in SUPPORTED_LANGS:
-            return await event.edit("Invalid language")
+            return await event.reply("Invalid language")
 
         result = await translate(text, lang)
-        await event.edit(result)
+        await event.reply(result)
