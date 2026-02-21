@@ -1,6 +1,7 @@
 # extra_commands_fixed.py
 
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from telebot import types
@@ -246,6 +247,30 @@ def register_commands(bot):
         send_board(room_id)
 #=====================================
     # ---------- /my_coins ----------
+
+
+
+    @bot.message_handler(commands=["panel"])
+    def show_panel(message):
+    # بررسی بن بودن
+        if is_banned(message.from_user.id):
+            return
+
+    # ساخت کیبورد
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row(KeyboardButton("موجودی"))
+        markup.row(KeyboardButton("حساب کاربری"))
+        markup.row(KeyboardButton("آمار سکه"), KeyboardButton("آمار برد"))
+        markup.row(KeyboardButton("دوز 20"))
+        markup.row(KeyboardButton("دوز 500"))
+
+    # پیام ریپلای به کاربر
+        bot.reply_to(
+            message,
+            f"🤖 ربات در گروه فعال شد! از دکمه‌های زیر استفاده کنید:",
+            reply_markup=markup
+    )
+
     @bot.message_handler(commands=["my_coins"])
     def balance_cmd(message):
         if is_banned(message.from_user.id):
@@ -323,19 +348,19 @@ def register_commands(bot):
         leaderboard_wins(bot, message)
 
     # ---------- TEXT BUTTONS ----------
-    @bot.message_handler(func=lambda m: m.text and m.text.strip() == ["موجودی", "پول"])
+    @bot.message_handler(func=lambda m: m.text and m.text.strip() == "موجودی")
     def show_coins(message):
         if is_banned(message.from_user.id):
             return
         my_coins(bot, message)
 
-    @bot.message_handler(func=lambda m: m.text and m.text.strip() == ["ایدی", "حساب کاربری"])
+    @bot.message_handler(func=lambda m: m.text and m.text.strip() == "حساب کاربری")
     def show_id(message):
         if is_banned(message.from_user.id):
             return
         my_id(bot, message)
 
-    @bot.message_handler(func=lambda m: m.text and m.text.strip() == "امار سکه")
+    @bot.message_handler(func=lambda m: m.text and m.text.strip() == "آمار سکه")
     def show_leaderboard(message):
         if is_banned(message.from_user.id):
             return
@@ -451,7 +476,7 @@ def register_commands(bot):
         )
 
 #=====================================
-    @bot.message_handler(func=lambda m: m.text and m.text.startswith("امار برد"))
+    @bot.message_handler(func=lambda m: m.text and m.text.startswith("آمار برد"))
     def create_xo_room(message):
         if is_banned(message.from_user.id):
             return
@@ -657,3 +682,27 @@ def register_commands(bot):
         # تغییر نوبت و ادامه بازی
         room["turn"] = room["player2"] if uid == room["creator"] else room["creator"]
         send_board(room_id)
+
+
+
+    @bot.message_handler(content_types=['new_chat_members'])
+    def welcome_new_members(message):
+        for new_user in message.new_chat_members:
+        # بررسی بن بودن
+            if is_banned(new_user.id):
+                continue
+
+        # ساخت کیبورد پنل
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row(KeyboardButton("موجودی"))
+        markup.row(KeyboardButton("حساب کاربری"))
+        markup.row(KeyboardButton("آمار سکه"), KeyboardButton("آمار برد"))
+        markup.row(KeyboardButton("دوز 20"))
+        markup.row(KeyboardButton("دوز 500"))
+        markup.row(KeyboardButton(" ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌"))
+        # ارسال پیام پنل به کاربر جدید
+        bot.send_message(
+            new_user.id,  
+            "به ربات self nix خوش امدید پنل برای شما باز شد ",
+            reply_markup=markup
+        )
