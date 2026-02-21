@@ -1,4 +1,3 @@
-
 import telebot
 from bson import ObjectId
 from telebot import types
@@ -18,7 +17,7 @@ REFERRAL_REWARD = 25
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
 MIN_COINS_FOR_SESSION = 10 # حداقل سکه برای ادامه سشن
-BOT_USERNAME = "self_nix_bot"
+BOT_USERNAME = "tiam"
 PRICE_PER_50 = 5000 
 CARD_NUMBER = "6219861457618899"
 CARD_NAME = "تیام رضازاده"
@@ -36,7 +35,7 @@ db = mongo.telegram_sessions
 db1 = mongo.self_panel_db
 
 users_col = db.users
-sessions_col = db.sessions
+sessions_col = db.sessions1
 required_chats_col = db1.required_chats
 
 
@@ -817,6 +816,40 @@ def toggle_session(call):
     
     safe_edit(call, get_user_sessions_panel(uid))
 
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_buy_"))
+def reject_buy(call):
+    if call.from_user.id not in ADMINS:
+        return
+
+    target_id = int(call.data.split("_")[2])
+
+    # حذف داده موقت و پیام‌ها
+    temp_data.pop(target_id, None)
+
+    if target_id in admin_messages:
+        for admin_id, msg_id in admin_messages[target_id]:
+            try:
+                bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
+            except:
+                pass
+        admin_messages.pop(target_id, None)
+
+    # اطلاع کاربر
+    try:
+        bot.send_message(target_id, "❌ درخواست خرید شما توسط ادمین رد شد.")
+    except:
+        pass
+
+    # Log برای ادمین
+    send_coin_log(
+        f"❌ خرید رد شد\n"
+        f"👮 ادمین: {call.from_user.id}\n"
+        f"👤 کاربر: {target_id}"
+    )
+
+    bot.answer_callback_query(call.id, "خرید رد شد ✅")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
 def confirm_buy(call):
     if call.from_user.id not in ADMINS:
@@ -893,12 +926,16 @@ def handle_receipt(message):
 )
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton(
-            "✅ تایید خرید",
-            callback_data=f"confirm_buy_{uid}"
-        )
+    markup.row(
+    types.InlineKeyboardButton(
+        "✅ تایید خرید",
+        callback_data=f"confirm_buy_{uid}"
+    ),
+    types.InlineKeyboardButton(
+        "❌ رد خرید",
+        callback_data=f"reject_buy_{uid}"
     )
+)
 
     admin_messages[uid] = []
 
