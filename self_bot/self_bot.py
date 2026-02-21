@@ -1,3 +1,4 @@
+
 import telebot
 from bson import ObjectId
 from telebot import types
@@ -17,7 +18,7 @@ REFERRAL_REWARD = 25
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
 MIN_COINS_FOR_SESSION = 10 # حداقل سکه برای ادامه سشن
-BOT_USERNAME = "tiam"
+BOT_USERNAME = "self_nix_bot"
 PRICE_PER_50 = 5000 
 CARD_NUMBER = "6219861457618899"
 CARD_NAME = "تیام رضازاده"
