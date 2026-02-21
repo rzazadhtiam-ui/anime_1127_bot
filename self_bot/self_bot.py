@@ -1,22 +1,27 @@
 import telebot
+from bson import ObjectId
 from telebot import types
 from datetime import datetime, timedelta, UTC
 import threading
 import requests
 from pymongo import MongoClient
 from update1 import PanelManager
+from update1_2 import register_commands
+
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
 MIN_COINS = 10
 REFERRAL_REWARD = 25
-PRICE_PER_50 = 1000
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
 MIN_COINS_FOR_SESSION = 10 # حداقل سکه برای ادامه سشن
-
-
+BOT_USERNAME = "tiam"
+PRICE_PER_50 = 5000 
+CARD_NUMBER = "6219861457618899"
+CARD_NAME = "تیام رضازاده"
+admin_messages = {} 
 # ================= MongoDB =================
 mongo_uri = (
     "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
@@ -38,6 +43,7 @@ required_chats_col = db1.required_chats
 # ================= Bot =================
 bot = telebot.TeleBot(TOKEN)
 panel_manager = PanelManager(bot)
+register_commands(bot)
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -46,11 +52,39 @@ panel_text = (
     "به ربات ⦁ Self Nix خوش اومدید 🙌🔥\n\n"
     "با این ربات می‌تونید امکانات اکانتتون رو بیشتر و خاص‌تر کنید 💎🚀"
 )
-ADMINS = [6433381392, 8588914809, 8277911482] 
+ADMIN = [6433381392, 8588914809, 8277911482] 
 
+ADMINS = [6433381392, 8588914809, 7851824627, 8259391739]
 
-    
+SUPER_ADMIN = 6433381392
 # ================= Helper =================
+
+def send_coin_log(text):
+    try:
+        bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}")
+    except Exception as e:
+        print("Log Error:", e)
+
+def command_allowed(message):
+
+    # در پیوی همیشه اجازه بده
+    if message.chat.type == "private":
+        return True
+
+    # اگر متن نبود اجازه بده
+    if not message.text:
+        return True
+
+    # اگر دستور نبود اجازه بده
+    if not message.text.startswith("/"):
+        return True
+
+    # اگر دستور بود ولی یوزرنیم نداشت → بلاک
+    if f"@{BOT_USERNAME}" not in message.text:
+        return False
+
+    return True
+
 def safe_edit(call, text, markup=None):
     try:
         bot.edit_message_text(text, call.from_user.id, call.message.message_id, reply_markup=markup)
@@ -69,15 +103,24 @@ def start_trial_expiration(uid):
 def register_user(user):
     uid = user.id
     if not users_col.find_one({"user_id": uid}):
-        users_col.insert_one({
-            "user_id": uid,
+        users_col.update_one(
+    {"user_id": uid},
+    {
+        "$set": {
             "first_name": user.first_name or "",
             "last_name": user.last_name or "",
-            "username": user.username or "",
+            "username": user.username or ""
+        },
+        "$setOnInsert": {
             "coins": 0,
             "created_at": datetime.now(UTC),
-            "trial_used": False
-        })
+            "trial_used": False,
+            "ban": False,
+            "wins": 0
+        }
+    },
+    upsert=True
+)
 
 def get_main_panel():
     markup = types.InlineKeyboardMarkup()
@@ -91,7 +134,7 @@ def get_main_panel():
     
     markup.add(types.InlineKeyboardButton("💬گپ🗣",
     
-      url="https://t.me/+UFkNow4CYBNmZGY8"))
+      url="https://t.me/Nix_self_Group"))
     
     return markup
 
@@ -184,7 +227,6 @@ def manage_user_coins(uid):
         # پیدا کردن سشن‌های فعال
         active_sessions = list(sessions_col.find({
             "user_id": uid,
-            "enabled": True,
             "power": "on"
         }))
 
@@ -259,6 +301,30 @@ def manage_user_coins(uid):
     except Exception as e:
         print("[COIN ENGINE ERROR]", e)
 
+
+def get_user_sessions_panel(uid):
+    markup = types.InlineKeyboardMarkup()
+    sessions = list(sessions_col.find({"user_id": uid}))
+
+    for s in sessions:
+        name = s.get("session_name", "Unnamed")
+        power = s.get("power", "off")
+
+        status_text = "🟢 ON" if power == "on" else "🔴 OFF"
+
+        markup.row(
+            types.InlineKeyboardButton(
+                f"📱 {name}",
+                callback_data=f"session_info_{s['_id']}"
+            ),
+            types.InlineKeyboardButton(
+                status_text,
+                callback_data=f"toggle_session_{s['_id']}"
+            )
+        )
+
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel"))
+    return markup
 
 
 
@@ -350,7 +416,9 @@ threading.Thread(target=run_flask, daemon=True).start()
 # ================= TeleBot Handlers =================
 @bot.message_handler(commands=["ping"])
 def awake_bot(message):
-    if message.from_user.id not in ADMINS:
+    if not command_allowed(message):
+        return
+    if message.from_user.id not in ADMIN:
         print("paaaaa")
         return
     started = start_keep_alive()
@@ -361,7 +429,9 @@ def awake_bot(message):
 
 @bot.message_handler(commands=["sleep"])
 def sleep_bot(message):
-    if message.from_user.id not in ADMINS:
+    if not command_allowed(message):
+        return
+    if message.from_user.id not in ADMIN:
         return
     stopped = stop_keep_alive()
     if stopped:
@@ -371,6 +441,8 @@ def sleep_bot(message):
 
 @bot.message_handler(commands=["start"])
 def start_panel(message):
+    if not command_allowed(message):
+        return
 
     uid = message.from_user.id
     register_user(message.from_user)
@@ -393,7 +465,9 @@ def start_panel(message):
 
 @bot.message_handler(commands=["admin_gift"])
 def give_coins_admin(message):
-    if message.from_user.id not in ADMINS:
+    if not command_allowed(message):
+        return
+    if message.from_user.id not in ADMIN:
         bot.send_message(message.from_user.id, "❌ شما دسترسی لازم را ندارید!")
         return
 
@@ -415,12 +489,21 @@ def give_coins_admin(message):
     bot.send_message(message.from_user.id, f"✅ {amount} سکه به  کاربر{recipient_name} اضافه شد.")
     try:
         bot.send_message(target_id, f"🌟 {amount} سکه توسط ادمین به حساب شما اضافه شد!")
+        
+        send_coin_log(
+    f"🔄 انتقال سکه\n"
+    f"👤 از: {from_id}\n"
+    f"👤 به: {to_id}\n"
+    f"💰 مقدار: {amount}"
+)
     except:
         pass
 
 @bot.message_handler(commands=["add_baton"])
 def add_required_chat(message):
-    if message.from_user.id not in ADMINS:
+    if not command_allowed(message):
+        return
+    if message.from_user.id not in ADMIN:
         bot.send_message(message.from_user.id, "❌ دسترسی ندارید!")
         return
 
@@ -461,14 +544,14 @@ def handle_callbacks(call):
             threading.Timer(3, lambda: bot.delete_message(uid, msg.message_id)).start()
             return
     # اگر سکه کافی بود ادامه بده
-        safe_edit(call, "📱 شماره خود را وارد کنید (+98...) برای سلف اصلی")
+        safe_edit(call, "📱 شماره خود را وارد کنید (+98...)")
         user_state[uid] = "await_phone_self"
 
     elif data == "selfbot_start_trial":
         if user.get("trial_used"):
             bot.answer_callback_query(call.id, "⚡ شما قبلاً سلف تست گرفتید!")
             return
-        safe_edit(call, "📱 شماره خود را وارد کنید (+98...) برای سلف تست یک روزه")
+        safe_edit(call, "📱 شماره خود را وارد کنید (+98...)")
         user_state[uid] = "await_phone_trial"
 
     elif data == "selfbot_account_info":
@@ -485,7 +568,7 @@ def handle_callbacks(call):
 تعداد زیر مجموعه: {referrals}
 تعداد سکه: {coins}
 تاریخ عضویت: {created_str}"""
-        safe_edit(call, msg, get_back_panel())
+        safe_edit(call, msg, get_user_sessions_panel(uid))
 
     elif data == "selfbot_referral":
         referral_link = f"https://t.me/self_nix_bot?start={uid}"
@@ -493,7 +576,7 @@ def handle_callbacks(call):
         safe_edit(call, msg, get_back_panel())
 
     elif data == "selfbot_buy_coins":
-        msg = f"تعداد سکه مورد نظر خود را ارسال کنید. هر ۵۰ سکه: {PRICE_PER_50} تومان"
+        msg = "تعداد سکه مورد نظر خود را ارسال کنید.\nهر ۵۰ سکه = ۵,۰۰۰ تومان"
         safe_edit(call, msg, get_back_panel())
         user_state[uid] = "await_buy_amount"
 
@@ -544,14 +627,43 @@ def handle_messages(message):
     state = user_state.get(uid)
 
     # ---------------- خرید سکه ----------------
+    # ---------------- خرید سکه ----------------
     if state == "await_buy_amount":
         if not text.isdigit():
-            bot.send_message(uid, "❌ لطفاً عدد وارد کنید.")
+            bot.send_message(uid, "❌ لطفاً فقط عدد وارد کنید.")
             return
+
         amount = int(text)
+
+        if amount < 50:
+            bot.send_message(uid, "❌ حداقل خرید 50 سکه است.")
+            return
+
         total = int((amount / 50) * PRICE_PER_50)
-        bot.send_message(uid, f"💰 تعداد {amount} سکه برابر است با {total} تومان")
-        user_state.pop(uid, None)
+
+        temp_data[uid] = {
+        "buy_amount": amount,
+        "buy_total": total
+    }
+
+        msg = (
+        f"💰 تعداد سکه: {amount}\n"
+        f"💵 مبلغ قابل پرداخت: {total:,} تومان\n\n"
+        f"لطفاً مبلغ را به کارت زیر واریز کنید:\n\n"
+        f"شماره کارت:\n{CARD_NUMBER}\n"
+        f"به نام: {CARD_NAME}\n\n"
+        f"پس از واریز، عکس فیش را ارسال کنید."
+    )
+    
+        send_coin_log(
+    f"🛒 درخواست خرید\n"
+    f"👤 کاربر: {uid}\n"
+    f"💰 تعداد: {amount}\n"
+    f"💵 مبلغ: {total} تومان"
+)
+
+        bot.send_message(uid, msg)
+        user_state[uid] = "await_receipt"
         return
 
     # ---------------- مرحله شماره ----------------
@@ -676,6 +788,126 @@ def handle_messages(message):
         elif res.get("status") == "2fa":
             msg = bot.send_message(uid, "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:")
             temp_data[uid]["last_msg_id"] = msg.message_id
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("toggle_session_"))
+def toggle_session(call):
+    uid = call.from_user.id
+    session_id = call.data.split("toggle_session_")[1]
+
+    session = sessions_col.find_one({"_id": ObjectId(session_id)})
+    if not session:
+        return
+
+    current_power = session.get("power", "off")
+    new_power = "off" if current_power == "on" else "on"
+
+    sessions_col.update_one(
+        {"_id": ObjectId(session_id)},
+        {"$set": {"power": new_power}}
+    )
+
+    bot.answer_callback_query(call.id, f"Power → {new_power.upper()}")
+
+    # رفرش پنل
+    user = users_col.find_one({"user_id": uid})
+    first_name = user.get("first_name", "")
+    coins = user.get("coins", 0)
+
+    
+    safe_edit(call, get_user_sessions_panel(uid))
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
+def confirm_buy(call):
+    if call.from_user.id not in ADMINS:
+        return
+
+    target_id = int(call.data.split("_")[2])
+
+    user = users_col.find_one({"user_id": target_id})
+    if not user:
+        return
+
+    amount = temp_data[target_id]["buy_amount"]
+
+    users_col.update_one(
+        {"user_id": target_id},
+        {"$inc": {"coins": amount}}
+    )
+
+    # حذف دکمه برای همه ادمین‌ها
+    if target_id in admin_messages:
+        for admin_id, msg_id in admin_messages[target_id]:
+            try:
+                bot.edit_message_reply_markup(
+                    chat_id=admin_id,
+                    message_id=msg_id,
+                    reply_markup=None
+                )
+            except:
+                pass
+
+
+    bot.send_message(target_id, f"✅ خرید شما تایید شد.\n💰 {amount} سکه اضافه شد.")
+    
+    admin_id = call.from_user.id
+
+    send_coin_log(
+    f"✅ تایید خرید\n"
+    f"👮 ادمین: {admin_id}\n"
+    f"👤 خریدار: {target_id}\n"
+    f"💰 مقدار اضافه شده: {amount}"
+    )
+
+    temp_data.pop(target_id, None)
+    admin_messages.pop(target_id, None)
+
+@bot.message_handler(content_types=["photo"])
+def handle_receipt(message):
+    uid = message.from_user.id
+
+    if user_state.get(uid) != "await_receipt":
+        return
+
+    data = temp_data.get(uid)
+    if not data:
+        return
+
+    coins = data["buy_amount"]
+    total = data["buy_total"]
+    file_id = message.photo[-1].file_id
+
+    caption = (
+        f"🧾 درخواست خرید جدید\n\n"
+        f"👤 کاربر: {message.from_user.first_name}\n"
+        f"🆔 آیدی: {uid}\n"
+        f"💰 تعداد سکه: {coins}\n"
+        f"💵 مبلغ: {total:,} تومان"
+    )
+    
+    send_coin_log(
+    f"🛒 درخواست خرید\n"
+    f"👤 کاربر: {uid}\n"
+    f"💰 تعداد: {coins}\n"
+    f"💵 مبلغ: {total} تومان"
+)
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(
+            "✅ تایید خرید",
+            callback_data=f"confirm_buy_{uid}"
+        )
+    )
+
+    admin_messages[uid] = []
+
+    for admin in ADMINS:
+        sent = bot.send_photo(admin, file_id, caption=caption, reply_markup=markup)
+        admin_messages[uid].append((admin, sent.message_id))
+
+    bot.send_message(uid, "⏳ کاربر گرامی، تا تایید ادمین منتظر بمانید.")
+    user_state.pop(uid, None)
+
   #===========================  
 
 import threading
