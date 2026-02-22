@@ -104,26 +104,25 @@ def start_trial_expiration(uid):
     threading.Timer(TRIAL_DURATION * 86400, remove_trial).start()
 
 def register_user(user):
-    uid = user.id
-    if not users_col.find_one({"user_id": uid}):
-        users_col.update_one(
-    {"user_id": uid},
-    {
-        "$set": {
-            "first_name": user.first_name or "",
-            "last_name": user.last_name or "",
-            "username": user.username or ""
+    users_col.update_one(
+        {"user_id": user.id},
+        {
+            "$set": {
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+                "username": user.username or "",
+                "last_seen": datetime.now(UTC)
+            },
+            "$setOnInsert": {
+                "coins": 0,
+                "created_at": datetime.now(UTC),
+                "trial_used": False,
+                "ban": False,
+                "wins": 0
+            }
         },
-        "$setOnInsert": {
-            "coins": 0,
-            "created_at": datetime.now(UTC),
-            "trial_used": False,
-            "ban": False,
-            "wins": 0
-        }
-    },
-    upsert=True
-)
+        upsert=True
+    )
 
 def get_main_panel():
     markup = types.InlineKeyboardMarkup()
@@ -135,13 +134,12 @@ def get_main_panel():
     )
     markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="selfbot_buy_coins"))
 
-    markup.add(types.InlineKeyboardButton("🛠️پشتیبانی💬",
-    
-      url="https://t.me/self_nix_support"))
-    
-    markup.add(types.InlineKeyboardButton("💬گپ🗣",
-    
-      url="https://t.me/Nix_self_Group"))
+    markup.add(
+    types.InlineKeyboardButton(
+        "🛠️ ارتباط با ما💬",
+        callback_data="open_support_menu"
+    )
+    )
     
     return markup
 
@@ -948,6 +946,23 @@ def handle_receipt(message):
 
     bot.send_message(uid, "⏳ کاربر گرامی، تا تایید ادمین منتظر بمانید.")
     user_state.pop(uid, None)
+
+@bot.callback_query_handler(func=lambda call: call.data == "open_support_menu")
+def open_support_menu(call):
+    new_markup = types.InlineKeyboardMarkup()
+    new_markup.add(
+        types.InlineKeyboardButton("🛠️ پشتیبانی", url="https://t.me/self_nix_support"),
+        types.InlineKeyboardButton("💬 گپ", url="https://t.me/Nix_self_Group")
+    )
+    new_markup.add(
+        types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel")
+    )
+
+    bot.edit_message_reply_markup(
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=new_markup
+    )
 
   #===========================  
 app = Flask(__name__)
