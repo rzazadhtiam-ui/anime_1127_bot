@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from telebot import types
 import pytz
 import re
+from time import time
+
 
 # ---------- MONGO SETUP ----------
 mongo_uri = (
@@ -19,10 +21,94 @@ mongo_uri = (
 mongo = MongoClient(mongo_uri)
 db = mongo.telegram_sessions
 users_col = db.users
+db1 = mongo.self_panel_db
+required_chats_col = db1.required_chats
+#============گیم==============
 xo_rooms = {}
+
+#============سکه==============
 TRANSFER_FEE_PERCENT = 10
 BOT_ACCOUNT_ID = 6433381392  
 
+#============اسپم==============
+user_cooldowns = {}
+COOLDOWN_SECONDS = 3
+#-------------بن--------------
+spam_tracker = {}
+SPAM_LIMIT = 3
+WINDOW_SECONDS = 5
+TEMP_BAN_SECONDS = 60
+
+
+
+#===========عضویت اجباری=============
+def is_user_joined(bot, user_id):
+    chats = list(required_chats_col.find({}))
+    missing = []
+
+    for chat in chats:
+        try:
+            link = chat["link"].strip()
+
+            if "t.me/" in link:
+                username = link.split("t.me/")[1].split("?")[0]
+                chat_id = "@" + username
+            elif link.startswith("@"):
+                chat_id = link
+            else:
+                chat_id = "@" + link
+
+            member = bot.get_chat_member(chat_id, user_id)
+
+            if member.status not in ["member", "administrator", "creator"]:
+                missing.append(chat)
+
+        except:
+            missing.append(chat)
+
+    return missing
+#====================
+def send_force_join(bot, message, missing):
+    user_id = message.from_user.id
+
+    # 1️⃣ پیام داخل گروه / چت فعلی
+    warn_msg = bot.send_message(
+        message.chat.id,
+        "❌ باید در کانال و گروه‌های تعیین‌شده عضو شوید."
+    )
+
+    # اگر خواستی پین شود (ربات باید ادمین باشد)
+    try:
+        bot.pin_chat_message(message.chat.id, warn_msg.message_id)
+    except:
+        pass
+
+    # 2️⃣ ساخت دکمه‌ها برای پیوی
+    markup = InlineKeyboardMarkup()
+    for chat in missing:
+        markup.add(
+            InlineKeyboardButton(
+                chat["button_name"],
+                url=chat["link"]
+            )
+        )
+
+    # 3️⃣ ارسال در پیوی
+    try:
+        bot.send_message(
+            user_id,
+            "برای استفاده از ربات، ابتدا در لیست زیر عضو شوید:",
+            reply_markup=markup
+        )
+    except:
+        # اگر کاربر استارت نکرده باشد
+        bot.send_message(
+            message.chat.id,
+            "⚠ ابتدا ربات را در پیوی استارت کنید."
+        )
+
+
+#=====================================
 def leaderboard_wins(bot, message, limit=10):
     """
     نمایش لیدربورد بر اساس تعداد برد (wins)
@@ -143,6 +229,88 @@ def leaderboard_coins(bot, message):
 # ---------- REGISTER COMMANDS ----------
 def register_commands(bot):
 #==============helper=================
+    def send_coin_log(text, parse_mode=None):
+        try:
+            bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}", parse_mode=parse_mode)
+        except Exception as e:
+            print("Log Error:", e)
+#=============decorator=============
+
+#----------عضویت اجباری--------------
+    def require_join(func):
+        def wrapper(update):
+            if hasattr(update, "from_user"):
+                user_id = update.from_user.id
+            elif hasattr(update, "message"):
+                user_id = update.message.from_user.id
+            else:
+                return
+
+            missing = is_user_joined(bot, user_id)
+            if missing:
+            # پیام هشدار بالا صفحه
+                if hasattr(update, "message"):
+                    msg = bot.send_message(
+                        update.message.chat.id,
+                    "❌ برای استفاده از ربات، ابتدا در کانال‌ها و گروه‌های اسپانسر عضو شوید."
+                    )
+                # حذف خودکار بعد از 5 ثانیه
+                    threading.Timer(5, lambda: bot.delete_message(update.message.chat.id, msg.message_id)).start()
+
+                # ارسال دکمه‌ها به پیوی
+                    send_force_join(bot, update.message, missing)
+                return
+
+            return func(update)
+        return wrapper
+
+#------------انجام داذن یک دستور----------------
+    def anti_spam(func):
+        def wrapper(message):
+            uid = message.from_user.id
+            now = time()
+
+            last_time = user_cooldowns.get(uid, 0)
+
+            if now - last_time < COOLDOWN_SECONDS:
+                return  # فقط نادیده می‌گیریم
+
+            user_cooldowns[uid] = now
+            return func(message)
+
+        return wrapper
+
+
+#-------------بن موقت---------------
+    def anti_spam_strict(func):
+        def wrapper(message):
+            uid = message.from_user.id
+            now = time()
+
+            data = spam_tracker.get(uid, {"count": 0, "first_time": now, "ban_until": 0})
+
+        # اگر موقتاً بن است
+            if now < data.get("ban_until", 0):
+                return
+
+        # اگر خارج از پنجره زمانی است ریست کن
+            if now - data["first_time"] > WINDOW_SECONDS:
+                data = {"count": 0, "first_time": now, "ban_until": 0}
+
+            data["count"] += 1
+
+        # اگر بیشتر از حد مجاز
+            if data["count"] >= SPAM_LIMIT:
+                data["ban_until"] = now + TEMP_BAN_SECONDS
+                bot.reply_to(message, "🚫 به دلیل اسپم، 1 دقیقه محدود شدید.")
+                spam_tracker[uid] = data
+                return
+
+            spam_tracker[uid] = data
+            return func(message)
+
+        return wrapper
+
 #============finish_game==============
     def finish_game(room_id, winner_id):
         if room_id not in xo_rooms:
@@ -251,6 +419,8 @@ def register_commands(bot):
 
 
     @bot.message_handler(commands=["panel"])
+    @require_join
+    @anti_spam
     def show_panel(message):
     # بررسی بن بودن
         if is_banned(message.from_user.id):
@@ -272,6 +442,8 @@ def register_commands(bot):
     )
 
     @bot.message_handler(commands=["my_coins"])
+    @require_join
+    @anti_spam
     def balance_cmd(message):
         if is_banned(message.from_user.id):
             return
@@ -279,6 +451,8 @@ def register_commands(bot):
 
     # ---------- /id ----------
     @bot.message_handler(commands=["id"])
+    @require_join
+    @anti_spam
     def profile_cmd(message):
         if is_banned(message.from_user.id):
             return
@@ -286,6 +460,8 @@ def register_commands(bot):
 
     # ---------- /daily ----------
     @bot.message_handler(commands=["daily"])
+    @require_join
+    @anti_spam
     def daily_cmd(message):
         uid = message.from_user.id
         ensure_user(message.from_user)
@@ -308,6 +484,8 @@ def register_commands(bot):
 
     # ---------- /leader_board ----------
     @bot.message_handler(commands=["leader_board"])
+    @require_join
+    @anti_spam
     def leaderboard_cmd(message):
         if is_banned(message.from_user.id):
             return
@@ -315,6 +493,8 @@ def register_commands(bot):
 
     # ---------- /ban ----------
     @bot.message_handler(commands=["ban"])
+    @require_join
+    @anti_spam
     def ban_cmd(message):
         ADMIN_ID = 6433381392
         if message.from_user.id != ADMIN_ID:
@@ -329,6 +509,9 @@ def register_commands(bot):
 
     # ---------- /unban ----------
     @bot.message_handler(commands=["unban"])
+    @require_join
+    @anti_spam
+    
     def unban_cmd(message):
         ADMIN_ID = 6433381392
         if message.from_user.id != ADMIN_ID:
@@ -342,6 +525,8 @@ def register_commands(bot):
         bot.reply_to(message, "✅ کاربر آنبن شد.")
 #=====================================
     @bot.message_handler(commands=["leader_board_wins"])
+    @require_join
+    @anti_spam
     def leaderboard_wins_cmd(message):
         if is_banned(message.from_user.id):
             return
@@ -349,18 +534,24 @@ def register_commands(bot):
 
     # ---------- TEXT BUTTONS ----------
     @bot.message_handler(func=lambda m: m.text and m.text.strip() == "موجودی")
+    @require_join
+    @anti_spam
     def show_coins(message):
         if is_banned(message.from_user.id):
             return
         my_coins(bot, message)
 
     @bot.message_handler(func=lambda m: m.text and m.text.strip() == "حساب کاربری")
+    @require_join
+    @anti_spam
     def show_id(message):
         if is_banned(message.from_user.id):
             return
         my_id(bot, message)
 
     @bot.message_handler(func=lambda m: m.text and m.text.strip() == "آمار سکه")
+    @require_join
+    @anti_spam
     def show_leaderboard(message):
         if is_banned(message.from_user.id):
             return
@@ -369,6 +560,9 @@ def register_commands(bot):
     # ---------- انتقال سکه یکجا ----------
     
     @bot.message_handler(func=lambda m: m.text and m.text.startswith("انتقال"))
+    @require_join
+    @anti_spam
+    @anti_spam_strict
     def transfer_coins(message):
         from_user = message.from_user
         uid = from_user.id
@@ -423,6 +617,10 @@ def register_commands(bot):
             bot.reply_to(message, f"❌ موجودی کافی نیست. موجودی شما: {sender.get('coins',0)}")
             return
 
+        if amount <= 0:
+            bot.reply_to(message, "❌ مبلغ انتقال باید بزرگتر از صفر باشد.")
+            return
+
         # محاسبه کارمزد
         fee = round(amount * TRANSFER_FEE_PERCENT / 100, 2)
         receive_amount = round(amount - fee, 2)
@@ -458,25 +656,50 @@ def register_commands(bot):
 
         sender_updated = users_col.find_one({"user_id": uid})
         receiver_updated = users_col.find_one({"user_id": target_user_id})
+        receiver_name = receiver_updated.get("first_name") or "کاربر"
+        name = f"<a href='tg://user?id={target_user_id}'>{receiver_name}</a>"
 
         bot.reply_to(message,
             f"💸 انتقال سکه انجام شد\n"
+            f"دریافت کننده: {name}\n"
             f"مبلغ ارسال: {amount}\n"
             f"کارمزد ربات: {fee}\n"
             f"مبلغ دریافتی: {receive_amount}\n"
             f"موجودی شما: {sender_updated.get('coins',0)}\n"
-            f"تاریخ: {date_str}"
+            f"تاریخ: {date_str}",
+            parse_mode="HTML"
         )
+        
+        
 
-        sender_name = sender.get("first_name", "کاربر")
+        sender_name = sender.get("first_name") or "کاربر"
+        sender_id = sender.get("user_id")
+
+        sender_mention = f"<a href='tg://user?id={sender_id}'>{sender_name}</a>"
+        
         bot.send_message(target_user_id,
-            f"🎁 دریافت سکه از {sender_name}\n"
+            f"🎁 دریافت سکه از {sender_mention}\n"
             f"مبلغ دریافتی: {receive_amount}\n"
-            f"تاریخ: {date_str}"
+            f"تاریخ: {date_str}",
+            parse_mode="HTML"
+        )
+        
+        
+        
+        send_coin_log(
+        f"انتقال سکه:\n\n"
+        f"انتقال دهنده: {sender_mention}\n"
+        f"دریافت کننده: {name}\n"
+        f"مبلق انتقال: {amount}\n"
+        f"کارمزد: {fee}\n"
+        f"مبلق دریافت شده: {receive_amount}",
+        parse_mode="HTML"
         )
 
 #=====================================
     @bot.message_handler(func=lambda m: m.text and m.text.startswith("آمار برد"))
+    @require_join
+    @anti_spam
     def create_xo_room(message):
         if is_banned(message.from_user.id):
             return
@@ -484,6 +707,8 @@ def register_commands(bot):
 
 #==============دوز==================
     @bot.message_handler(func=lambda m: m.text and m.text.startswith("دوز"))
+    @require_join
+    @anti_spam_strict
     def create_xo_room(message):
     	
         uid = message.from_user.id
@@ -508,7 +733,7 @@ def register_commands(bot):
             bot.reply_to(message, "سکه کافی ندارید ❌")
             return
 
-        # کم کردن سهم سازنده
+        
         
 
         room_id = message.message_id
@@ -552,6 +777,7 @@ def register_commands(bot):
 #=====================================
 
     @bot.message_handler(commands=['fild'])
+    @require_join
     def get_file_id(message):
 
         # بررسی ریپلای بودن
@@ -576,6 +802,7 @@ def register_commands(bot):
         bot.reply_to(message, "این پیام عکس یا فایل نیست ❌")
 #=====================================
     @bot.callback_query_handler(func=lambda call: call.data.startswith("join_xo_"))
+    @require_join
     def join_xo(call):
         room_id = int(call.data.split("_")[2])
         uid = call.from_user.id
@@ -615,8 +842,45 @@ def register_commands(bot):
 )
 
         start_real_game(room_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("cancel_xo_"))
+    @require_join
+    def cancel_xo(call):
+        room_id = int(call.data.split("_")[2])
+        uid = call.from_user.id
+
+        if room_id not in xo_rooms:
+            return
+
+        room = xo_rooms[room_id]
+
+    # فقط سازنده بتواند لغو کند
+        if uid != room["creator"]:
+            bot.answer_callback_query(call.id, "فقط سازنده می‌تواند لغو کند ❌")
+            return
+
+    # اگر نفر دوم وارد شده باشد، دیگر لغو مجاز نیست
+        if room["player2"] is not None:
+            bot.answer_callback_query(call.id, "بازی شروع شده و قابل لغو نیست ❌")
+            return
+
+    # حذف پیام
+        try:
+            bot.edit_message_caption(
+                chat_id=room["chat_id"],
+                message_id=room["message_id"],
+                caption="❌ بازی توسط سازنده لغو شد.",
+                reply_markup=InlineKeyboardMarkup()
+        )
+        except:
+            pass
+
+        xo_rooms.pop(room_id)
+        bot.answer_callback_query(call.id, "بازی لغو شد ✅")
+
 #=====================================
     @bot.callback_query_handler(func=lambda call: call.data.startswith("xo_"))
+    @require_join
     def handle_xo_move(call):
         _, room_id, index = call.data.split("_")
         room_id = int(room_id)
@@ -686,6 +950,7 @@ def register_commands(bot):
 
 
     @bot.message_handler(content_types=['new_chat_members'])
+    @require_join
     def welcome_new_members(message):
         for new_user in message.new_chat_members:
         # بررسی بن بودن
@@ -701,8 +966,9 @@ def register_commands(bot):
         markup.row(KeyboardButton("دوز 500"))
         markup.row(KeyboardButton(" ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌"))
         # ارسال پیام پنل به کاربر جدید
-        bot.send_message(
-            new_user.id,  
-            "به ربات self nix خوش امدید پنل برای شما باز شد ",
-            reply_markup=markup
-        )
+        for new_user in message.new_chat_members:
+            bot.send_message(
+                message.chat.id,
+                f"به ربات self nix خوش آمدید {new_user.first_name}!\nپنل برای شما آماده شد.",
+                reply_markup=markup
+    )
