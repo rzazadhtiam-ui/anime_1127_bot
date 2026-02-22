@@ -62,9 +62,9 @@ ADMINS = [6433381392, 8588914809, 7851824627, 8259391739]
 SUPER_ADMIN = 6433381392
 # ================= Helper =================
 
-def send_coin_log(text):
+def send_coin_log(text, parse_mode=None):
     try:
-        bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}")
+        bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}", parse_mode=parse_mode)
     except Exception as e:
         print("Log Error:", e)
 
@@ -134,6 +134,10 @@ def get_main_panel():
         types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
     )
     markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="selfbot_buy_coins"))
+
+    markup.add(types.InlineKeyboardButton("🛠️پشتیبانی💬",
+    
+      url="https://t.me/self_nix_support"))
     
     markup.add(types.InlineKeyboardButton("💬گپ🗣",
     
@@ -812,17 +816,62 @@ def toggle_session(call):
 
 
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
+def confirm_buy(call):
+    target_id = int(call.data.split("_")[2])
+
+    # فقط کسانی که پیام براشون فرستاده شده اجازه تایید دارند
+    allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
+
+# اضافه کردن سوپر ادمین به لیست
+    if SUPER_ADMIN not in allowed_admins:
+        allowed_admins.append(SUPER_ADMIN)
+
+    if call.from_user.id not in allowed_admins:
+        bot.answer_callback_query(call.id, "❌ اجازه ندارید این خرید را تایید کنید")
+        return
+
+    amount = temp_data[target_id]["buy_amount"]
+    users_col.update_one({"user_id": target_id}, {"$inc": {"coins": amount}})
+
+    # حذف دکمه‌ها
+    for admin_id, msg_id in admin_messages.get(target_id, []):
+        try:
+            bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
+        except:
+            pass
+
+    bot.send_message(target_id, f"✅ خرید شما تایید شد.\n💰 {amount} سکه اضافه شد.")
+
+    # لاگ به سوپرادمین
+    send_coin_log(
+        f"✅ خرید تایید شد\n"
+        f"👤 ادمین: <a href='tg://user?id={call.from_user.id}'>{call.from_user.first_name}</a>\n"
+        f"👤 کاربر: <a href='tg://user?id={target_id}'>{users_col.find_one({'user_id': target_id}).get('first_name','کاربر')}</a>\n"
+        f"💰 تعداد سکه اضافه شده: {amount}",
+        parse_mode="HTML"
+    )
+
+    temp_data.pop(target_id, None)
+    admin_messages.pop(target_id, None)
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reject_buy_"))
 def reject_buy(call):
     target_id = int(call.data.split("_")[2])
 
-    # فقط کسی که پیام براش فرستاده شده اجازه داره رد کنه
+    # همه admin هایی که برای این خرید پیام داشتند
     allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
+
+    # همیشه سوپر ادمین را هم اضافه کن
+    if SUPER_ADMIN not in allowed_admins:
+        allowed_admins.append(SUPER_ADMIN)
+
     if call.from_user.id not in allowed_admins:
         bot.answer_callback_query(call.id, "❌ اجازه ندارید این خرید را رد کنید")
-        return
+        return 
 
-    # حذف داده موقت و پیام‌ها
+    # حذف داده موقت و دکمه‌ها
     temp_data.pop(target_id, None)
     for admin_id, msg_id in admin_messages.get(target_id, []):
         try:
@@ -830,6 +879,14 @@ def reject_buy(call):
         except:
             pass
     admin_messages.pop(target_id, None)
+
+    # لاگ به سوپرادمین
+    send_coin_log(
+        f"❌ خرید رد شد\n"
+        f"👤 ادمین: <a href='tg://user?id={call.from_user.id}'>{call.from_user.first_name}</a>\n"
+        f"👤 کاربر: <a href='tg://user?id={target_id}'>{users_col.find_one({'user_id': target_id}).get('first_name','کاربر')}</a>",
+        parse_mode="HTML"
+    )
 
     # اطلاع کاربر
     try:
@@ -879,6 +936,15 @@ def handle_receipt(message):
     for admin in recipients:
         sent = bot.send_photo(admin, file_id, caption=caption, reply_markup=markup)
         admin_messages[uid].append((admin, sent.message_id))
+
+    # لاگ به سوپرادمین
+    send_coin_log(
+        f"🛒 درخواست خرید جدید\n"
+        f"👤 کاربر: <a href='tg://user?id={uid}'>{message.from_user.first_name}</a>\n"
+        f"💰 تعداد سکه: {coins}\n"
+        f"💵 مبلغ: {total:,} تومان",
+        parse_mode="HTML"
+    )
 
     bot.send_message(uid, "⏳ کاربر گرامی، تا تایید ادمین منتظر بمانید.")
     user_state.pop(uid, None)
