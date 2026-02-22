@@ -811,83 +811,31 @@ def toggle_session(call):
     safe_edit(call, get_user_sessions_panel(uid))
 
 
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reject_buy_"))
 def reject_buy(call):
-    if call.from_user.id not in ADMINS:
-        return
-
     target_id = int(call.data.split("_")[2])
+
+    # فقط کسی که پیام براش فرستاده شده اجازه داره رد کنه
+    allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
+    if call.from_user.id not in allowed_admins:
+        bot.answer_callback_query(call.id, "❌ اجازه ندارید این خرید را رد کنید")
+        return
 
     # حذف داده موقت و پیام‌ها
     temp_data.pop(target_id, None)
-
-    if target_id in admin_messages:
-        for admin_id, msg_id in admin_messages[target_id]:
-            try:
-                bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
-            except:
-                pass
-        admin_messages.pop(target_id, None)
+    for admin_id, msg_id in admin_messages.get(target_id, []):
+        try:
+            bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
+        except:
+            pass
+    admin_messages.pop(target_id, None)
 
     # اطلاع کاربر
     try:
-        bot.send_message(target_id, "❌ درخواست خرید شما توسط ادمین رد شد.")
+        bot.send_message(target_id, "❌ درخواست خرید شما رد شد.")
     except:
         pass
-
-    # Log برای ادمین
-    send_coin_log(
-        f"❌ خرید رد شد\n"
-        f"👮 ادمین: {call.from_user.id}\n"
-        f"👤 کاربر: {target_id}"
-    )
-
-    bot.answer_callback_query(call.id, "خرید رد شد ✅")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
-def confirm_buy(call):
-    if call.from_user.id not in ADMINS:
-        return
-
-    target_id = int(call.data.split("_")[2])
-
-    user = users_col.find_one({"user_id": target_id})
-    if not user:
-        return
-
-    amount = temp_data[target_id]["buy_amount"]
-
-    users_col.update_one(
-        {"user_id": target_id},
-        {"$inc": {"coins": amount}}
-    )
-
-    # حذف دکمه برای همه ادمین‌ها
-    if target_id in admin_messages:
-        for admin_id, msg_id in admin_messages[target_id]:
-            try:
-                bot.edit_message_reply_markup(
-                    chat_id=admin_id,
-                    message_id=msg_id,
-                    reply_markup=None
-                )
-            except:
-                pass
-
-
-    bot.send_message(target_id, f"✅ خرید شما تایید شد.\n💰 {amount} سکه اضافه شد.")
-    
-    admin_id = call.from_user.id
-
-    send_coin_log(
-    f"✅ تایید خرید\n"
-    f"👮 ادمین: {admin_id}\n"
-    f"👤 خریدار: {target_id}\n"
-    f"💰 مقدار اضافه شده: {amount}"
-    )
-
-    temp_data.pop(target_id, None)
-    admin_messages.pop(target_id, None)
 
 @bot.message_handler(content_types=["photo"])
 def handle_receipt(message):
@@ -911,29 +859,24 @@ def handle_receipt(message):
         f"💰 تعداد سکه: {coins}\n"
         f"💵 مبلغ: {total:,} تومان"
     )
-    
-    send_coin_log(
-    f"🛒 درخواست خرید\n"
-    f"👤 کاربر: {uid}\n"
-    f"💰 تعداد: {coins}\n"
-    f"💵 مبلغ: {total} تومان"
-)
+
+    # تعیین دریافت‌کننده‌ها
+    if uid in ADMINS:
+        # اگر خود کاربر ادمین است → پیام فقط برای سوپرادمین
+        recipients = [SUPER_ADMIN]
+    else:
+        # کاربران عادی → پیام برای همه ADMINS
+        recipients = ADMINS
 
     markup = types.InlineKeyboardMarkup()
     markup.row(
-    types.InlineKeyboardButton(
-        "✅ تایید خرید",
-        callback_data=f"confirm_buy_{uid}"
-    ),
-    types.InlineKeyboardButton(
-        "❌ رد خرید",
-        callback_data=f"reject_buy_{uid}"
+        types.InlineKeyboardButton("✅ تایید خرید", callback_data=f"confirm_buy_{uid}"),
+        types.InlineKeyboardButton("❌ رد خرید", callback_data=f"reject_buy_{uid}")
     )
-)
 
     admin_messages[uid] = []
 
-    for admin in ADMINS:
+    for admin in recipients:
         sent = bot.send_photo(admin, file_id, caption=caption, reply_markup=markup)
         admin_messages[uid].append((admin, sent.message_id))
 
