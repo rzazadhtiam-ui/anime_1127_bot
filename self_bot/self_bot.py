@@ -343,7 +343,7 @@ KEEP_ALIVE_URLS = [
     "https://anime-1128-bot.onrender.com",
     "https://self-nix-bot.onrender.com",
     "https://self-nix-app.onrender.com",
-    "https://self-bot-tv3l.onrender.com"
+    "https://self-bot-ssvq.onrender.com"
 ]
 KEEP_ALIVE_INTERVAL = 150  # ثانیه
 keep_alive_running = False
