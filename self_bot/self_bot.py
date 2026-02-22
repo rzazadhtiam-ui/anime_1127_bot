@@ -2,6 +2,8 @@ import telebot
 from bson import ObjectId
 from telebot import types
 from datetime import datetime, timedelta, UTC
+from flask import request
+from telebot.types import Update
 import threading
 import requests
 from pymongo import MongoClient
@@ -402,16 +404,7 @@ def stop_keep_alive():
     return True
 
 # ================= Flask =================
-app = Flask(__name__)
-@app.route("/")
-def home():
-    return "🤖 Bot is alive ✅"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
-
-threading.Thread(target=run_flask, daemon=True).start()
 
 # ================= TeleBot Handlers =================
 @bot.message_handler(commands=["ping"])
@@ -947,10 +940,23 @@ def handle_receipt(message):
     user_state.pop(uid, None)
 
   #===========================  
+app = Flask(__name__)
 
-import threading
-import time
+@app.route("/")
+def home():
+    return "🤖 Bot is alive ✅"
 
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    if request.headers.get("content-type") == "application/json":
+        json_string = request.get_data().decode("utf-8")
+        update = Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK", 200
+    return "Unsupported Media Type", 403
+
+
+# ================= BACKGROUND TASK =================
 def hourly_loop():
     while True:
         try:
@@ -958,13 +964,21 @@ def hourly_loop():
                 manage_user_coins(user["user_id"])
         except Exception as e:
             print("Hourly deduct error:", e)
-        time.sleep(3600)  # اجرای واقعی هر ۱ ساعت
+        time.sleep(3600)
 
-# اجرای loop در thread جداگانه
 threading.Thread(target=hourly_loop, daemon=True).start()
 
 
+# ================= WEBHOOK SETUP =================
+def set_webhook():
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.set_webhook(url=f"{SITE_URL}/{TOKEN}")
+    print("Webhook set successfully")
 
-# ================= RUN BOT =================
-print("Self Bot is running...")
-bot.infinity_polling()
+
+# ================= RUN SERVER =================
+if __name__ == "__main__":
+    set_webhook()
+    print("Self Bot is running...")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))()
