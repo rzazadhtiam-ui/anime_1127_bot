@@ -14,6 +14,7 @@ from update1_2 import register_commands
 
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
+bot_URL = "https://self-bot-ssvq.onrender.com"
 MIN_COINS = 10
 REFERRAL_REWARD = 25
 TRIAL_DURATION = 1  # روز
@@ -973,7 +974,7 @@ threading.Thread(target=hourly_loop, daemon=True).start()
 def set_webhook():
     bot.remove_webhook()
     time.sleep(1)
-    bot.set_webhook(url=f"{SITE_URL}/{TOKEN}")
+    bot.set_webhook(url=f"{bot_URL}/{TOKEN}")
     print("Webhook set successfully")
 
 
