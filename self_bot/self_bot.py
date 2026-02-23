@@ -38,7 +38,7 @@ db = mongo.telegram_sessions
 db1 = mongo.self_panel_db
 
 users_col = db.users
-sessions_col = db.sessions1
+sessions_col = db.sessions
 required_chats_col = db1.required_chats
 
 
