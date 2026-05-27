@@ -69,30 +69,90 @@ async def translate(text, target):
         return text
 
 # ===============================
-# Auto Reply
+# 
 # ===============================
+# 🛑 قوانین Ignore مرکزی برای جلوگیری از تداخل دستورات مشابه
+IGNORE_RULES = {
+    # بخش ساعت (فارسی و انگلیسی)
+    ".ساعت": [
+        ".ساعت خاموش",
+        ".ساعت اسم",
+        ".ساعت بیو",
+        ".ساعت کلی",
+        ".ساعت جهانی",
+        ".ساعت منطقه",
+        ".ساعا فونت",
+    ],
+    ".clock": [
+        ".clock utc",
+        ".clock all",
+        ".clock bio",
+        ".clock name",
+        ".clock font",
+        ".clock off",
+        ".clock region",
+    ],
+    
+}
+
+def _norm_cmd(s: str) -> str:
+    """نرمال‌سازی متن برای مقایسه دقیق و بدون مشکل فاصله اضافی"""
+    return " ".join((s or "").strip().lower().split())
+
+def _get_auto_ignore_for_patterns(patterns):
+    """پیدا کردن خودکار قوانین ignore بر اساس الگوی ورودی"""
+    auto_ignores = []
+    for p in patterns:
+        key = _norm_cmd(p)
+        if key in IGNORE_RULES:
+            auto_ignores.extend(IGNORE_RULES[key])
+    return list(dict.fromkeys(auto_ignores))
+
+def _should_ignore(raw_text: str, ignores) -> bool:
+    """بررسی اینکه آیا پیام فعلی باید نادیده گرفته شود یا خیر"""
+    t = _norm_cmd(raw_text)
+    for ign in ignores:
+        ign_n = _norm_cmd(ign)
+        if t.startswith(ign_n):
+            return True
+    return False
+
 # ===============================
 # Multi Language Decorator
 # ===============================
-def multi_lang(patterns):
-
+def multi_lang(patterns, ignore=None, use_auto_ignore=True):
     if isinstance(patterns, str):
         patterns = [patterns]
 
-    def decorator(func):
+    if ignore and isinstance(ignore, str):
+        ignore = [ignore]
 
+    # ignore مرکزی + ignore دستی
+    auto_ignores = _get_auto_ignore_for_patterns(patterns) if use_auto_ignore else []
+    manual_ignores = ignore or []
+    final_ignores = list(dict.fromkeys(auto_ignores + manual_ignores))
+
+    def decorator(func):
         @wraps(func)
         async def wrapper(event):
-
             if not event.out:
                 return
 
             raw_text = (event.raw_text or "").strip()
+            if not raw_text:
+                return
+
             user_lang = get_lang(event.chat_id)
 
-            # ==========================
-            # ترجمه ورودی به انگلیسی برای اجرا
-            # ==========================
+            # ------------------------------
+            # اگر پیام جزو ignore ها بود، این handler اجرا نشود
+            # ------------------------------
+            if final_ignores and _should_ignore(raw_text, final_ignores):
+                return
+
+            # ------------------------------
+            # ترجمه ورودی برای match کردن
+            # ------------------------------
             if user_lang != "en":
                 normalized = await translate(raw_text, "fa")
             else:
@@ -101,15 +161,14 @@ def multi_lang(patterns):
             text = normalized.lower()
 
             for pattern in patterns:
-
                 if text.startswith(pattern.lower()):
                     event.ml_text = text
                     event.ml_args = text[len(pattern):].strip()
-                    # ذخیره زبان کاربر برای استفاده بعدی در پاسخ
                     event.user_lang = user_lang
                     return await func(event)
 
         return wrapper
+
     return decorator
 
 # ===============================
