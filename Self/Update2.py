@@ -1,530 +1,290 @@
 # =========================================================
-# ◢◤ ⟦ ◈ SELF NIX SYSTEM ◈ ⟧ ◢◤
-# Tiam Official Self System
-# Version: 1.1.2
+# ◢◤ SELF NIX SYSTEM FULL CORE ◢◤
 # =========================================================
 
 import asyncio
 import random
+import os
 from telethon import events
 from telethon.tl.functions.account import UpdateProfileRequest
 from functools import wraps
+
 from multi_lang import multi_lang, reply_auto, edit_auto
+
+# optional heavy modules (safe import)
+try:
+    import pytesseract
+    from PIL import Image
+except:
+    pytesseract = None
+
+try:
+    import ffmpeg
+except:
+    ffmpeg = None
+
+# whisper optional
+try:
+    import whisper
+    whisper_model = whisper.load_model("base")
+except:
+    whisper_model = None
+
 
 # =========================================================
 # CONFIG
 # =========================================================
 
 SELF_NIX_ENABLED = True
-
 MANDATORY_TAG = True
-
-DEFAULT_PROFILE_STYLE = 1
-
 AUTO_SIGNATURE_LINES = 6
 AUTO_SIGNATURE_LENGTH = 50
+
+user_styles = {}
 
 # =========================================================
 # PROFILE STYLES
 # =========================================================
 
 PROFILE_STYLES = {
-
-    1: {
-        "name": "◈NIX◈ | {name}",
-        "bio": "◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤"
-    },
-
-    2: {
-        "name": "◢ ₮ ł ₳ ₼ | NIX ◤ {name}",
-        "bio": "⟦ ◈ ⟧ 𝑆𝑒𝑙𝑓 𝑁𝑖𝑥 𝑃𝑜𝑤𝑒𝑟𝑒𝑑"
-    },
-
-    3: {
-        "name": "тɪαм | ◈ {name}",
-        "bio": "◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤"
-    },
-
-    4: {
-        "name": "[ ₮ ł ₳ ₼ ] | {name}",
-        "bio": "◢◤ Nix Group ◢◤"
-    },
-
-    5: {
-        "name": "⟦ ◈ SELF_NIX ◈ ⟧ {name}",
-        "bio": "▰▰▰▰▰▱▱▱ 70%"
-    }
-
+    1: {"name": "◈NIX◈ | {name}", "bio": "SELF NIX ACTIVE"},
+    2: {"name": "◢ NIX | {name}", "bio": "POWERED BY NIX"},
+    3: {"name": "тɪαм | {name}", "bio": "OFFICIAL SELF"},
+    4: {"name": "[NIX] | {name}", "bio": "SYSTEM ONLINE"},
+    5: {"name": "⟦SELF NIX⟧ {name}", "bio": "70% POWER"}
 }
 
-# =========================================================
-# RUNTIME
-# =========================================================
-
-user_styles = {}
 
 # =========================================================
 # UTILS
 # =========================================================
 
-def generate_bar(percent):
+def bar(p):
+    return "▰" * int(p / 10) + "▱" * (10 - int(p / 10))
 
-    full = int(percent / 10)
 
-    empty = 10 - full
+def get_style(cid):
+    return user_styles.get(cid, 1)
 
-    return "▰" * full + "▱" * empty
 
-def get_style(chat_id):
+def set_style(cid, s):
+    user_styles[cid] = s
 
-    return user_styles.get(
-        chat_id,
-        DEFAULT_PROFILE_STYLE
-    )
 
-def set_style(chat_id, style):
-
-    user_styles[chat_id] = style
-
-def build_signature():
-
-    percent = random.randint(70, 99)
-
-    bar = generate_bar(percent)
-
-    return f"""
-
-______
-
-⟦ ◈ ⟧ 𝑆𝑒𝑙𝑓 𝑁𝑖𝑥 𝑃𝑜𝑤𝑒𝑟𝑒𝑑
-
-{bar} {percent}%
-
-◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤
-"""
-
-def should_add_signature(text):
-
+def sig(text):
     if not text:
-        return False
+        return text
 
-    lines = text.count("\n") + 1
+    if len(text) > AUTO_SIGNATURE_LENGTH or text.count("\n") >= AUTO_SIGNATURE_LINES:
+        p = random.randint(70, 99)
+        return text + f"\n\n▰ SELF NIX {p}% ▰"
+    return text
 
-    length = len(text)
-
-    if lines >= AUTO_SIGNATURE_LINES:
-        return True
-
-    if length >= AUTO_SIGNATURE_LENGTH:
-        return True
-
-    return False
-
-async def auto_edit(event, text, edit_auto):
-
-    if should_add_signature(text):
-
-        text += build_signature()
-
-    return await edit_auto(event, text)
-
-async def auto_reply(event, text, reply_auto):
-
-    if should_add_signature(text):
-
-        text += build_signature()
-
-    return await reply_auto(event, text)
 
 # =========================================================
 # PROFILE APPLY
 # =========================================================
 
 async def apply_profile(client, style_id):
-
     me = await client.get_me()
-
-    current_name = me.first_name or "User"
+    name = me.first_name or "User"
 
     style = PROFILE_STYLES.get(style_id)
-
     if not style:
         return False
 
-    new_name = style["name"].format(
-        name=current_name
-    )
+    new_name = style["name"].format(name=name)
 
-    new_bio = style["bio"]
-
-    # جلوگیری از حذف اسم اصلی سلف
-    if MANDATORY_TAG:
-
-        if "NIX" not in new_name.upper():
-
-            new_name = f"◈NIX◈ | {current_name}"
+    if MANDATORY_TAG and "NIX" not in new_name.upper():
+        new_name = "◈NIX◈ | " + name
 
     try:
-
         await client(UpdateProfileRequest(
             first_name=new_name,
-            about=new_bio
+            about=style["bio"]
         ))
-
         return True
-
-    except Exception as e:
-
-        print("PROFILE ERROR:", e)
-
+    except:
         return False
 
+
 # =========================================================
-# STATUS BUILDER
+# STATUS
 # =========================================================
 
-def build_status():
-
-    speed = round(
-        random.uniform(0.08, 0.20),
-        2
-    )
-
-    percent = random.randint(75, 99)
-
-    bar = generate_bar(percent)
-
+def status():
     return f"""
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
+◢◤ SELF NIX ◢◤
+Ping: OK
+Speed: {round(random.uniform(0.05,0.2),2)}s
+Status: ONLINE
+{bar(random.randint(70,99))}
+"""
 
-◈ Message: Pong!
-◈ Speed: {speed}s
-◈ Status: Online ✨
-
-{bar} {percent}%
-
-◢◤ Nix Group ◢◤
-""".strip()
 
 # =========================================================
-# STYLE LIST
+# VOICE → TEXT
 # =========================================================
 
-def build_style_text():
+async def voice_to_text(path):
+    if not whisper_model:
+        return "Whisper not installed"
 
-    return """
-◢◤ ⟦ ◈ SELF NIX STYLE ◈ ⟧ ◢◤
+    result = whisper_model.transcribe(path)
+    return result["text"]
 
-◈ استایل های موجود:
-
-1 → ◈NIX◈ | Name
-2 → ◢ ₮ ł ₳ ₼ | NIX ◤
-3 → тɪαм | ◈
-4 → [ ₮ ł ₳ ₼ ]
-5 → ⟦ ◈ SELF_NIX ◈ ⟧
-
-نماد ها:
-◢ SELF NIX ◤
-⟦ ◈ SELF_NIX ◈ ⟧
-◢ ₮ ł ₳ ₼ | NIX ◤
-
-شکل ها:
-тɪαм
-T I A M
-[ ₮ ł ₳ ₼ ]
-◢ ◤
-⟦ ◈ ⟧
-▰▰▰▱▱
-
-◈ مثال:
-.profile 2
-""".strip()
 
 # =========================================================
-# MAIN REGISTER
+# TEXT → VOICE (placeholder)
 # =========================================================
 
-def register_self_nix_system(
-    client,
-):
+async def text_to_voice(text, out="voice.mp3"):
+    # نیاز به gtts یا edge-tts
+    from gtts import gTTS
+    tts = gTTS(text=text, lang="en")
+    tts.save(out)
+    return out
 
-    # =====================================================
-    # AUTO NAME CHECK
-    # =====================================================
 
-    @client.on(events.NewMessage(outgoing=True))
-    async def auto_name_protect(event):
+# =========================================================
+# IMAGE OCR
+# =========================================================
 
-        if not SELF_NIX_ENABLED:
-            return
+async def image_to_text(path):
+    if not pytesseract:
+        return "OCR not installed"
 
-        try:
+    img = Image.open(path)
+    return pytesseract.image_to_string(img)
 
-            me = await client.get_me()
 
-            current_name = me.first_name or ""
+# =========================================================
+# AUDIO EDIT (FFMPEG)
+# =========================================================
 
-            if "NIX" not in current_name.upper():
+async def audio_trim(inp, out, start=0, dur=10):
+    if not ffmpeg:
+        return None
 
-                style_id = get_style(event.chat_id)
+    (
+        ffmpeg
+        .input(inp, ss=start, t=dur)
+        .output(out)
+        .run(overwrite_output=True)
+    )
+    return out
 
-                style = PROFILE_STYLES.get(style_id)
 
-                new_name = style["name"].format(
-                    name=current_name
-                )
+# =========================================================
+# VIDEO EDIT (FFMPEG)
+# =========================================================
 
-                await client(UpdateProfileRequest(
-                    first_name=new_name
-                ))
+async def video_trim(inp, out, start=0, dur=10):
+    if not ffmpeg:
+        return None
 
-        except:
-            pass
+    (
+        ffmpeg
+        .input(inp, ss=start, t=dur)
+        .output(out)
+        .run(overwrite_output=True)
+    )
+    return out
 
-    # =====================================================
-    # STATUS
-    # =====================================================
 
+# =========================================================
+# COMMANDS
+# =========================================================
+
+def register_self_nix_system(client):
+
+    # ---------------- STATUS ----------------
     @multi_lang([".ping", ".پینگ"])
-    async def ping_handler(event):
+    async def ping(e):
+        await edit_auto(e, status())
 
-        txt = build_status()
-
-        await edit_auto(
-            event,
-            txt,
-            edit_auto
-        )
-
-    # =====================================================
-    # PROFILE LIST
-    # =====================================================
-
+    # ---------------- PROFILE ----------------
     @multi_lang([".profile", ".پروفایل"])
-    async def profile_handler(event):
+    async def profile(e):
+        arg = (e.ml_args or "").strip()
 
-        args = event.ml_args.strip()
+        if not arg:
+            return await edit_auto(e, "Styles: 1-5")
 
-        # نمایش لیست
-        if not args:
+        sid = int(arg)
+        set_style(e.chat_id, sid)
 
-            return await auto_edit(
-                event,
-                build_style_text(),
-                edit_auto
-            )
+        ok = await apply_profile(client, sid)
+        await edit_auto(e, "Updated" if ok else "Error")
 
-        # انتخاب استایل
-        try:
-
-            style_id = int(args)
-
-        except:
-
-            return await auto_edit(
-                event,
-                "❌ شماره استایل نامعتبر است",
-                edit_auto
-            )
-
-        if style_id not in PROFILE_STYLES:
-
-            return await auto_edit(
-                event,
-                "❌ استایل پیدا نشد",
-                edit_auto
-            )
-
-        set_style(
-            event.chat_id,
-            style_id
-        )
-
-        ok = await apply_profile(
-            client,
-            style_id
-        )
-
-        if not ok:
-
-            return await auto_edit(
-                event,
-                "❌ خطا در اعمال پروفایل",
-                edit_auto
-            )
-
-        percent = random.randint(80, 99)
-
-        bar = generate_bar(percent)
-
-        txt = f"""
-◢◤ ⟦ ◈ PROFILE UPDATED ◈ ⟧ ◢◤
-
-◈ Style: {style_id}
-◈ Status: Synced ✨
-
-{bar} {percent}%
-
-◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤
-"""
-
-        await edit_auto(
-            event,
-            txt.strip(),
-            edit_auto
-        )
-
-    # =====================================================
-    # NAME
-    # =====================================================
-
+    # ---------------- NAME ----------------
     @multi_lang([".name", ".اسم"])
-    async def name_handler(event):
+    async def name(e):
+        arg = (e.ml_args or "").strip()
 
-        args = event.ml_args
+        if not arg:
+            return await edit_auto(e, "No name")
 
-        if not args:
+        if MANDATORY_TAG and "NIX" not in arg.upper():
+            arg = "◈NIX◈ | " + arg
 
-            return await auto_edit(
-                event,
-                "❌ اسم وارد نشده",
-                edit_auto
-            )
+        await client(UpdateProfileRequest(first_name=arg))
+        await edit_auto(e, "Name updated")
 
-        new_name = args
+    # ---------------- VOICE TO TEXT ----------------
+    @multi_lang([".vvt", ".ویس"])
+    async def v2t(e):
+        if not e.file:
+            return await reply_auto(e, "Send voice")
 
-        if MANDATORY_TAG:
+        path = await e.download_media()
+        text = await voice_to_text(path)
 
-            if "NIX" not in new_name.upper():
+        await edit_auto(e, text)
 
-                new_name = f"◈NIX◈ | {new_name}"
+    # ---------------- TEXT TO VOICE ----------------
+    @multi_lang([".ttv", ".صدا"])
+    async def t2v(e):
+        text = (e.ml_args or "").strip()
+        if not text:
+            return await reply_auto(e, "No text")
 
-        try:
+        file = await text_to_voice(text)
+        await e.edit(file=file)
 
-            await client(UpdateProfileRequest(
-                first_name=new_name
-            ))
+    # ---------------- OCR ----------------
+    @multi_lang([".ocr", ".عکس"])
+    async def ocr(e):
+        if not e.file:
+            return await reply_auto(e, "Send image")
 
-            txt = f"""
-◢◤ ⟦ ◈ NAME UPDATED ◈ ⟧ ◢◤
+        path = await e.download_media()
+        text = await image_to_text(path)
 
-◈ Name:
-{new_name}
+        await edit_auto(e, text)
 
-◈ Status: Protected ✨
-"""
+    # ---------------- AUDIO TRIM ----------------
+    @multi_lang([".cutaudio", ".برش"])
+    async def cut_audio(e):
+        if not e.file:
+            return await reply_auto(e, "Send audio")
 
-            await edit_auto(
-                event,
-                txt.strip(),
-                edit_auto
-            )
+        path = await e.download_media()
+        out = "out.mp3"
 
-        except:
+        await audio_trim(path, out)
+        await e.edit(file=out)
 
-            await edit_auto(
-                event,
-                "❌ خطا در تغییر اسم",
-                edit_auto
-            )
+    # ---------------- VIDEO TRIM ----------------
+    @multi_lang([".cutvideo", ".ویدیو"])
+    async def cut_video(e):
+        if not e.file:
+            return await reply_auto(e, "Send video")
 
-    # =====================================================
-    # BIO
-    # =====================================================
+        path = await e.download_media()
+        out = "out.mp4"
 
-    @multi_lang([".bio", ".بیو"])
-    async def bio_handler(event):
+        await video_trim(path, out)
+        await e.edit(file=out)
 
-        args = event.ml_args
-
-        if not args:
-
-            return await auto_edit(
-                event,
-                "❌ بیو وارد نشده",
-                edit_auto
-            )
-
-        bio = args
-
-        if "SELF NIX" not in bio.upper():
-
-            bio += "\n\n◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤"
-
-        try:
-
-            await client(UpdateProfileRequest(
-                about=bio
-            ))
-
-            await edit_auto(
-                event,
-                """
-◢◤ ⟦ ◈ BIO UPDATED ◈ ⟧ ◢◤
-
-◈ New Bio Applied ✨
-◈ Self Nix Protected
-""",
-                edit_auto
-            )
-
-        except:
-
-            await auto_edit(
-                event,
-                "❌ خطا در تغییر بیو",
-                edit_auto
-            )
-
-    # =====================================================
-    # SIGN TEST
-    # =====================================================
-
-    @multi_lang([".sign", ".امضا"])
-    async def sign_handler(event):
-
-        txt = """
-این یک تست برای سیستم امضای خودکار Self Nix است
-
-این متن عمداً طولانی نوشته شده
-تا امضای حرفه‌ای خودکار فعال شود
-
-◢◤ SELF NIX ACTIVE ◢◤
-"""
-
-        await edit_auto(
-            event,
-            txt.strip(),
-            edit_auto
-        )
-
-    # =====================================================
-    # EXAMPLE
-    # =====================================================
-
-    @multi_lang([".example", ".نمونه"])
-    async def sample_handler(event):
-
-        args = event.ml_args
-
-        text = event.ml_text
-
-        txt = f"""
-◢◤ ⟦ ◈ SELF NIX EXAMPLE ◈ ⟧ ◢◤
-
-◈ متن:
-{text}
-
-◈ آرگومان:
-{args}
-
-◈ Status: Active ✨
-"""
-
-        await edit_auto(
-            event,
-            txt.strip(),
-            reply_auto
-        )
-
-    print("◢◤ SELF NIX SYSTEM LOADED ◢◤")
+    print("SELF NIX FULL SYSTEM LOADED")
