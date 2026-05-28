@@ -19,7 +19,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from Update1 import register_update1
 from multi_lang import register_language_commands
-from Update2 import setup_features
+from Update2 import register_self_nix_system
 # ------------------------------------------------
 # PATH FIX
 # ------------------------------------------------
@@ -50,11 +50,11 @@ MONGO_URI = (
 )
 
 DB_NAME = "telegram_sessions"
-COLLECTION_NAME = "sessions1"
+COLLECTION_NAME = "sessions"
 
 ADMIN_ID = 6433381392
 
-SESSION_DIR = "sessions1"
+SESSION_DIR = "sessions"
 USER_DATA_DIR = "user_data"
 
 os.makedirs(SESSION_DIR, exist_ok=True)
@@ -203,22 +203,24 @@ async def start_session(doc):
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         # ثبت هندلرها و ابزارها
+        register_self_nix_system(client)
         register(client)
         create_handlers(client)
         register_handlers(client)
         register_group_handlers(client, me.id)
-        register_language_commands(client)
         register_update1(client)
         register_clock(client)
         self_tools(client)
-        setup_features(client)
+        register_language_commands(client)
+        started_sessions.add(name)
+        
 
         # استارت status bot
         status_bot = SelfStatusBot(client)
         asyncio.create_task(status_bot.start())
 
         active_clients[name] = client
-        started_sessions.add(name)
+        
 
         # آپدیت MongoDB
         sessions_col.update_one(
