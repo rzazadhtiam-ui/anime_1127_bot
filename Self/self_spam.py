@@ -187,6 +187,13 @@ def list_blocked(owner_id):
     doc = collection.find_one({"_id": owner_id})
     return doc.get("blocked", {}) if doc else {}
 
+async def owner_only(event):
+    try:
+        me = await event.client.get_me()
+        return event.sender_id == me.id
+    except:
+        return False
+
 # ================================================================
 # MAIN HANDLERS
 # ================================================================
