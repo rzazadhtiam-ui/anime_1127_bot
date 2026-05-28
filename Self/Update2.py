@@ -1,1272 +1,530 @@
 # =========================================================
-# ◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
+# ◢◤ ⟦ ◈ SELF NIX SYSTEM ◈ ⟧ ◢◤
 # Tiam Official Self System
 # Version: 1.1.2
 # =========================================================
 
-import os
-import re
-import io
-import gc
-import psutil
 import asyncio
-import yt_dlp
-import edge_tts
-import tempfile
-import subprocess
-import pytesseract
-import requests
-import time
-
-from PIL import Image
-from datetime import datetime
-from pymongo import MongoClient
-
+import random
 from telethon import events
-from telethon.tl.types import (
-    DocumentAttributeAudio
-)
-
-from deep_translator import GoogleTranslator
+from telethon.tl.functions.account import UpdateProfileRequest
+from functools import wraps
+from multi_lang import multi_lang, reply_auto, edit_auto
 
 # =========================================================
 # CONFIG
 # =========================================================
 
-OWNER_ID = 123456789
+SELF_NIX_ENABLED = True
 
-MONGO_URI = "mongodb://localhost:27017"
+MANDATORY_TAG = True
 
-mongo = MongoClient(MONGO_URI)
+DEFAULT_PROFILE_STYLE = 1
 
-db = mongo["nix_self"]
-
-coins_db = db["coins"]
-profile_db = db["profiles"]
-stats_db = db["stats"]
-
-START_TIME = time.time()
+AUTO_SIGNATURE_LINES = 6
+AUTO_SIGNATURE_LENGTH = 50
 
 # =========================================================
-# DECORATORS
+# PROFILE STYLES
 # =========================================================
 
-def owner_only(func):
+PROFILE_STYLES = {
 
-    async def wrapper(event):
+    1: {
+        "name": "◈NIX◈ | {name}",
+        "bio": "◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤"
+    },
 
-        if event.sender_id != OWNER_ID:
-            return
+    2: {
+        "name": "◢ ₮ ł ₳ ₼ | NIX ◤ {name}",
+        "bio": "⟦ ◈ ⟧ 𝑆𝑒𝑙𝑓 𝑁𝑖𝑥 𝑃𝑜𝑤𝑒𝑟𝑒𝑑"
+    },
 
-        try:
-            return await func(event)
+    3: {
+        "name": "тɪαм | ◈ {name}",
+        "bio": "◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤"
+    },
 
-        except Exception as e:
+    4: {
+        "name": "[ ₮ ł ₳ ₼ ] | {name}",
+        "bio": "◢◤ Nix Group ◢◤"
+    },
 
-            await event.reply(
-                f"""
-◢◤ ERROR ◢◤
+    5: {
+        "name": "⟦ ◈ SELF_NIX ◈ ⟧ {name}",
+        "bio": "▰▰▰▰▰▱▱▱ 70%"
+    }
 
-{str(e)}
-"""
-            )
-
-    return wrapper
+}
 
 # =========================================================
-# HELPERS
+# RUNTIME
 # =========================================================
 
-def progress_bar(percent):
+user_styles = {}
 
-    filled = int(percent / 10)
+# =========================================================
+# UTILS
+# =========================================================
 
-    empty = 10 - filled
+def generate_bar(percent):
 
-    return "▰" * filled + "▱" * empty
+    full = int(percent / 10)
 
+    empty = 10 - full
 
-async def add_signature(user_id):
+    return "▰" * full + "▱" * empty
 
-    data = stats_db.find_one(
-        {"user_id": user_id}
+def get_style(chat_id):
+
+    return user_styles.get(
+        chat_id,
+        DEFAULT_PROFILE_STYLE
     )
 
-    if not data:
+def set_style(chat_id, style):
 
-        stats_db.insert_one({
-            "user_id": user_id,
-            "messages": 1
-        })
+    user_styles[chat_id] = style
 
-        total = 1
+def build_signature():
 
-    else:
+    percent = random.randint(70, 99)
 
-        total = data.get(
-            "messages",
-            0
-        ) + 1
-
-        stats_db.update_one(
-            {"user_id": user_id},
-            {
-                "$set": {
-                    "messages": total
-                }
-            }
-        )
+    bar = generate_bar(percent)
 
     return f"""
 
-◢◤ ⟦ ◈ ⟧ ɴɪx ᴍᴀɴᴀɢᴇᴅ: {total:,} ᴍsɢs
-"""
+______
 
+⟦ ◈ ⟧ 𝑆𝑒𝑙𝑓 𝑁𝑖𝑥 𝑃𝑜𝑤𝑒𝑟𝑒𝑑
 
-def add_coin(user_id, amount=1):
-
-    data = coins_db.find_one(
-        {"user_id": user_id}
-    )
-
-    if not data:
-
-        coins_db.insert_one({
-            "user_id": user_id,
-            "coins": amount
-        })
-
-    else:
-
-        coins_db.update_one(
-            {"user_id": user_id},
-            {
-                "$inc": {
-                    "coins": amount
-                }
-            }
-        )
-
-# =========================================================
-# MAIN SETUP
-# =========================================================
-
-def setup_features(client):
-
-    # =====================================================
-    # COIN SYSTEM
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.coin"
-    ))
-    @owner_only
-    async def coin_handler(event):
-
-        add_coin(event.sender_id)
-
-        data = coins_db.find_one(
-            {"user_id": event.sender_id}
-        )
-
-        coins = data.get(
-            "coins",
-            0
-        )
-
-        text = f"""
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-
-◈ Coins: {coins}
-
-▰▰▰▰▰▰▱▱▱▱
+{bar} {percent}%
 
 ◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤
 """
 
-        text += await add_signature(
-            event.sender_id
-        )
+def should_add_signature(text):
 
-        await event.reply(text)
+    if not text:
+        return False
 
-    # =====================================================
-    # SYSTEM MONITOR
-    # =====================================================
+    lines = text.count("\n") + 1
 
-    @client.on(events.NewMessage(
-        pattern=r"\.sys"
-    ))
-    @owner_only
-    async def system_handler(event):
+    length = len(text)
 
-        cpu = psutil.cpu_percent()
+    if lines >= AUTO_SIGNATURE_LINES:
+        return True
 
-        ram = psutil.virtual_memory().percent
+    if length >= AUTO_SIGNATURE_LENGTH:
+        return True
 
-        uptime = int(
-            time.time() - START_TIME
-        )
+    return False
 
-        text = f"""
-◢◤ SYSTEM STATUS ◢◤
+async def auto_edit(event, text, edit_auto):
 
-CPU:
-{progress_bar(cpu)} {cpu}%
+    if should_add_signature(text):
 
-RAM:
-{progress_bar(ram)} {ram}%
+        text += build_signature()
 
-UPTIME:
-{uptime}s
+    return await edit_auto(event, text)
 
-STATUS:
-ONLINE ✨
-"""
+async def auto_reply(event, text, reply_auto):
 
-        text += await add_signature(
-            event.sender_id
-        )
+    if should_add_signature(text):
 
-        await event.reply(text)
+        text += build_signature()
 
-    # =====================================================
-    # TRANSLATOR
-    # =====================================================
+    return await reply_auto(event, text)
 
-    @client.on(events.NewMessage(
-        pattern=r"\.tr (.+)"
-    ))
-    @owner_only
-    async def translate_handler(event):
+# =========================================================
+# PROFILE APPLY
+# =========================================================
 
-        text = event.pattern_match.group(1)
+async def apply_profile(client, style_id):
 
-        translated = GoogleTranslator(
-            source='auto',
-            target='en'
-        ).translate(text)
+    me = await client.get_me()
 
-        msg = f"""
-◢◤ NIX TRANSLATOR ◢◤
+    current_name = me.first_name or "User"
 
-◈ Original:
-{text}
+    style = PROFILE_STYLES.get(style_id)
 
-◈ Translated:
-{translated}
-"""
+    if not style:
+        return False
 
-        msg += await add_signature(
-            event.sender_id
-        )
+    new_name = style["name"].format(
+        name=current_name
+    )
 
-        await event.reply(msg)
+    new_bio = style["bio"]
 
-    # =====================================================
-    # TEXT TO SPEECH
-    # =====================================================
+    # جلوگیری از حذف اسم اصلی سلف
+    if MANDATORY_TAG:
 
-    @client.on(events.NewMessage(
-        pattern=r"\.tts (.+)"
-    ))
-    @owner_only
-    async def tts_handler(event):
+        if "NIX" not in new_name.upper():
 
-        text = event.pattern_match.group(1)
+            new_name = f"◈NIX◈ | {current_name}"
 
-        file_name = "nix_tts.mp3"
+    try:
 
-        communicate = edge_tts.Communicate(
-            text,
-            voice="en-US-GuyNeural"
-        )
+        await client(UpdateProfileRequest(
+            first_name=new_name,
+            about=new_bio
+        ))
 
-        await communicate.save(file_name)
+        return True
 
-        await event.reply(
-            file=file_name,
-            voice_note=True
-        )
+    except Exception as e:
 
-        os.remove(file_name)
+        print("PROFILE ERROR:", e)
 
-    # =====================================================
-    # OCR
-    # =====================================================
+        return False
 
-    @client.on(events.NewMessage(
-        pattern=r"\.ocr"
-    ))
-    @owner_only
-    async def ocr_handler(event):
+# =========================================================
+# STATUS BUILDER
+# =========================================================
 
-        if not event.is_reply:
-            return await event.reply(
-                "Reply to image."
-            )
+def build_status():
 
-        reply = await event.get_reply_message()
+    speed = round(
+        random.uniform(0.08, 0.20),
+        2
+    )
 
-        path = await reply.download_media()
+    percent = random.randint(75, 99)
 
-        image = Image.open(path)
+    bar = generate_bar(percent)
 
-        text = pytesseract.image_to_string(
-            image
-        )
-
-        result = f"""
-◢◤ NIX OCR ◢◤
-
-{text}
-"""
-
-        result += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(result)
-
-        os.remove(path)
-
-    # =====================================================
-    # OCR TRANSLATE
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.ocrtr"
-    ))
-    @owner_only
-    async def ocr_translate_handler(event):
-
-        if not event.is_reply:
-            return await event.reply(
-                "Reply to image."
-            )
-
-        reply = await event.get_reply_message()
-
-        path = await reply.download_media()
-
-        image = Image.open(path)
-
-        text = pytesseract.image_to_string(
-            image
-        )
-
-        translated = GoogleTranslator(
-            source='auto',
-            target='en'
-        ).translate(text)
-
-        result = f"""
-◢◤ NIX OCR TRANSLATOR ◢◤
-
-◈ Extracted:
-{text}
-
-◈ Translated:
-{translated}
-"""
-
-        result += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(result)
-
-        os.remove(path)
-
-    # =====================================================
-    # YOUTUBE / INSTAGRAM DOWNLOADER
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.dl (.+)"
-    ))
-    @owner_only
-    async def download_handler(event):
-
-        url = event.pattern_match.group(1)
-
-        msg = await event.reply(
-            "Downloading..."
-        )
-
-        ydl_opts = {
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
-            'format': 'best'
-        }
-
-        os.makedirs(
-            "downloads",
-            exist_ok=True
-        )
-
-        with yt_dlp.YoutubeDL(
-            ydl_opts
-        ) as ydl:
-
-            info = ydl.extract_info(
-                url,
-                download=True
-            )
-
-            file_path = ydl.prepare_filename(
-                info
-            )
-
-        await event.reply(
-            file=file_path,
-            caption="""
-◢◤ NIX DOWNLOADER ◢◤
-
-Downloaded Successfully ✨
-"""
-        )
-
-        await msg.delete()
-
-        os.remove(file_path)
-
-    # =====================================================
-    # PROFILE SYSTEM
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.setbio (.+)"
-    ))
-    @owner_only
-    async def setbio_handler(event):
-
-        bio = event.pattern_match.group(1)
-
-        profile_db.update_one(
-            {"user_id": event.sender_id},
-            {
-                "$set": {
-                    "bio": bio
-                }
-            },
-            upsert=True
-        )
-
-        await event.reply(
-            """
-◢◤ PROFILE UPDATED ◢◤
-"""
-        )
-
-    @client.on(events.NewMessage(
-        pattern=r"\.profile"
-    ))
-    @owner_only
-    async def profile_handler(event):
-
-        me = await client.get_me()
-
-        data = profile_db.find_one(
-            {"user_id": event.sender_id}
-        )
-
-        bio = "No Bio"
-
-        if data:
-            bio = data.get(
-                "bio",
-                "No Bio"
-            )
-
-        text = f"""
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-
-PROFILE NAME:
-◈NIX◈ | {me.first_name}
-
-USERNAME:
-@{me.username}
-
-BIO:
-{bio}
-
-STATUS:
-PREMIUM SELF USER ✨
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # TIMELINE
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.timeline"
-    ))
-    @owner_only
-    async def timeline_handler(event):
-
-        percent = 45
-
-        text = f"""
-⟦ ◈ ⟧ ɴɪx ᴛɪᴍᴇʟɪɴᴇ
-
-{progress_bar(percent)} {percent}% ʟᴇꜰᴛ
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # PREMIUM EMOJI STYLE
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.nixping"
-    ))
-    @owner_only
-    async def ping_handler(event):
-
-        start = time.time()
-
-        msg = await event.reply(
-            "Pinging..."
-        )
-
-        end = time.time()
-
-        speed = round(
-            end - start,
-            2
-        )
-
-        text = f"""
+    return f"""
 ◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
 
 ◈ Message: Pong!
 ◈ Speed: {speed}s
 ◈ Status: Online ✨
 
-▰▰▰▰▰▰▰▰▱▱ 85%
+{bar} {percent}%
 
 ◢◤ Nix Group ◢◤
-"""
+""".strip()
 
-        text += await add_signature(
-            event.sender_id
-        )
+# =========================================================
+# STYLE LIST
+# =========================================================
 
-        await msg.edit(text)
+def build_style_text():
 
-    # =====================================================
-    # TERMINAL
-    # =====================================================
+    return """
+◢◤ ⟦ ◈ SELF NIX STYLE ◈ ⟧ ◢◤
 
-    @client.on(events.NewMessage(
-        pattern=r"\.cmd (.+)"
-    ))
-    @owner_only
-    async def cmd_handler(event):
+◈ استایل های موجود:
 
-        command = event.pattern_match.group(1)
+1 → ◈NIX◈ | Name
+2 → ◢ ₮ ł ₳ ₼ | NIX ◤
+3 → тɪαм | ◈
+4 → [ ₮ ł ₳ ₼ ]
+5 → ⟦ ◈ SELF_NIX ◈ ⟧
 
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        stdout, stderr = process.communicate()
-
-        output = stdout.decode()
-
-        error = stderr.decode()
-
-        result = output or error
-
-        if len(result) > 4000:
-            result = result[:4000]
-
-        text = f"""
-◢◤ NIX TERMINAL ◢◤
-
-{result}
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # SCREENSHOT
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.screenshot"
-    ))
-    @owner_only
-    async def screenshot_handler(event):
-
-        try:
-
-            import pyautogui
-
-            file_name = "screen.png"
-
-            image = pyautogui.screenshot()
-
-            image.save(file_name)
-
-            await event.reply(
-                file=file_name
-            )
-
-            os.remove(file_name)
-
-        except Exception as e:
-
-            await event.reply(str(e))
-
-    # =====================================================
-    # GROUP CLEANER
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.clean"
-    ))
-    @owner_only
-    async def clean_handler(event):
-
-        deleted = 0
-
-        async for msg in client.iter_messages(
-            event.chat_id,
-            limit=100
-        ):
-
-            try:
-
-                if msg.sender_id != OWNER_ID:
-
-                    await msg.delete()
-
-                    deleted += 1
-
-            except:
-                pass
-
-        await event.reply(
-            f"""
-◢◤ NIX CLEANER ◢◤
-
-Deleted:
-{deleted} messages
-"""
-        )
-
-    # =====================================================
-    # AI DELETE
-    # =====================================================
-
-    BAD_WORDS = [
-        "spam",
-        "fuck",
-        "scam",
-        "hack"
-    ]
-
-    @client.on(events.NewMessage)
-    async def auto_moderation(event):
-
-        if event.sender_id == OWNER_ID:
-            return
-
-        if not event.is_group:
-            return
-
-        text = event.raw_text.lower()
-
-        for word in BAD_WORDS:
-
-            if word in text:
-
-                try:
-                    await event.delete()
-                except:
-                    pass
-
-    # =====================================================
-    # VOICE TO TEXT
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.stt"
-    ))
-    @owner_only
-    async def stt_handler(event):
-
-        if not event.is_reply:
-
-            return await event.reply(
-                "Reply to voice."
-            )
-
-        reply = await event.get_reply_message()
-
-        path = await reply.download_media()
-
-        text = """
-Speech Recognition Installed
-Use faster-whisper here
-"""
-
-        result = f"""
-◢◤ NIX STT ◢◤
-
-{text}
-"""
-
-        result += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(result)
-
-        os.remove(path)
-
-    # =====================================================
-    # MEDIA INFO
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.media"
-    ))
-    @owner_only
-    async def media_handler(event):
-
-        if not event.is_reply:
-
-            return await event.reply(
-                "Reply to media."
-            )
-
-        reply = await event.get_reply_message()
-
-        media = reply.media
-
-        text = f"""
-◢◤ MEDIA INFO ◢◤
-
-MEDIA:
-{type(media)}
-
-DATE:
-{reply.date}
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-# =====================================================
-    # SELF INFO
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.(nix|selfinfo|self)"
-    ))
-    @owner_only
-    async def nix_info(event):
-
-        me = await client.get_me()
-
-        cpu = psutil.cpu_percent()
-
-        ram = psutil.virtual_memory().percent
-
-        uptime = int(
-            time.time() - START_TIME
-        )
-
-        uptime_h = uptime // 3600
-        uptime_m = (uptime % 3600) // 60
-        uptime_s = uptime % 60
-
-        coin_data = coins_db.find_one(
-            {"user_id": event.sender_id}
-        )
-
-        coins = 0
-
-        if coin_data:
-            coins = coin_data.get(
-                "coins",
-                0
-            )
-
-        stats = stats_db.find_one(
-            {"user_id": event.sender_id}
-        )
-
-        total_msgs = 0
-
-        if stats:
-            total_msgs = stats.get(
-                "messages",
-                0
-            )
-
-        text = f"""
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-__________________________
-
-◈ OWNER:
-{me.first_name}
-
-◈ USERNAME:
-@{me.username}
-
-◈ USER ID:
-{me.id}
-
-◈ VERSION:
-1.1.2
-
-◈ STATUS:
-ONLINE ✨
-
-◈ PING:
-0.12s
-
-◈ UPTIME:
-{uptime_h}h {uptime_m}m {uptime_s}s
-
-__________________________
-
-◈ CPU:
-{progress_bar(cpu)} {cpu}%
-
-◈ RAM:
-{progress_bar(ram)} {ram}%
-
-__________________________
-
-◈ NIX COINS:
-{coins}
-
-◈ MANAGED MSGS:
-{total_msgs:,}
-
-__________________________
-
-◈ FEATURES:
-
-• OCR SYSTEM
-• OCR TRANSLATOR
-• AI GROUP CLEANER
-• DOWNLOADER
-• PROFILE SYSTEM
-• TTS SYSTEM
-• STT SYSTEM
-• TERMINAL SYSTEM
-• SCREENSHOT SYSTEM
-• PREMIUM STYLE
-• NIX TIMELINE
-• SMART TOOLS
-• GROUP MANAGER
-
-__________________________
-
-◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # RESTART
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.restart"
-    ))
-    @owner_only
-    async def restart_handler(event):
-
-        msg = await event.reply(
-            """
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-
-Restarting Self...
-"""
-        )
-
-        await asyncio.sleep(2)
-
-        os.execl(
-            sys.executable,
-            sys.executable,
-            *sys.argv
-        )
-
-    # =====================================================
-    # PING SYSTEM
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.ping"
-    ))
-    @owner_only
-    async def ping_handler(event):
-
-        start = time.time()
-
-        msg = await event.reply(
-            "Pinging..."
-        )
-
-        end = time.time()
-
-        ping = round(
-            (end - start) * 1000
-        )
-
-        text = f"""
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-
-◈ Message: Pong!
-◈ Speed: {ping} ms
-◈ Status: Online ✨
-
-▰▰▰▰▰▰▰▰▱▱ 85%
-
-◢◤ Nix Group ◢◤
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await msg.edit(text)
-
-    # =====================================================
-    # HELP MENU
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.(help|menu)"
-    ))
-    @owner_only
-    async def help_handler(event):
-
-        text = """
-◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤
-__________________________
-
-◈ MAIN COMMANDS
-
-.coin
-.sys
-.self
-.help
-.profile
-.timeline
-
-__________________________
-
-◈ MEDIA COMMANDS
-
-.tts
-.stt
-.dl
-.ocr
-.ocrtr
-.media
-
-__________________________
-
-◈ MANAGEMENT
-
-.clean
-.cmd
-.screenshot
-
-__________________________
-
-◈ PROFILE
-
-.setbio
-.profile
-
-__________________________
-
-◈ UTILITIES
-
-.tr
-.ping
-.restart
-
-__________________________
-
+نماد ها:
+◢ SELF NIX ◤
+⟦ ◈ SELF_NIX ◈ ⟧
 ◢ ₮ ł ₳ ₼ | NIX ◤
-"""
 
-        text += await add_signature(
-            event.sender_id
-        )
+شکل ها:
+тɪαм
+T I A M
+[ ₮ ł ₳ ₼ ]
+◢ ◤
+⟦ ◈ ⟧
+▰▰▰▱▱
 
-        await event.reply(text)
+◈ مثال:
+.profile 2
+""".strip()
 
-    # =====================================================
-    # AUTO COIN SYSTEM
-    # =====================================================
+# =========================================================
+# MAIN REGISTER
+# =========================================================
 
-    @client.on(events.NewMessage)
-    async def auto_coin_system(event):
-
-        if event.sender_id != OWNER_ID:
-            return
-
-        if not event.raw_text:
-            return
-
-        add_coin(
-            event.sender_id,
-            amount=1
-        )
+def register_self_nix_system(
+    client,
+):
 
     # =====================================================
-    # AUTO PROFILE TAG
+    # AUTO NAME CHECK
     # =====================================================
 
-    @client.on(events.NewMessage(
-        outgoing=True
-    ))
-    async def auto_profile_tag(event):
+    @client.on(events.NewMessage(outgoing=True))
+    async def auto_name_protect(event):
 
-        if not event.raw_text:
-            return
-
-        if event.raw_text.startswith("."):
+        if not SELF_NIX_ENABLED:
             return
 
         try:
 
             me = await client.get_me()
 
-            custom_name = f"""
-◢ SELF NIX ◤ | {me.first_name}
-"""
+            current_name = me.first_name or ""
 
-            if me.first_name != custom_name:
+            if "NIX" not in current_name.upper():
 
-                await client(
-                    UpdateProfileRequest(
-                        first_name=custom_name
-                    )
+                style_id = get_style(event.chat_id)
+
+                style = PROFILE_STYLES.get(style_id)
+
+                new_name = style["name"].format(
+                    name=current_name
                 )
+
+                await client(UpdateProfileRequest(
+                    first_name=new_name
+                ))
 
         except:
             pass
 
     # =====================================================
-    # SMART DELETE
+    # STATUS
     # =====================================================
 
-    @client.on(events.NewMessage(
-        pattern=r"\.autodel (\d+)"
-    ))
-    @owner_only
-    async def auto_delete(event):
+    @multi_lang([".ping", ".پینگ"])
+    async def ping_handler(event):
 
-        seconds = int(
-            event.pattern_match.group(1)
+        txt = build_status()
+
+        await edit_auto(
+            event,
+            txt,
+            edit_auto
         )
 
-        msg = await event.reply(
-            f"""
-◢◤ AUTO DELETE ◢◤
-
-This message will delete in
-{seconds} seconds.
-"""
-        )
-
-        await asyncio.sleep(seconds)
-
-        await msg.delete()
-
     # =====================================================
-    # SERVER SPEED TEST
+    # PROFILE LIST
     # =====================================================
 
-    @client.on(events.NewMessage(
-        pattern=r"\.speed"
-    ))
-    @owner_only
-    async def speed_test(event):
+    @multi_lang([".profile", ".پروفایل"])
+    async def profile_handler(event):
 
-        start = time.time()
+        args = event.ml_args.strip()
 
-        for _ in range(50000):
-            pass
+        # نمایش لیست
+        if not args:
 
-        end = time.time()
-
-        speed = round(
-            end - start,
-            5
-        )
-
-        text = f"""
-◢◤ SERVER SPEED ◢◤
-
-◈ Benchmark:
-{speed}s
-
-◈ Status:
-FAST ⚡
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # MEMORY CLEANER
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.ramclean"
-    ))
-    @owner_only
-    async def ram_cleaner(event):
-
-        before = psutil.virtual_memory().percent
-
-        gc.collect()
-
-        after = psutil.virtual_memory().percent
-
-        text = f"""
-◢◤ MEMORY CLEANER ◢◤
-
-RAM BEFORE:
-{before}%
-
-RAM AFTER:
-{after}%
-
-STATUS:
-CLEANED ✨
-"""
-
-        text += await add_signature(
-            event.sender_id
-        )
-
-        await event.reply(text)
-
-    # =====================================================
-    # JSON INFO
-    # =====================================================
-
-    @client.on(events.NewMessage(
-        pattern=r"\.json"
-    ))
-    @owner_only
-    async def json_handler(event):
-
-        if not event.is_reply:
-
-            return await event.reply(
-                "Reply to message."
+            return await auto_edit(
+                event,
+                build_style_text(),
+                edit_auto
             )
 
-        reply = await event.get_reply_message()
+        # انتخاب استایل
+        try:
 
-        data = reply.to_dict()
+            style_id = int(args)
 
-        text = json.dumps(
-            data,
-            indent=4,
-            ensure_ascii=False
+        except:
+
+            return await auto_edit(
+                event,
+                "❌ شماره استایل نامعتبر است",
+                edit_auto
+            )
+
+        if style_id not in PROFILE_STYLES:
+
+            return await auto_edit(
+                event,
+                "❌ استایل پیدا نشد",
+                edit_auto
+            )
+
+        set_style(
+            event.chat_id,
+            style_id
         )
 
-        if len(text) > 4000:
-            text = text[:4000]
+        ok = await apply_profile(
+            client,
+            style_id
+        )
 
-        await event.reply(
-            f"""
-◢◤ MESSAGE JSON ◢◤
+        if not ok:
 
+            return await auto_edit(
+                event,
+                "❌ خطا در اعمال پروفایل",
+                edit_auto
+            )
+
+        percent = random.randint(80, 99)
+
+        bar = generate_bar(percent)
+
+        txt = f"""
+◢◤ ⟦ ◈ PROFILE UPDATED ◈ ⟧ ◢◤
+
+◈ Style: {style_id}
+◈ Status: Synced ✨
+
+{bar} {percent}%
+
+◢ ᴛɪᴀᴍ'ꜱ ᴏꜰꜰɪᴄɪᴀʟ ꜱᴇʟꜰ ◤
+"""
+
+        await edit_auto(
+            event,
+            txt.strip(),
+            edit_auto
+        )
+
+    # =====================================================
+    # NAME
+    # =====================================================
+
+    @multi_lang([".name", ".اسم"])
+    async def name_handler(event):
+
+        args = event.ml_args
+
+        if not args:
+
+            return await auto_edit(
+                event,
+                "❌ اسم وارد نشده",
+                edit_auto
+            )
+
+        new_name = args
+
+        if MANDATORY_TAG:
+
+            if "NIX" not in new_name.upper():
+
+                new_name = f"◈NIX◈ | {new_name}"
+
+        try:
+
+            await client(UpdateProfileRequest(
+                first_name=new_name
+            ))
+
+            txt = f"""
+◢◤ ⟦ ◈ NAME UPDATED ◈ ⟧ ◢◤
+
+◈ Name:
+{new_name}
+
+◈ Status: Protected ✨
+"""
+
+            await edit_auto(
+                event,
+                txt.strip(),
+                edit_auto
+            )
+
+        except:
+
+            await edit_auto(
+                event,
+                "❌ خطا در تغییر اسم",
+                edit_auto
+            )
+
+    # =====================================================
+    # BIO
+    # =====================================================
+
+    @multi_lang([".bio", ".بیو"])
+    async def bio_handler(event):
+
+        args = event.ml_args
+
+        if not args:
+
+            return await auto_edit(
+                event,
+                "❌ بیو وارد نشده",
+                edit_auto
+            )
+
+        bio = args
+
+        if "SELF NIX" not in bio.upper():
+
+            bio += "\n\n◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ◢◤"
+
+        try:
+
+            await client(UpdateProfileRequest(
+                about=bio
+            ))
+
+            await edit_auto(
+                event,
+                """
+◢◤ ⟦ ◈ BIO UPDATED ◈ ⟧ ◢◤
+
+◈ New Bio Applied ✨
+◈ Self Nix Protected
+""",
+                edit_auto
+            )
+
+        except:
+
+            await auto_edit(
+                event,
+                "❌ خطا در تغییر بیو",
+                edit_auto
+            )
+
+    # =====================================================
+    # SIGN TEST
+    # =====================================================
+
+    @multi_lang([".sign", ".امضا"])
+    async def sign_handler(event):
+
+        txt = """
+این یک تست برای سیستم امضای خودکار Self Nix است
+
+این متن عمداً طولانی نوشته شده
+تا امضای حرفه‌ای خودکار فعال شود
+
+◢◤ SELF NIX ACTIVE ◢◤
+"""
+
+        await edit_auto(
+            event,
+            txt.strip(),
+            edit_auto
+        )
+
+    # =====================================================
+    # EXAMPLE
+    # =====================================================
+
+    @multi_lang([".example", ".نمونه"])
+    async def sample_handler(event):
+
+        args = event.ml_args
+
+        text = event.ml_text
+
+        txt = f"""
+◢◤ ⟦ ◈ SELF NIX EXAMPLE ◈ ⟧ ◢◤
+
+◈ متن:
 {text}
-"""
-        )
 
-    # =====================================================
-    # USER INFO
-    # =====================================================
+◈ آرگومان:
+{args}
 
-    @client.on(events.NewMessage(
-        pattern=r"\.userinfo"
-    ))
-    @owner_only
-    async def user_info(event):
-
-        user = await event.get_sender()
-
-        text = f"""
-◢◤ USER INFO ◢◤
-
-◈ ID:
-{user.id}
-
-◈ NAME:
-{user.first_name}
-
-◈ USERNAME:
-@{user.username}
-
-◈ BOT:
-{user.bot}
-
-◈ VERIFIED:
-{user.verified}
-
-◈ PREMIUM:
-{user.premium}
+◈ Status: Active ✨
 """
 
-        text += await add_signature(
-            event.sender_id
+        await edit_auto(
+            event,
+            txt.strip(),
+            reply_auto
         )
 
-        await event.reply(text)
-
-    # =====================================================
-    # FINAL LOADER
-    # =====================================================
-
-    print("""
-╔══════════════════════════════╗
-║   ◢◤ SELF NIX LOADED ◢◤    ║
-╚══════════════════════════════╝
-""")
+    print("◢◤ SELF NIX SYSTEM LOADED ◢◤")
