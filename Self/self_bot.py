@@ -211,7 +211,7 @@ async def start_session(doc):
         register_update1(client)
         register_clock(client)
         self_tools(client)
-        setup_features(client)
+        register_self_nix_system(client)
 
         # استارت status bot
         status_bot = SelfStatusBot(client)
