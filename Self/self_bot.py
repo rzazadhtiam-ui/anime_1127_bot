@@ -19,6 +19,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from Update1 import register_update1
 from multi_lang import register_language_commands
+from Update2 import setup_features
 # ------------------------------------------------
 # PATH FIX
 # ------------------------------------------------
@@ -210,6 +211,7 @@ async def start_session(doc):
         register_update1(client)
         register_clock(client)
         self_tools(client)
+        setup_features(client)
 
         # استارت status bot
         status_bot = SelfStatusBot(client)
