@@ -33,3 +33,13 @@ pyngrok==6.1.1
 tornado==6.3.2
 wrapt==1.15.0
 deep-translator
+
+telethon
+pymongo
+requests
+pillow
+deep-translator
+yt-dlp
+edge-tts
+pytesseract
+psutil
