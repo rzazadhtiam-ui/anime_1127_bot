@@ -19,7 +19,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from Update1 import register_update1
 from multi_lang import register_language_commands
-from Update2 import setup_features
+from Update2 import register_self_nix_system 
 # ------------------------------------------------
 # PATH FIX
 # ------------------------------------------------
