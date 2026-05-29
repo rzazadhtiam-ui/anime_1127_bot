@@ -129,11 +129,13 @@ async def video_trim(inp, out, start=0, dur=10):
 
 def register_self_nix_system(client):
     print("runing srlf nix system")
-
+    
+    @client.on(events.NewMessage)
     @multi_lang([".ping", ".پینگ"])
     async def ping(e):
         await edit_auto(event, status())
 
+    @client.on(events.NewMessage)
     @multi_lang([".profile", ".پروفایل"])
     async def profile(e):
         arg = (e.ml_args or "").strip()
@@ -149,6 +151,7 @@ def register_self_nix_system(client):
         ok = await apply_profile(client, sid)
         await edit_auto(e, "Updated" if ok else "Error")
 
+    @client.on(events.NewMessage)
     @multi_lang([".name", ".اسم"])
     async def name(e):
         arg = (e.ml_args or "").strip()
@@ -164,6 +167,7 @@ def register_self_nix_system(client):
         except Exception as ex:
             await edit_auto(event, f"Error: {ex}")
 
+    @client.on(events.NewMessage)
     @multi_lang([".vvt", ".ویس"])
     async def v2t(e):
         if not e.file:
@@ -173,6 +177,7 @@ def register_self_nix_system(client):
         text = await voice_to_text(path)
         await edit_auto(event, text)
 
+    @client.on(events.NewMessage)
     @multi_lang([".ttv", ".صدا"])
     async def t2v(e):
         text = (e.ml_args or "").strip()
@@ -182,6 +187,7 @@ def register_self_nix_system(client):
         file = await text_to_voice(text)
         await e.reply(file=file)
 
+    @client.on(events.NewMessage)
     @multi_lang([".ocr", ".عکس"])
     async def ocr(e):
         if not e.file:
@@ -191,6 +197,7 @@ def register_self_nix_system(client):
         text = await image_to_text(path)
         await edit_auto(e, text)
 
+    @client.on(events.NewMessage)
     @multi_lang([".cutaudio", ".برش"])
     async def cut_audio(e):
         if not e.file:
@@ -204,6 +211,7 @@ def register_self_nix_system(client):
         else:
             await edit_auto(event, "FFmpeg not installed")
 
+    @client.on(events.NewMessage)
     @multi_lang([".cutvideo", ".ویدیو"])
     async def cut_video(e):
         if not e.file:
