@@ -508,52 +508,65 @@ def register_commands(bot):
     @require_join
     @anti_spam
     def emoji_from_link(message):
-        parts = message.text.split()
+        parts = message.text.split(maxsplit=1)
 
         if len(parts) < 2:
-            bot.reply_to(message, "لینک پک را بده:\nایموجی https://t.me/addstickers/PackName")
+            bot.reply_to(message, "فرمت:\nایموجی <link یا pack name>")
             return
 
-        link = parts[1]
+        raw = parts[1].strip()
 
         import re
-        match = re.search(r"t\.me/addstickers/([a-zA-Z0-9_]+)", link)
 
-        if not match:
-            bot.reply_to(message, "❌ لینک معتبر نیست")
+        pack_name = None
+
+    # 1) لینک addemoji
+        match = re.search(r"t\.me/addemoji/([a-zA-Z0-9_]+)", raw)
+        if match:
+            pack_name = match.group(1)
+
+    # 2) لینک addstickers (fallback)
+        elif "t.me/addstickers/" in raw:
+            pack_name = raw.split("addstickers/")[-1].split("?")[0]
+
+    # 3) اسم مستقیم (CatsBigPack)
+        elif re.match(r"^[a-zA-Z0-9_]+$", raw):
+            pack_name = raw
+
+        if not pack_name:
+            bot.reply_to(message, "❌ لینک یا نام پک اشتباهه")
             return
 
-        pack_name = match.group(1)
-
         try:
-            pack = bot.get_sticker_set("CatsBigPack")
+            pack = bot.get_sticker_set(pack_name)
         except:
-            bot.reply_to(message, "❌ پک پیدا نشد")
+            bot.reply_to(message, "❌ این پک پیدا نشد")
             return
 
         kb = types.InlineKeyboardMarkup()
 
         stickers = pack.stickers[:MAX_PACK_LIMIT]
 
+        emoji_shop_sessions[message.from_user.id] = {}
+
         for st in stickers:
+            if not hasattr(st, "custom_emoji_id"):
+                continue
+
+            emoji_shop_sessions[message.from_user.id][st.file_id] = st.custom_emoji_id
+
             kb.add(
-            types.InlineKeyboardButton(
-                text=st.custom_emoji_id,
+                types.InlineKeyboardButton(
+                text="🧩 انتخاب ایموجی",
                 callback_data=f"buy_emoji|{st.file_id}"
             )
         )
-
-        emoji_shop_sessions[message.from_user.id] = {
-        "pack": pack_name,
-        "stickers": {st.file_id: st.custom_emoji_id for st in stickers}
-    }
 
         bot.send_message(
         message.chat.id,
         "یکی از ایموجی‌ها را انتخاب کن:",
         reply_markup=kb
     )
-
     # ---------- /leader_board ----------
     @bot.message_handler(commands=["leader_board"])
     @require_join
