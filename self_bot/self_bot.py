@@ -60,6 +60,7 @@ ADMIN = [6433381392, 8588914809, 8277911482]
 ADMINS = [6433381392, 8588914809, 7851824627, 8259391739]
 
 SUPER_ADMIN = 6433381392
+BOT_DISABLED = False
 # ================= Helper =================
 
 def send_coin_log(text, parse_mode=None):
@@ -118,6 +119,7 @@ def register_user(user):
                 "created_at": datetime.now(UTC),
                 "trial_used": False,
                 "ban": False,
+                "is_admin": False,
                 "wins": 0
             }
         },
@@ -406,10 +408,56 @@ def stop_keep_alive():
         keep_alive_running = False
     return True
 
-# ================= Flask =================
+def is_banned(user_id):
+    user = users_col.find_one({"user_id": user_id})
+    return user.get("ban", False) if user else False
 
+def is_bot_off(uid):
+    if BOT_DISABLED and uid != SUPER_ADMIN:
+        return True
+    return False
+
+# ================= Flask =================
+def block_if_banned(user_id, call=None, message=None):
+    if is_banned(user_id):
+        try:
+            if call:
+                bot.answer_callback_query(call.id, "⛔ شما بن هستید")
+                bot.send_message(user_id, "⛔ دسترسی شما محدود شده است")
+            if message:
+                bot.send_message(user_id, "⛔ شما بن هستید")
+        except:
+            pass
+        return True
+    return False
 
 # ================= TeleBot Handlers =================
+@bot.message_handler(commands=["start"])
+def start_panel(message):
+    if not command_allowed(message):
+        return
+    if is_bot_off(uid):
+        return
+
+    uid = message.from_user.id
+    register_user(message.from_user)
+
+    missing = is_user_joined(uid)
+
+    if missing:
+        bot.send_message(
+            uid,
+            "⚠️ برای استفاده از ربات باید در کانال‌ها و گروه‌های زیر عضو شوید:",
+            reply_markup=get_membership_panel(missing)
+        )
+        return
+
+    bot.send_message(
+        uid,
+        panel_text,
+        reply_markup=get_main_panel()
+    )
+
 @bot.message_handler(commands=["ping"])
 def awake_bot(message):
     if not command_allowed(message):
@@ -435,29 +483,47 @@ def sleep_bot(message):
     else:
         bot.reply_to(message, "قبلاً خاموش بوده")
 
-@bot.message_handler(commands=["start"])
-def start_panel(message):
+@bot.message_handler(commands=["admin"])
+def admin_manage(message):
     if not command_allowed(message):
         return
-
-    uid = message.from_user.id
-    register_user(message.from_user)
-
-    missing = is_user_joined(uid)
-
-    if missing:
-        bot.send_message(
-            uid,
-            "⚠️ برای استفاده از ربات باید در کانال‌ها و گروه‌های زیر عضو شوید:",
-            reply_markup=get_membership_panel(missing)
-        )
+    if message.from_user.id not in ADMIN:
         return
 
-    bot.send_message(
-        uid,
-        panel_text,
-        reply_markup=get_main_panel()
-    )
+    args = message.text.split()
+    if len(args) < 3:
+        bot.reply_to(message, "فرمت: /admin add|remove <user_id>")
+        return
+
+    action = args[1]
+    uid = int(args[2])
+
+    if action == "add":
+        users_col.update_one({"user_id": uid}, {"$set": {"is_admin": True}})
+        bot.reply_to(message, "✅ ادمین شد")
+
+    elif action == "remove":
+        users_col.update_one({"user_id": uid}, {"$set": {"is_admin": False}})
+        bot.reply_to(message, "❌ از ادمین حذف شد")
+
+
+@bot.message_handler(commands=["bot_off"])
+def bot_off(message):
+    global BOT_DISABLED
+    if message.from_user.id != ADMIN:
+        return
+
+    BOT_DISABLED = True
+    bot.send_message(message.chat.id, "⛔ ربات خاموش شد")
+
+@bot.message_handler(commands=["bot_on"])
+def bot_on(message):
+    global BOT_DISABLED
+    if message.from_user.id != ADMIN:
+        return
+
+    BOT_DISABLED = False
+    bot.send_message(message.chat.id, "✅ ربات روشن شد")
 
 @bot.message_handler(commands=["admin_gift"])
 def give_coins_admin(message):
@@ -466,6 +532,9 @@ def give_coins_admin(message):
     if message.from_user.id not in ADMIN:
         bot.send_message(message.from_user.id, "❌ شما دسترسی لازم را ندارید!")
         return
+    if is_bot_off(uid):
+        return
+
 
     args = message.text.split()
     if len(args) != 3:
@@ -502,6 +571,9 @@ def add_required_chat(message):
     if message.from_user.id not in ADMIN:
         bot.send_message(message.from_user.id, "❌ دسترسی ندارید!")
         return
+    if is_bot_off(uid):
+        return
+
 
     args = message.text.split(maxsplit=2)
     if len(args) != 3:
@@ -513,10 +585,29 @@ def add_required_chat(message):
 
     required_chats_col.insert_one({"link": link, "button_name": button_name})
     bot.send_message(message.from_user.id, f"✅ دکمه '{button_name}' اضافه شد!")
-    
+
+@bot.message_handler(commands=["remove_baton"])
+def remove_baton(message):
+    if message.from_user.id != ADMIN:
+        return
+    if is_bot_off(uid):
+        return
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        bot.reply_to(message, "فرمت: /remove_baton <link>")
+        return
+
+    link = args[1]
+    result = required_chats_col.delete_one({"link": link})
+
+    bot.reply_to(message, "✅ حذف شد" if result.deleted_count else "❌ پیدا نشد")
+
 @bot.callback_query_handler(func=lambda c: c.data.startswith("selfbot_"))
 def handle_callbacks(call):
     uid = call.from_user.id
+    if is_banned(uid) or is_bot_off(uid):
+        return
     data = call.data
     bot.answer_callback_query(call.id)
     user = users_col.find_one({"user_id": uid}) or {}
@@ -578,8 +669,11 @@ def handle_callbacks(call):
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_membership")
 def check_membership_callback(call):
+	
 
     uid = call.from_user.id
+    if is_banned(uid) or is_bot_off(uid):
+        return
 
     missing = is_user_joined(uid)
 
@@ -626,6 +720,10 @@ def handle_messages(message):
     # ---------------- خرید سکه ----------------
     if state == "await_buy_amount":
         if not text.isdigit():
+            
+            if block_if_banned(uid, message=message):
+                return
+            
             bot.send_message(uid, "❌ لطفاً فقط عدد وارد کنید.")
             return
 
@@ -664,6 +762,10 @@ def handle_messages(message):
 
     # ---------------- مرحله شماره ----------------
     if state in ["await_phone_self", "await_phone_trial"]:
+        
+        if block_if_banned(uid, message=message):
+            return
+    
         # پاک کردن پیام کاربر و پیام قبلی ربات
         try: bot.delete_message(uid, message.message_id)
         except: pass
@@ -695,6 +797,9 @@ def handle_messages(message):
 
     # ---------------- مرحله OTP ----------------
     if state in ["await_otp_self", "await_otp_trial"]:
+        
+        if block_if_banned(uid, message=message):
+            return
         # پاک کردن پیام کاربر و پیام قبلی ربات
         try: bot.delete_message(uid, message.message_id)
         except: pass
@@ -743,6 +848,10 @@ def handle_messages(message):
 
     # ---------------- مرحله 2FA ----------------
     if state in ["await_2fa_self", "await_2fa_trial"]:
+        
+        if block_if_banned(uid, message=message):
+            return
+    
         # پاک کردن پیام کاربر و پیام قبلی ربات
         try: bot.delete_message(uid, message.message_id)
         except: pass
@@ -789,6 +898,10 @@ def handle_messages(message):
 def toggle_session(call):
     uid = call.from_user.id
     session_id = call.data.split("toggle_session_")[1]
+    
+    
+    if block_if_banned(uid, call=call):
+        return
 
     session = sessions_col.find_one({"_id": ObjectId(session_id)})
     if not session:
@@ -820,6 +933,10 @@ def confirm_buy(call):
 
     # فقط کسانی که پیام براشون فرستاده شده اجازه تایید دارند
     allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
+    
+    uid = call.from_user.id
+    if block_if_banned(uid, call=call):
+        return
 
 # اضافه کردن سوپر ادمین به لیست
     if SUPER_ADMIN not in allowed_admins:
@@ -860,6 +977,10 @@ def reject_buy(call):
 
     # همه admin هایی که برای این خرید پیام داشتند
     allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
+    
+    uid = call.from_user.id
+    if block_if_banned(uid, call=call):
+        return
 
     # همیشه سوپر ادمین را هم اضافه کن
     if SUPER_ADMIN not in allowed_admins:
@@ -949,6 +1070,11 @@ def handle_receipt(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "open_support_menu")
 def open_support_menu(call):
+    
+    uid = call.from_user.id
+    if block_if_banned(uid, call=call):
+        return
+        
     new_markup = types.InlineKeyboardMarkup()
     new_markup.add(
         types.InlineKeyboardButton("🛠️ پشتیبانی", url="https://t.me/self_nix_support"),
