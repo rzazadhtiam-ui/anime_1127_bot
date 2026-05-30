@@ -57,7 +57,7 @@ panel_text = (
 )
 ADMIN = [6433381392, 8588914809, 8277911482] 
 
-ADMINS = [6433381392, 8588914809, 7851824627, 8259391739]
+
 
 SUPER_ADMIN = 6433381392
 BOT_DISABLED = False
@@ -104,7 +104,7 @@ def start_trial_expiration(uid):
             pass
     threading.Timer(TRIAL_DURATION * 86400, remove_trial).start()
 
-def register_user(user):
+def register_user(user, referrer=None):
     users_col.update_one(
         {"user_id": user.id},
         {
@@ -120,7 +120,8 @@ def register_user(user):
                 "trial_used": False,
                 "ban": False,
                 "is_admin": False,
-                "wins": 0
+                "wins": 0,
+                "referrer": referrer
             }
         },
         upsert=True
@@ -436,10 +437,11 @@ def block_if_banned(user_id, call=None, message=None):
 def start_panel(message):
     if not command_allowed(message):
         return
+    
+    uid = message.from_user.id
+
     if is_bot_off(uid):
         return
-
-    uid = message.from_user.id
     register_user(message.from_user)
 
     missing = is_user_joined(uid)
@@ -462,7 +464,7 @@ def start_panel(message):
 def awake_bot(message):
     if not command_allowed(message):
         return
-    if message.from_user.id not in ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
         print("paaaaa")
         return
     started = start_keep_alive()
@@ -475,7 +477,8 @@ def awake_bot(message):
 def sleep_bot(message):
     if not command_allowed(message):
         return
-    if message.from_user.id not in ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
+        return
         return
     stopped = stop_keep_alive()
     if stopped:
@@ -510,7 +513,7 @@ def admin_manage(message):
 @bot.message_handler(commands=["bot_off"])
 def bot_off(message):
     global BOT_DISABLED
-    if message.from_user.id != ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
         return
 
     BOT_DISABLED = True
@@ -519,7 +522,7 @@ def bot_off(message):
 @bot.message_handler(commands=["bot_on"])
 def bot_on(message):
     global BOT_DISABLED
-    if message.from_user.id != ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
         return
 
     BOT_DISABLED = False
@@ -532,10 +535,10 @@ def give_coins_admin(message):
     if message.from_user.id not in ADMIN:
         bot.send_message(message.from_user.id, "❌ شما دسترسی لازم را ندارید!")
         return
+    uid = message.from_user.idp
     if is_bot_off(uid):
         return
-
-
+ 
     args = message.text.split()
     if len(args) != 3:
         bot.send_message(message.from_user.id, "❌ فرمت دستور: /admin_gift <آیدی> <تعداد سکه>")
@@ -568,9 +571,12 @@ def give_coins_admin(message):
 def add_required_chat(message):
     if not command_allowed(message):
         return
-    if message.from_user.id not in ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
+        return
         bot.send_message(message.from_user.id, "❌ دسترسی ندارید!")
         return
+    uid = message.from_user.id
+
     if is_bot_off(uid):
         return
 
@@ -588,8 +594,10 @@ def add_required_chat(message):
 
 @bot.message_handler(commands=["remove_baton"])
 def remove_baton(message):
-    if message.from_user.id != ADMIN:
+    if message.from_user.id != SUPER_ADMIN:
         return
+    uid = message.from_user.id
+
     if is_bot_off(uid):
         return
 
@@ -1037,12 +1045,12 @@ def handle_receipt(message):
     )
 
     # تعیین دریافت‌کننده‌ها
-    if uid in ADMINS:
+    if uid in ADMIN:
         # اگر خود کاربر ادمین است → پیام فقط برای سوپرادمین
         recipients = [SUPER_ADMIN]
     else:
         # کاربران عادی → پیام برای همه ADMINS
-        recipients = ADMINS
+        recipients = is_admin
 
     markup = types.InlineKeyboardMarkup()
     markup.row(
