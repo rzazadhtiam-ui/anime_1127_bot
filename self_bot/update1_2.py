@@ -29,7 +29,11 @@ xo_rooms = {}
 #============سکه==============
 TRANSFER_FEE_PERCENT = 10
 BOT_ACCOUNT_ID = 6433381392  
+# ============ EMOJI SHOP ============
+emoji_shop_sessions = {}
 
+DEFAULT_EMOJI_PRICE = 200  # قیمت پایه
+MAX_PACK_LIMIT = 40        # حداکثر نمایش ایموجی
 #============اسپم==============
 user_cooldowns = {}
 COOLDOWN_SECONDS = 3
@@ -405,13 +409,30 @@ def register_commands(bot):
 
 #=============start_game==============
     def start_real_game(room_id):
-        room = xo_rooms[room_id]
+        room = xo_rooms.get(room_id)
+
+        if not room:
+            return
+    
+    # اگر بازی ناقص است (نفر دوم هنوز نیست)
+        if not room.get("player2"):
+              return
+
         room["board"] = [" "] * 9
         room["turn"] = room["creator"]
+
+        def get_symbol(uid, default):
+            user = users_col.find_one({"user_id": uid}) or {}
+            return user.get("xo_emoji", default)
+
+        creator_symbol = get_symbol(room["creator"], "❌")
+        player2_symbol = get_symbol(room["player2"], "⭕")
+
         room["symbols"] = {
-            room["creator"]: "❌",
-            room["player2"]: "⭕"
+            room["creator"]: creator_symbol,
+            room["player2"]: player2_symbol
         }
+
         send_board(room_id)
 #=====================================
     # ---------- /my_coins ----------
@@ -481,6 +502,57 @@ def register_commands(bot):
             {"$set": {"last_daily": now}, "$inc": {"coins": 0.2}}
         )
         bot.reply_to(message, "🎁 0.2 سکه دریافت کردی!")
+
+    # ---------- ایموجی ----------
+    @bot.message_handler(func=lambda m: m.text and m.text.startswith("ایموجی"))
+    @require_join
+    @anti_spam
+    def emoji_from_link(message):
+        parts = message.text.split()
+
+        if len(parts) < 2:
+            bot.reply_to(message, "لینک پک را بده:\nایموجی https://t.me/addstickers/PackName")
+            return
+
+        link = parts[1]
+
+        import re
+        match = re.search(r"t\.me/addstickers/([a-zA-Z0-9_]+)", link)
+
+        if not match:
+            bot.reply_to(message, "❌ لینک معتبر نیست")
+            return
+
+        pack_name = match.group(1)
+
+        try:
+            pack = bot.get_sticker_set(pack_name)
+        except:
+            bot.reply_to(message, "❌ پک پیدا نشد")
+            return
+
+        kb = types.InlineKeyboardMarkup()
+
+        stickers = pack.stickers[:MAX_PACK_LIMIT]
+
+        for st in stickers:
+            kb.add(
+            types.InlineKeyboardButton(
+                text=st.emoji,
+                callback_data=f"buy_emoji|{st.file_id}|{st.emoji}"
+            )
+        )
+
+        emoji_shop_sessions[message.from_user.id] = {
+        "pack": pack_name,
+        "stickers": {st.file_id: st.emoji for st in stickers}
+    }
+
+        bot.send_message(
+        message.chat.id,
+        "یکی از ایموجی‌ها را انتخاب کن:",
+        reply_markup=kb
+    )
 
     # ---------- /leader_board ----------
     @bot.message_handler(commands=["leader_board"])
@@ -566,168 +638,160 @@ def register_commands(bot):
         from_user = message.from_user
         uid = from_user.id
 
-    ensure_user(from_user)
+        ensure_user(from_user)
 
-    sender = users_col.find_one({"user_id": uid}) or {}
+        sender = users_col.find_one({"user_id": uid}) or {}
 
-    if sender.get("ban", False):
-        return
+        if sender.get("ban", False):
+            return
 
-    text = message.text.strip()
-    parts = text.split()
+        text = message.text.strip()
+        parts = text.split()
 
-    target_user_id = None
-    amount = None
+        target_user_id = None
+        amount = None
 
-# انتقال با آیدی
-    if len(parts) == 3:
+        # انتقال با آیدی
+        if len(parts) == 3:
+            try:
+                target_user_id = int(parts[1])
+                amount = float(parts[2])
+            except:
+                bot.reply_to(message, "❌ فرمت صحیح:\nانتقال <آیدی عددی> <مبلغ>")
+                return
+
+        # انتقال با ریپلای
+        elif len(parts) == 2 and message.reply_to_message:
+            try:
+                target_user_id = message.reply_to_message.from_user.id
+                amount = float(parts[1])
+            except:
+                bot.reply_to(
+                    message,
+                    "❌ فرمت صحیح:\nروی پیام کاربر ریپلای کنید و بنویسید:\nانتقال <مبلغ>"
+                )
+                return
+        else:
+            bot.reply_to(message, "❌ فرمت دستور صحیح نیست.")
+            return
+
+        # انتقال به خود
+        if target_user_id == uid:
+            bot.reply_to(message, "❌ نمی‌توانید به خودتان سکه منتقل کنید.")
+            return
+
+        # مبلغ
+        if amount <= 0:
+            bot.reply_to(message, "❌ مبلغ باید بیشتر از صفر باشد.")
+            return
+
+        # وجود کاربر مقصد
         try:
-            target_user_id = int(parts[1])
-            amount = float(parts[2])
+            bot.get_chat(target_user_id)
         except:
-            bot.reply_to(
-                message,
-                "❌ فرمت صحیح:\nانتقال <آیدی عددی> <مبلغ>"
-            )
+            bot.reply_to(message, "❌ کاربر مقصد یافت نشد.")
             return
 
-# انتقال با ریپلای
-    elif len(parts) == 2 and message.reply_to_message:
-        try:
-            target_user_id = message.reply_to_message.from_user.id
-            amount = float(parts[1])
-        except:
-            bot.reply_to(
-                message,
-                "❌ فرمت صحیح:\nروی پیام کاربر ریپلای کنید و بنویسید:\nانتقال <مبلغ>"
-            )
-            return
-    else:
-        bot.reply_to(message, "❌ فرمت دستور صحیح نیست.")
-    return
+        receiver = users_col.find_one({"user_id": target_user_id})
 
-# انتقال به خود
-    if target_user_id == uid:
-        bot.reply_to(message, "❌ نمی‌توانید به خودتان سکه منتقل کنید.")
-        return
-
-# مبلغ
-    if amount <= 0:
-        bot.reply_to(message, "❌ مبلغ باید بیشتر از صفر باشد.")
-        return
-
-# وجود کاربر مقصد
-    try:
-        bot.get_chat(target_user_id)
-    except:
-        bot.reply_to(message, "❌ کاربر مقصد یافت نشد.")
-        return
-
-    receiver = users_col.find_one({"user_id": target_user_id})
-
-    if not receiver:
-        bot.reply_to(message, "❌ کاربر مقصد در سیستم ثبت نشده است.")
-        return
-
-# بررسی موجودی (به جز بانک)
-    if uid != BOT_ACCOUNT_ID:
-        if sender.get("coins", 0) < amount:
-            bot.reply_to(
-                message,
-                f"❌ موجودی کافی نیست.\nموجودی شما: {sender.get('coins',0)}"
-            )
+        if not receiver:
+            bot.reply_to(message, "❌ کاربر مقصد در سیستم ثبت نشده است.")
             return
 
-    fee = round(amount * TRANSFER_FEE_PERCENT / 100, 2)
-    receive_amount = round(amount - fee, 2)
+        # بررسی موجودی (به جز بانک)
+        if uid != BOT_ACCOUNT_ID:
+            if sender.get("coins", 0) < amount:
+                bot.reply_to(
+                    message,
+                    f"❌ موجودی کافی نیست.\nموجودی شما: {sender.get('coins',0)}"
+                )
+                return
 
-    if receive_amount <= 0:
-        bot.reply_to(message, "❌ مبلغ انتقال خیلی کم است.")
-        return
+        fee = round(amount * TRANSFER_FEE_PERCENT / 100, 2)
+        receive_amount = round(amount - fee, 2)
 
-# کم کردن موجودی فرستنده
-    if uid != BOT_ACCOUNT_ID:
+        if receive_amount <= 0:
+            bot.reply_to(message, "❌ مبلغ انتقال خیلی کم است.")
+            return
+
+        # کم کردن موجودی فرستنده
+        if uid != BOT_ACCOUNT_ID:
+            users_col.update_one(
+                {"user_id": uid},
+                {"$inc": {"coins": -amount}}
+            )
+
+        # افزودن به گیرنده
         users_col.update_one(
-        {"user_id": uid},
-        {"$inc": {"coins": -amount}}
-    )
+            {"user_id": target_user_id},
+            {"$inc": {"coins": receive_amount}}
+        )
 
-# افزودن به گیرنده
-    users_col.update_one(
-        {"user_id": target_user_id},
-        {"$inc": {"coins": receive_amount}}
-)
+        # واریز کارمزد به بانک
+        users_col.update_one(
+            {"user_id": BOT_ACCOUNT_ID},
+            {
+                "$inc": {"coins": fee},
+                "$setOnInsert": {
+                    "wins": 0,
+                    "ban": False,
+                    "created_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
 
-# واریز کارمزد به بانک
-    users_col.update_one(
-        {"user_id": BOT_ACCOUNT_ID},
-        {
-            "$inc": {"coins": fee},
-            "$setOnInsert": {
-                "wins": 0,
-                "ban": False,
-                "created_at": datetime.utcnow()
-            }
-        },
-        upsert=True
-)
+        tz = pytz.timezone("Asia/Tehran")
+        now_iran = datetime.now(tz)
+        date_str = now_iran.strftime("%Y-%m-%d %H:%M:%S")
 
-    tz = pytz.timezone("Asia/Tehran")
-    now_iran = datetime.now(tz)
-    date_str = now_iran.strftime("%Y-%m-%d %H:%M:%S")
+        sender_updated = users_col.find_one({"user_id": uid}) or {}
+        receiver_updated = users_col.find_one({"user_id": target_user_id}) or {}
 
-    sender_updated = users_col.find_one({"user_id": uid}) or {}
-    receiver_updated = users_col.find_one({"user_id": target_user_id}) or {}
+        receiver_name = receiver_updated.get("first_name") or "کاربر"
+        receiver_mention = f"<a href='tg://user?id={target_user_id}'>{receiver_name}</a>"
 
-    receiver_name = receiver_updated.get("first_name") or "کاربر"
-    receiver_mention = (
-    f"<a href='tg://user?id={target_user_id}'>{receiver_name}</a>"
-)
+        sender_name = sender.get("first_name") or "کاربر"
+        sender_mention = f"<a href='tg://user?id={uid}'>{sender_name}</a>"
 
-    sender_name = sender.get("first_name") or "کاربر"
-    sender_mention = (
-    f"<a href='tg://user?id={uid}'>{sender_name}</a>"
-)
+        if uid == BOT_ACCOUNT_ID:
+            balance_text = "♾️ موجودی شما: نامحدود"
+        else:
+            balance_text = f"💰 موجودی شما: {sender_updated.get('coins',0)}"
 
-    if uid == BOT_ACCOUNT_ID:
-        balance_text = "♾️ موجودی شما: نامحدود"
-    else:
-       balance_text = f"💰 موجودی شما: {sender_updated.get('coins',0)}"
+        bot.reply_to(
+            message,
+            f"💸 انتقال سکه انجام شد\n\n"
+            f"👤 دریافت کننده: {receiver_mention}\n"
+            f"📤 مبلغ ارسال: {amount}\n"
+            f"💳 کارمزد: {fee}\n"
+            f"📥 مبلغ دریافتی: {receive_amount}\n"
+            f"{balance_text}\n"
+            f"📅 تاریخ: {date_str}",
+            parse_mode="HTML"
+        )
 
-       bot.reply_to(
-        message,
-        f"💸 انتقال سکه انجام شد\n\n"
-    f"👤 دریافت کننده: {receiver_mention}\n"
-    f"📤 مبلغ ارسال: {amount}\n"
-    f"💳 کارمزد: {fee}\n"
-    f"📥 مبلغ دریافتی: {receive_amount}\n"
-    f"{balance_text}\n"
-    f"📅 تاریخ: {date_str}",
-    parse_mode="HTML"
-)
-
-    try:
-        bot.send_message(
-        target_user_id,
-        f"🎁 دریافت سکه\n\n"
-        f"از: {sender_mention}\n"
-        f"مبلغ: {receive_amount}\n"
-        f"تاریخ: {date_str}",
-        parse_mode="HTML"
-    )
-    except:
-        pass
-
-    send_coin_log(
-    f"انتقال سکه:\n\n"
-    f"انتقال دهنده: {sender_mention}\n"
-    f"دریافت کننده: {receiver_mention}\n"
-    f"مبلغ انتقال: {amount}\n"
-    f"کارمزد: {fee}\n"
-    f"مبلغ دریافتی: {receive_amount}",
-    parse_mode="HTML"
+        try:
+            bot.send_message(
+                target_user_id,
+                f"🎁 دریافت سکه\n\n"
+                f"از: {sender_mention}\n"
+                f"مبلغ: {receive_amount}\n"
+                f"تاریخ: {date_str}",
+                parse_mode="HTML"
             )
+        except:
+            pass
 
+        send_coin_log(
+            f"انتقال سکه:\n\n"
+            f"انتقال دهنده: {sender_mention}\n"
+            f"دریافت کننده: {receiver_mention}\n"
+            f"مبلغ انتقال: {amount}\n"
+            f"کارمزد: {fee}\n"
+            f"مبلغ دریافتی: {receive_amount}",
+            parse_mode="HTML"
+        )
 
 #=====================================
     @bot.message_handler(func=lambda m: m.text and m.text.startswith("آمار برد"))
@@ -1005,3 +1069,34 @@ def register_commands(bot):
                 f"به ربات self nix خوش آمدید {new_user.first_name}!\nپنل برای شما آماده شد.",
                 reply_markup=markup
     )
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_emoji|"))
+    def buy_emoji(call):
+        try:
+            _, file_id, emoji = call.data.split("|")
+        except:
+            return
+
+        uid = call.from_user.id
+        ensure_user(call.from_user)
+
+        user = users_col.find_one({"user_id": uid})
+
+        price = DEFAULT_EMOJI_PRICE
+
+        if not user or user.get("coins", 0) < price:
+            bot.answer_callback_query(call.id, "سکه کافی نیست ❌")
+            return
+
+        users_col.update_one(
+        {"user_id": uid},
+        {
+            "$inc": {"coins": -price},
+            "$set": {
+                "xo_emoji": emoji,
+                "xo_sticker": file_id
+            }
+        }
+    )
+
+        bot.answer_callback_query(call.id, f"خرید شد ✅ ({emoji})")
