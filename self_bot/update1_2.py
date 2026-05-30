@@ -526,7 +526,7 @@ def register_commands(bot):
         pack_name = match.group(1)
 
         try:
-            pack = bot.get_sticker_set(pack_name)
+            pack = bot.get_custom_emoji_stickers(pack_name)
         except:
             bot.reply_to(message, "❌ پک پیدا نشد")
             return
@@ -538,14 +538,14 @@ def register_commands(bot):
         for st in stickers:
             kb.add(
             types.InlineKeyboardButton(
-                text=st.emoji,
-                callback_data=f"buy_emoji|{st.file_id}|{st.emoji}"
+                text=st.custom_emoji_id,
+                callback_data=f"buy_emoji|{st.file_id}"
             )
         )
 
         emoji_shop_sessions[message.from_user.id] = {
         "pack": pack_name,
-        "stickers": {st.file_id: st.emoji for st in stickers}
+        "stickers": {st.file_id: st.custom_emoji_id for st in stickers}
     }
 
         bot.send_message(
@@ -1073,7 +1073,7 @@ def register_commands(bot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_emoji|"))
     def buy_emoji(call):
         try:
-            _, file_id, emoji = call.data.split("|")
+            _, file_id = call.data.split("|")[1]
         except:
             return
 
