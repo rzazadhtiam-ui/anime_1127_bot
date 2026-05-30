@@ -508,65 +508,47 @@ def register_commands(bot):
     @require_join
     @anti_spam
     def emoji_from_link(message):
-        parts = message.text.split(maxsplit=1)
+        import re
 
+        parts = message.text.split(maxsplit=1)
         if len(parts) < 2:
-            bot.reply_to(message, "فرمت:\nایموجی <link یا pack name>")
-            return
+            return bot.reply_to(message, "فرمت: ایموجی <link یا name>")
 
         raw = parts[1].strip()
 
-        import re
-
-        pack_name = None
-
-    # 1) لینک addemoji
-        match = re.search(r"t\.me/addemoji/([a-zA-Z0-9_]+)", raw)
-        if match:
-            pack_name = match.group(1)
-
-    # 2) لینک addstickers (fallback)
-        elif "t.me/addstickers/" in raw:
-            pack_name = raw.split("addstickers/")[-1].split("?")[0]
-
-    # 3) اسم مستقیم (CatsBigPack)
-        elif re.match(r"^[a-zA-Z0-9_]+$", raw):
-            pack_name = raw
-
-        if not pack_name:
-            bot.reply_to(message, "❌ لینک یا نام پک اشتباهه")
-            return
+        match = re.search(r"t\.me/addemoji/([A-Za-z0-9_]+)", raw)
+        pack_name = match.group(1) if match     else raw
 
         try:
             pack = bot.get_sticker_set(pack_name)
         except:
-            bot.reply_to(message, "❌ این پک پیدا نشد")
-            return
+            return bot.reply_to(message, "❌ پک پیدا نشد")
 
         kb = types.InlineKeyboardMarkup()
-
-        stickers = pack.stickers[:MAX_PACK_LIMIT]
-
         emoji_shop_sessions[message.from_user.id] = {}
 
-        for st in stickers:
-            if not hasattr(st, "custom_emoji_id"):
-                continue
+        count = 0
 
-            emoji_shop_sessions[message.from_user.id][st.file_id] = st.custom_emoji_id
+        for st in pack.stickers:
+            if count >= MAX_PACK_LIMIT:
+                break
+
+        # مهم: هیچ فیلتر custom_emoji_id نزن
+            emoji_shop_sessions[message.from_user.id][st.file_id] = st.file_id
 
             kb.add(
                 types.InlineKeyboardButton(
-                text="🧩 انتخاب ایموجی",
+                text="🧩 انتخاب",
                 callback_data=f"buy_emoji|{st.file_id}"
             )
         )
 
-        bot.send_message(
-        message.chat.id,
-        "یکی از ایموجی‌ها را انتخاب کن:",
-        reply_markup=kb
-    )
+            count += 1
+
+        if count == 0:
+            return bot.reply_to(message, "❌ این پک قابل استفاده نیست")
+
+        bot.send_message(message.chat.id, "یکی از آیتم‌ها رو انتخاب کن:", reply_markup=kb)
     # ---------- /leader_board ----------
     @bot.message_handler(commands=["leader_board"])
     @require_join
@@ -1084,34 +1066,23 @@ def register_commands(bot):
     )
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_emoji|"))
+    @require_join
     def buy_emoji(call):
         uid = call.from_user.id
         ensure_user(call.from_user)
 
-        _, file_id = call.data.split("|")
-
-        pack_data = emoji_shop_sessions.get(uid, {})
-        emoji_id = pack_data.get(file_id)
-
-        if not emoji_id:
-            bot.answer_callback_query(call.id, "ایموجی پیدا نشد ❌")
-            return
+        file_id = call.data.split("|")[1]
 
         user = users_col.find_one({"user_id": uid})
-        price = DEFAULT_EMOJI_PRICE
 
-        if not user or user.get("coins", 0) < price:
-            bot.answer_callback_query(call.id, "سکه کافی نیست ❌")
-            return
+        if not user or user.get("coins", 0) < DEFAULT_EMOJI_PRICE:
+            return bot.answer_callback_query(call.id, "سکه کافی نیست ❌")
 
         users_col.update_one(
         {"user_id": uid},
         {
-            "$inc": {"coins": -price},
-            "$set": {
-                "xo_emoji": emoji_id,
-                "xo_sticker": file_id
-            }
+            "$inc": {"coins": -DEFAULT_EMOJI_PRICE},
+            "$set": {"last_emoji": file_id}
         }
     )
 
