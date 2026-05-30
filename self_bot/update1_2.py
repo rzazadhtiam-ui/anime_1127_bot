@@ -526,7 +526,7 @@ def register_commands(bot):
         pack_name = match.group(1)
 
         try:
-            pack = bot.get_custom_emoji_stickers(pack_name)
+            pack = bot.get_sticker_set("CatsBigPack")
         except:
             bot.reply_to(message, "❌ پک پیدا نشد")
             return
@@ -1072,16 +1072,19 @@ def register_commands(bot):
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_emoji|"))
     def buy_emoji(call):
-        try:
-            _, file_id = call.data.split("|")[1]
-        except:
-            return
-
         uid = call.from_user.id
         ensure_user(call.from_user)
 
-        user = users_col.find_one({"user_id": uid})
+        _, file_id = call.data.split("|")
 
+        pack_data = emoji_shop_sessions.get(uid, {})
+        emoji_id = pack_data.get(file_id)
+
+        if not emoji_id:
+            bot.answer_callback_query(call.id, "ایموجی پیدا نشد ❌")
+            return
+
+        user = users_col.find_one({"user_id": uid})
         price = DEFAULT_EMOJI_PRICE
 
         if not user or user.get("coins", 0) < price:
@@ -1093,10 +1096,10 @@ def register_commands(bot):
         {
             "$inc": {"coins": -price},
             "$set": {
-                "xo_emoji": emoji,
+                "xo_emoji": emoji_id,
                 "xo_sticker": file_id
             }
         }
     )
 
-        bot.answer_callback_query(call.id, f"خرید شد ✅ ({emoji})")
+        bot.answer_callback_query(call.id, "خرید انجام شد ✅")
