@@ -11,8 +11,14 @@ class Storage:
         """
         account_name: برای هر اکانت یک دیتابیس جداگانه
         """
-        self.MONGO_URI = "mongodb://jinx:titi_jinx@ac-yjpvg6o-shard-00-00.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-01.35gzto0.mongodb.net:27017,ac-yjpvg6o-shard-00-02.35gzto0.mongodb.net:27017/?replicaSet=atlas-fzmhnh-shard-0&ssl=true&authSource=admin"
-        self.client = MongoClient(self.MONGO_URI)
+        
+        self.client = MongoClient(
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
+)
         self.db = self.client[f"selfbot_{account_name}"]  # دیتابیس جداگانه برای هر اکانت
         self.users_col = self.db["users"]
         self.groups_col = self.db["groups"]
