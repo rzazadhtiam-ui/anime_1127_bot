@@ -1,73 +1,72 @@
-from flask import Flask, jsonify, request, render_template_string
-from huggingface_hub import HfApi
+from flask import Flask, request, jsonify, render_template_string
 import requests
 
 app = Flask(__name__)
-
-HF_TOKEN = "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"
-
-api = HfApi()
 
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HF Model Scanner</title>
+<title>HF AI Tester</title>
 
 <style>
-body{
+body {
     margin:0;
-    background:#0f1117;
-    color:white;
     font-family:Arial;
+    background:#0b0f19;
+    color:white;
 }
 
-.top{
-    padding:15px;
+.top {
+    padding:10px;
+    display:flex;
+    gap:10px;
     border-bottom:1px solid #333;
 }
 
-input{
-    width:100%;
+input {
     padding:10px;
-    background:#1a1d26;
-    color:white;
+    flex:1;
+    background:#111827;
     border:none;
+    color:white;
 }
 
-.main{
+button {
+    padding:10px;
+    background:#2563eb;
+    border:none;
+    color:white;
+    cursor:pointer;
+}
+
+.container {
     display:flex;
-    height:calc(100vh - 70px);
+    height:calc(100vh - 60px);
 }
 
-.left{
-    width:50%;
+.left {
+    width:45%;
     overflow-y:auto;
     border-right:1px solid #333;
 }
 
-.right{
-    width:50%;
+.right {
+    width:55%;
+    padding:10px;
     overflow-y:auto;
-    padding:15px;
 }
 
-.model{
-    margin:10px;
+.model {
     padding:10px;
-    background:#1a1d26;
+    margin:8px;
+    background:#111827;
     border-radius:8px;
 }
 
-button{
-    padding:6px 12px;
-    cursor:pointer;
-}
-
-pre{
-    white-space:pre-wrap;
-    word-break:break-word;
+small {
+    color:#9ca3af;
 }
 </style>
 </head>
@@ -75,17 +74,18 @@ pre{
 <body>
 
 <div class="top">
-<input id="search" placeholder="Search model..." onkeyup="loadModels()">
+    <input id="token" placeholder="Enter HF Token">
+    <button onclick="loadModels()">Load Models</button>
 </div>
 
-<div class="main">
+<div class="container">
 
-<div class="left" id="models"></div>
+    <div class="left" id="list"></div>
 
-<div class="right">
-<h3>Test Result</h3>
-<pre id="result">Ready...</pre>
-</div>
+    <div class="right">
+        <h3>Result</h3>
+        <pre id="out">Ready...</pre>
+    </div>
 
 </div>
 
@@ -93,25 +93,21 @@ pre{
 
 async function loadModels(){
 
-    let q = document.getElementById("search").value;
-
-    let res = await fetch("/models?q=" + encodeURIComponent(q));
-
+    let res = await fetch("/models");
     let data = await res.json();
 
-    let box = document.getElementById("models");
-
+    let box = document.getElementById("list");
     box.innerHTML = "";
 
-    data.forEach(m=>{
+    data.forEach(m => {
 
         let div = document.createElement("div");
-
         div.className = "model";
 
         div.innerHTML = `
-            <b>${m.id}</b><br><br>
-            Type: ${m.type}<br><br>
+            <b>${m.id}</b><br>
+            <small>${m.type}</small><br><br>
+
             <button onclick="testModel('${m.id}','${m.type}')">
                 Test
             </button>
@@ -121,29 +117,27 @@ async function loadModels(){
     });
 }
 
-async function testModel(model,type){
+async function testModel(id,type){
 
-    document.getElementById("result").innerText =
-        "Testing " + model + "...";
+    let token = document.getElementById("token").value;
+
+    document.getElementById("out").innerText = "Testing...";
 
     let res = await fetch("/test",{
         method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-            model:model,
-            type:type
+            model:id,
+            type:type,
+            token:token
         })
     });
 
     let data = await res.json();
 
-    document.getElementById("result").innerText =
+    document.getElementById("out").innerText =
         JSON.stringify(data,null,2);
 }
-
-loadModels();
 
 </script>
 
@@ -151,44 +145,45 @@ loadModels();
 </html>
 """
 
+from huggingface_hub import HfApi
+api = HfApi()
+
 @app.route("/")
 def home():
     return render_template_string(HTML)
 
+
 @app.route("/models")
 def models():
 
-    q = request.args.get("q","").lower()
+    out = []
+    models = api.list_models(limit=80)
 
-    result = []
+    for m in models:
 
-    try:
-        models = api.list_models(limit=200)
+        task = getattr(m,"pipeline_tag","unknown")
 
-        for m in models:
+        if "text" in task or "generation" in task:
+            t = "text"
+        elif "image" in task:
+            t = "image"
+        elif "video" in task:
+            t = "video"
+        elif "audio" in task:
+            t = "audio"
+        else:
+            t = "unknown"
 
-            model_id = m.modelId
+        if getattr(m,"private",False):
+            continue
 
-            if q and q not in model_id.lower():
-                continue
+        out.append({
+            "id": m.modelId,
+            "type": t
+        })
 
-            model_type = getattr(m,"pipeline_tag",None)
+    return jsonify(out)
 
-            if not model_type:
-                model_type = "unknown"
-
-            result.append({
-                "id": model_id,
-                "type": model_type
-            })
-
-    except Exception as e:
-        return jsonify([{
-            "id":"ERROR",
-            "type":str(e)
-        }])
-
-    return jsonify(result)
 
 @app.route("/test", methods=["POST"])
 def test():
@@ -197,68 +192,42 @@ def test():
 
     model = data["model"]
     model_type = data["type"]
+    token = data["token"]
 
     url = f"https://api-inference.huggingface.co/models/{model}"
 
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}"
-    }
+    headers = {"Authorization": f"Bearer {token}"}
 
     try:
 
-        if "text" in model_type or "generation" in model_type:
+        if model_type == "image":
 
-            payload = {
-                "inputs":"Hello AI"
-            }
+            payload = {"inputs":"a futuristic robot"}
 
-            r = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
+            r = requests.post(url, headers=headers, json=payload, timeout=60)
 
-        elif "image" in model_type:
-
-            payload = {
-                "inputs":"robot in cyber city"
-            }
-
-            r = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
+            if r.headers.get("content-type","").startswith("image"):
+                return {"status":"ok","type":"image","note":"binary image returned"}
 
         else:
 
-            payload = {
-                "inputs":"test"
-            }
+            payload = {"inputs":"Hello AI test"}
 
-            r = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
+            r = requests.post(url, headers=headers, json=payload, timeout=30)
 
-        return jsonify({
+        return {
             "model": model,
             "type": model_type,
             "status": r.status_code,
-            "response": r.text[:3000]
-        })
+            "response": r.text[:2000]
+        }
 
     except Exception as e:
 
-        return jsonify({
-            "model": model,
-            "type": model_type,
+        return {
             "error": str(e)
-        })
+        }
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
