@@ -22,3 +22,6 @@ pytz
 uvicorn
 requests
 
+flask
+requests
+huggingface_hub
