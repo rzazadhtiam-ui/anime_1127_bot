@@ -14,9 +14,11 @@ from multi_lang import multi_lang, reply_auto, edit_auto
 
 
 mongo = MongoClient(
-    "mongodb://jinx:titi_jinx@ac-yjpvg6o-shard-00-00.35gzto0.mongodb.net:27017,"
-    "ac-yjpvg6o-shard-00-01.35gzto0.mongodb.net:27017,"
-    "ac-yjpvg6o-shard-00-02.35gzto0.mongodb.net:27017/?replicaSet=atlas-fzmhnh-shard-0&ssl=true&authSource=admin"
+    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
+    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
+    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
+    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
 )
 
 db = mongo["selfbot_default"]
