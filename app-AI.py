@@ -4,7 +4,7 @@ import requests
 
 app = Flask(__name__)
 
-HF_TOKEN = "YOUR_HF_TOKEN"
+HF_TOKEN = "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"
 
 api = HfApi()
 
