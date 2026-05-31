@@ -155,35 +155,42 @@ def home():
 
 @app.route("/models")
 def models():
+    try:
+        data = api.list_models(limit=30)
 
-    out = []
-    models = api.list_models(limit=80)
+        out = []
 
-    for m in models:
+        for m in data:
 
-        task = getattr(m,"pipeline_tag","unknown")
+            task = getattr(m, "pipeline_tag", None)
 
-        if "text" in task or "generation" in task:
-            t = "text"
-        elif "image" in task:
-            t = "image"
-        elif "video" in task:
-            t = "video"
-        elif "audio" in task:
-            t = "audio"
-        else:
-            t = "unknown"
+            if task is None:
+                task = "unknown"
 
-        if getattr(m,"private",False):
-            continue
+            if isinstance(task, str):
 
-        out.append({
-            "id": m.modelId,
-            "type": t
-        })
+                if "text" in task or "generation" in task:
+                    t = "text"
+                elif "image" in task:
+                    t = "image"
+                elif "video" in task:
+                    t = "video"
+                elif "audio" in task:
+                    t = "audio"
+                else:
+                    t = "unknown"
+            else:
+                t = "unknown"
 
-    return jsonify(out)
+            out.append({
+                "id": m.modelId,
+                "type": t
+            })
 
+        return jsonify(out)
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route("/test", methods=["POST"])
 def test():
