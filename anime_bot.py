@@ -929,10 +929,14 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    json_str = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "", 200
+    try:
+        json_str = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+        return "OK", 200
+    except Exception as e:
+        print("WEBHOOK ERROR:", e)
+        return "ERROR", 200
 
 # =======================
 if __name__ == "__main__":
