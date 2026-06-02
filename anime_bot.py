@@ -910,7 +910,61 @@ def sleep_bot(message):
     bot.reply_to(message, "سیستم Keep-Alive خاموش شد 😴")
 
 
+@bot.message_handler(commands=["debug"])
+def debug_cmd(message):
+    report = []
 
+    # 1) Webhook check
+    try:
+        info = bot.get_webhook_info()
+        report.append(f"WEBHOOK URL: {info.url}")
+        report.append(f"PENDING: {info.pending_update_count}")
+    except Exception as e:
+        report.append(f"WEBHOOK ERROR: {e}")
+
+    # 2) MongoDB check
+    try:
+        db.list_collection_names()
+        report.append("DB: OK")
+    except Exception as e:
+        report.append(f"DB ERROR: {e}")
+
+    # 3) Bot identity check
+    try:
+        me = bot.get_me()
+        report.append(f"BOT: @{me.username} OK")
+    except Exception as e:
+        report.append(f"BOT ERROR: {e}")
+
+    # 4) Force join check
+    try:
+        fc = force_join_col.count_documents({})
+        report.append(f"FORCE JOIN CHANNELS: {fc}")
+    except Exception as e:
+        report.append(f"FORCE JOIN ERROR: {e}")
+
+    # 5) Admin check
+    try:
+        ac = admins_col.count_documents({})
+        report.append(f"ADMINS IN DB: {ac}")
+    except Exception as e:
+        report.append(f"ADMINS ERROR: {e}")
+
+    # 6) Users collection check
+    try:
+        uc = users_col.count_documents({})
+        report.append(f"USERS IN DB: {uc}")
+    except Exception as e:
+        report.append(f"USERS ERROR: {e}")
+
+    # 7) Simple reply test
+    try:
+        bot.reply_to(message, "DEBUG: MESSAGE OK")
+    except Exception as e:
+        report.append(f"REPLY ERROR: {e}")
+
+    # Send final report
+    bot.reply_to(message, "\n".join(report))
 # =======================
 # Flask App
 app = Flask(__name__)
