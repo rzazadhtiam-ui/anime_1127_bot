@@ -837,11 +837,11 @@ def auto_save_videos(message):
 # Keep-alive (Professional Version)
 
 KEEP_ALIVE_URLS = [
-    "https://anime-1128-bot.onrender.com"
-    "https://self-nix-bot.onrender.com"
-    "https://self-nix-app.onrender.com"
-    "https://self-bot-tv3l.onrender.com"
-    "https://anime-1127-bot-x0nn.onrender.com"
+    "https://anime-1128-bot.onrender.com",
+    "https://self-nix-bot.onrender.com",
+    "https://self-nix-app.onrender.com",
+    "https://self-bot-tv3l.onrender.com",
+    "https://anime-1127-bot-x0nn.onrender.com",
 ] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
@@ -930,20 +930,32 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        json_string = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(request.get_data().decode("utf-8"))
 
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
+        threading.Thread(
+            target=bot.process_new_updates,
+            args=([update],),
+            daemon=True
+        ).start()
 
         return "OK", 200
 
     except Exception as e:
         print("WEBHOOK ERROR:", e)
         return "OK", 200
-
 # =======================
 if __name__ == "__main__":
-    URL = "https://anime-1128-bot.onrender.com/webhook"
+    import os
+
+    BASE_URL = os.getenv("RENDER_EXTERNAL_URL")
+
+    if not BASE_URL:
+        BASE_URL = "https://anime-1128-bot.onrender.com"
+
     bot.remove_webhook()
-    bot.set_webhook(URL)
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), threaded=True)
+    bot.set_webhook(f"{BASE_URL}/webhook")
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8080))
+    )
