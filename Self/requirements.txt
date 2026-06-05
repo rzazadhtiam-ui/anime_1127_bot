@@ -41,3 +41,7 @@ edge-tts
 pytesseract
 psutil
 gtts
+openai-whisper
+pytesseract
+Pillow
+opencv-python
