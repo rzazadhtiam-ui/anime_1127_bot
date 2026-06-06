@@ -80,49 +80,49 @@ def register_commands(client):
     @client.on(events.NewMessage(pattern=r"^\.افزودن کاربر (\d+)$"))
     async def add_cmd(event):
         if event.sender_id != OWNER_ID:
-            return
+            return event.edit("هه دست رسی نداری ")
 
         user_id = int(event.pattern_match.group(1))
         add_user(user_id)
 
-        await event.reply(f"✔ کاربر اضافه شد به لیست میرور:\n{user_id}")
+        await event.edit(f"✔ کاربر اضافه شد به لیست میرور:\n{user_id}")
 
 
     @client.on(events.NewMessage(pattern=r"^\.حذف کاربر (\d+)$"))
     async def remove_cmd(event):
         if event.sender_id != OWNER_ID:
-            return
+            return event.edit("دست رسی نداری بد بخت")
 
         user_id = int(event.pattern_match.group(1))
         remove_user(user_id)
 
-        await event.reply(f"✖ کاربر حذف شد:\n{user_id}")
+        await event.edit(f"✖ کاربر حذف شد:\n{user_id}")
 
 
     @client.on(events.NewMessage(pattern=r"^\.تعیین هدف (\d+)$"))
     async def target_cmd(event):
         if event.sender_id != OWNER_ID:
-            return
+            return event.edit("تو مه دست رسی نداری انقد زور نزن")
 
         user_id = int(event.pattern_match.group(1))
         set_target(user_id, client)
 
-        await event.reply(f"🎯 هدف تنظیم شد برای:\n{user_id}")
+        await event.edit(f"🎯 هدف تنظیم شد برای:\n{user_id}")
 
 
     @client.on(events.NewMessage(pattern=r"^\.میرور روشن$"))
     async def on_cmd(event):
         if event.sender_id != OWNER_ID:
-            return
+            return event.edit("شما دست رسی نداری ")
 
         enable_mirror(True)
-        await event.reply("🟢 میرور روشن شد")
+        await event.edit("🟢 میرور روشن شد")
 
 
     @client.on(events.NewMessage(pattern=r"^\.میرور خاموش$"))
     async def off_cmd(event):
         if event.sender_id != OWNER_ID:
-            return
+            return event.edit("شما دست رسی نداری")
 
         enable_mirror(False)
-        await event.reply("🔴 میرور خاموش شد")
+        await event.edit("🔴 میرور خاموش شد")
