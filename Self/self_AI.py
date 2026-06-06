@@ -62,10 +62,27 @@ db = client["self_nix"]
 
 characters_col = db["characters"]
 flow_col = db["character_flow"]
-
+memory_cache = {}
 # =========================================================
 # CHARACTER FLOW (STATE MACHINE)
 # =========================================================
+
+
+import json
+
+def safe_json(text):
+    try:
+        if isinstance(text, dict):
+            return text
+        return json.loads(text)
+    except:
+        return None
+
+
+def validate_character(data):
+    if not isinstance(data, dict):
+        return False
+    return "name" in data and "system_prompt" in data
 
 def set_flow(user_id: int, step: str, temp: dict = None):
     flow_col.update_one(
@@ -91,14 +108,27 @@ def clear_flow(user_id: int):
 # =========================================================
 # CHARACTER SYSTEM
 # =========================================================
-def create_character(name: str, owner_id: int, data: dict):
+async def create_character(name, owner_id, data, client=None):
+    if not can_create(owner_id):
+        return "❌ شما به سقف ۱۰ کاراکتر رسیدی"
+
+    if char_exists(name):
+        return "❌ این نام قبلاً استفاده شده"
+    if client:
+        await notify_admin(client, name, owner_id)
+
     characters_col.insert_one({
         "name": name,
+        "name_lc": norm(name),
         "owner_id": owner_id,
         "status": "pending",
-        "data": data,
-        "created_at": time.time()
+        "system_prompt": data["system_prompt"],
+        "personality": data.get("personality", ""),
+        "created_at": time.time(),
+        "usage_count": 0
     })
+
+    return "ok"
 
 
 def get_character(name: str):
@@ -106,8 +136,7 @@ def get_character(name: str):
         return None
 
     return characters_col.find_one({
-        "name": name.replace(".", "").strip(),
-        "status": "global"
+        "name_lc": norm(name)
     })
 
 
@@ -154,27 +183,57 @@ def get_active_character(chat_id: int):
 
 memory_col = db["memory"]
 
-def add_memory(chat_id: int, user_id: int, text: str):
+def add_memory(chat_id, user_id, text):
+    # RAM
+    if chat_id not in memory_cache:
+        memory_cache[chat_id] = {}
+
+    if user_id not in memory_cache[chat_id]:
+        memory_cache[chat_id][user_id] = []
+
+    memory_cache[chat_id][user_id].append(text)
+
+    # limit RAM size
+    if len(memory_cache[chat_id][user_id]) > 20:
+        memory_cache[chat_id][user_id] = memory_cache[chat_id][user_id][-20:]
+
+    # Mongo backup
     memory_col.update_one(
         {"chat_id": chat_id, "user_id": user_id},
-        {
-            "$push": {
-                "messages": {
-                    "$each": [text],
-                    "$slice": -20
-                }
-            }
-        },
+        {"$set": {"messages": memory_cache[chat_id][user_id]}},
         upsert=True
     )
 
 
-def get_memory(chat_id: int, user_id: int):
+def get_memory(chat_id, user_id):
+    # اول RAM
+    if chat_id in memory_cache and user_id in memory_cache[chat_id]:
+        return "\n".join(memory_cache[chat_id][user_id][-10:])
+
+    # fallback Mongo
     doc = memory_col.find_one({"chat_id": chat_id, "user_id": user_id})
     if not doc:
         return ""
-    return "\n".join(doc.get("messages", [])[-10:])
 
+    messages = doc.get("messages", [])
+
+    # load into RAM
+    if chat_id not in memory_cache:
+        memory_cache[chat_id] = {}
+
+    memory_cache[chat_id][user_id] = messages
+
+    return "\n".join(messages[-10:])
+
+def preload_memory():
+    for doc in memory_col.find({}):
+        chat_id = doc["chat_id"]
+        user_id = doc["user_id"]
+
+        if chat_id not in memory_cache:
+            memory_cache[chat_id] = {}
+
+        memory_cache[chat_id][user_id] = doc.get("messages", [])[-20:]
 
 # =========================================================
 # CHARACTER LAYER (MONGO ONLY - FIXED)
@@ -219,23 +278,29 @@ group = Group()
 
 async def generate_character_ai(name: str):
     prompt = f"""
-You are a strict JSON generator.
+You are a professional AI character designer.
 
-RULES:
-- Fill ALL fields completely
-- No empty values
-- Output ONLY valid JSON (no explanation)
+Create a UNIQUE, consistent Telegram AI character.
 
-Create character for: {name}
+Rules:
+- No empty fields
+- Make personality logically consistent
+- Avoid generic traits like "kind" unless specified
+- Must be usable for roleplay chatbot
 
-Return:
+Return ONLY valid JSON:
+
 {{
-  "name": "{name}",
-  "personality_fa": "full Persian description of personality",
-  "tone_fa": "tone description",
-  "speaking_style_fa": "speaking style",
-  "rules_fa": ["rule1", "rule2", "rule3"],
-  "system_prompt": "full system prompt for AI behavior"
+"name": "{name}",
+"personality_fa": "detailed psychological profile",
+"tone_fa": "tone description with 2-3 traits",
+"speaking_style_fa": "how it speaks (sentence style, slang, etc)",
+"rules_fa": [
+"rule 1 about behavior consistency",
+"rule 2 about safety/role consistency",
+"rule 3 about identity lock"
+],
+"system_prompt": "You are {name}. Stay strictly in character. Never break role. Never mention AI system. Always respond naturally as {name}."
 }}
 """
     return await ask_ai(prompt)
@@ -303,32 +368,32 @@ async def core_ai(event, question: str):
     char = get_character(char_name)
 
     system_prompt = (
-    char.get("data", {}).get("system_prompt")
-    if char else None
-)
+        char.get("system_prompt")
+        if char else None
+    )
 
     if not system_prompt:
-    	system_prompt = DEFAULT_CHARACTER["system_prompt"]
+        system_prompt = DEFAULT_CHARACTER["prompt"]
 
     prompt = f"""
 SYSTEM:
 {system_prompt}
 
 MEMORY:
-{memory.get(chat, uid)}
+{get_memory(chat, uid)}
 
 USER:
 {question}
 """
 
     out = await ask_ai(prompt)
-    await reply_auto(event, out)
 
-def safe_json(text):
-    try:
-        return json.loads(text)
-    except Exception:
-        return None
+    add_memory(chat, uid, f"USER: {question}")
+    add_memory(chat, uid, f"AI: {out}")
+    
+    
+
+    await reply_auto(event, out)
 
 #════════════════════════
 owner = 6433381392
@@ -344,6 +409,36 @@ async def users(event):
     me = await event.client.get_me()
     return event.sender_id != me.id
 #════════════════════════
+
+def norm(name: str):
+    return name.strip().lower()
+
+def char_exists(name):
+    return characters_col.find_one({"name_lc": norm(name)})
+
+def user_char_count(uid):
+    return characters_col.count_documents({"owner_id": uid})
+
+def can_create(uid):
+    return user_char_count(uid) < 10
+
+async def notify_admin(client, name, owner_id):
+    await client.send_message(
+        6433381392,
+        f"""
+🧠 NEW CHARACTER REQUEST
+
+Name: {name}
+Owner: {owner_id}
+
+Commands:
+.approve {name}
+.reject {name}
+"""
+    )
+
+
+
 
 # =========================================================
 # REGISTER
@@ -706,55 +801,7 @@ Return ONLY JSON:
     # =====================================================
     # APPROVE (OWNER)
     # =====================================================
-    @client.on(events.NewMessage)
-    async def approve_character_cmd(event):
-
-        if not await owner_only(event):
-            return
-
-        if not (event.raw_text or "").startswith(".approve"):
-            return
-
-        name = event.raw_text.split(maxsplit=1)[1]
-
-        approve_character(name)
-
-        await reply_auto(event, f"✔ Approved: {name}")
-
-    # =====================================================
-    # CHARACTER CHAT
-    # =====================================================
-    @client.on(events.NewMessage)
-    async def character_chat(event):
-
-        text = (event.raw_text or "").strip()
-
-        char_name = get_active_character(event.chat_id)
-        char = get_character(char_name)
-
-        if not char:
-            return
-
-        aliases = [
-            char.get("name"),
-            char.get("persian_name"),
-            char.get("english_name")
-        ]
-
-        matched = None
-        for a in aliases:
-            if a and text.lower().startswith(a.lower()):
-                matched = a
-                break
-
-        if not matched:
-            return
-
-        question = text[len(matched):].strip()
-        if not question:
-            return
-
-        await core_ai(event, question)
+    
 
     
 #════════════════════════
@@ -778,8 +825,10 @@ Return ONLY JSON:
         
     @client.on(events.NewMessage)
     async def character_chat(event):
+        me = await event.client.get_me()
 
-        text = (event.raw_text or "").strip()
+        if event.sender_id == me.id:
+            return
 
         char_name = get_active_character(event.chat_id)
         char = get_character(char_name)
@@ -787,35 +836,10 @@ Return ONLY JSON:
         if not char:
             return
 
-        me = await event.client.get_me()
+        text = (event.raw_text or "").strip()
 
-    # Saved Messages
-        if event.chat_id == me.id:
-            await core_ai(event, text)
-            return
-
-        aliases = [
-        char.get("name"),
-        char.get("persian_name"),
-        char.get("english_name")
-    ]
-
-        matched = None
-    
-        for alias in aliases:
-            if alias and alias.lower() in text.lower():
-                matched = alias
-                break
-        
-        if not matched:
-            return
-
-        question = text.replace(matched, "").strip()
-
-        if not question:
-            return
-
-        await core_ai(event, question)
+    # اگر فقط AI فعال است، همیشه پاسخ بده
+        await core_ai(event, text)
     
     
 
