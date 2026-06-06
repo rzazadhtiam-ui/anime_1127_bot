@@ -1,15 +1,23 @@
 import asyncio
 from telethon import events
 
+# =========================
+# STATE
+# =========================
+
 mirror_users = set()
 mirror_targets = {}
 
 mirror_enabled = True
 OWNER_ID = 6433381392
 
-panel_sessions = {}
-last_message = {}   # NEW: ذخیره آخرین پیام پنل
+panel_sessions = {}  # owner -> target
+last_msg_cache = {}  # برای click بهتر
 
+
+# =========================
+# CORE
+# =========================
 
 def enable_mirror(state: bool):
     global mirror_enabled
@@ -28,8 +36,15 @@ def set_target(user_id: int, client):
     mirror_targets[user_id] = client
 
 
+# =========================
+# MIRROR ENGINE
+# =========================
+
 def register_mirror(client):
 
+    # =========================
+    # PANEL COMMAND
+    # =========================
     @client.on(events.NewMessage(pattern=r"^\.پنل (\d+)$"))
     async def panel_cmd(event):
 
@@ -44,16 +59,14 @@ def register_mirror(client):
         if not target_client:
             return await event.edit("Target client not set")
 
-        # 🔥 فقط متن "پنل"
+        # فقط کلمه "پنل"
         await target_client.send_message(target_id, "پنل")
 
-        await event.edit("Panel sent")
-
+        await event.edit("📟 Panel sent")
 
     # =========================
-    # CLICK MIRROR (AUTO)
+    # CALLBACK MIRROR
     # =========================
-
     @client.on(events.CallbackQuery)
     async def callback_handler(event):
 
@@ -76,16 +89,19 @@ def register_mirror(client):
             if not msg:
                 return
 
-            # ذخیره آخرین پیام برای کلیک واقعی
-            last_message[user_id] = msg
+            last_msg_cache[user_id] = msg
 
-            # 🔥 کلیک واقعی روی همان پیام
+            # 🔥 اجرای کلیک واقعی روی همان پیام
             try:
                 await msg.click(data=data)
             except:
-                pass
+                # fallback
+                await target_client.send_message(
+                    event.chat_id,
+                    f"CLICK:{data}"
+                )
 
-            # حذف پیام کنترل
+            # حذف پیام کنترل خودت
             try:
                 await event.delete()
             except:
@@ -93,3 +109,59 @@ def register_mirror(client):
 
         except Exception as e:
             print("Mirror error:", e)
+
+
+# =========================
+# COMMANDS
+# =========================
+
+def register_commands(client):
+
+    @client.on(events.NewMessage(pattern=r"^\.افزودن کاربر (\d+)$"))
+    async def add_cmd(event):
+        if event.sender_id != OWNER_ID:
+            return await event.edit("No access")
+
+        add_user(int(event.pattern_match.group(1)))
+        await event.edit("User added")
+
+    @client.on(events.NewMessage(pattern=r"^\.حذف کاربر (\d+)$"))
+    async def remove_cmd(event):
+        if event.sender_id != OWNER_ID:
+            return await event.edit("No access")
+
+        remove_user(int(event.pattern_match.group(1)))
+        await event.edit("User removed")
+
+    @client.on(events.NewMessage(pattern=r"^\.تعیین هدف (\d+)$"))
+    async def target_cmd(event):
+        if event.sender_id != OWNER_ID:
+            return await event.edit("No access")
+
+        set_target(event.sender_id, client)
+        await event.edit("Target set")
+
+    @client.on(events.NewMessage(pattern=r"^\.میرور روشن$"))
+    async def on_cmd(event):
+        if event.sender_id != OWNER_ID:
+            return await event.edit("No access")
+
+        enable_mirror(True)
+        await event.edit("Mirror ON")
+
+    @client.on(events.NewMessage(pattern=r"^\.میرور خاموش$"))
+    async def off_cmd(event):
+        if event.sender_id != OWNER_ID:
+            return await event.edit("No access")
+
+        enable_mirror(False)
+        await event.edit("Mirror OFF")
+
+
+# =========================
+# OPTIONAL LOOP (FOR EXTENSIONS)
+# =========================
+
+async def bridge_worker():
+    while True:
+        await asyncio.sleep(0.2)
