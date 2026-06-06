@@ -8,7 +8,7 @@ from telethon import events
 # CONFIG
 # =========================
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 GITHUB_TOKEN = "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"
 
 
@@ -26,7 +26,7 @@ def ai_request(prompt: str):
             "Content-Type": "application/json"
         },
         json={
-            "model": "llama3-70b-8192",
+            "model": "llama-3.1-8b-instant",
             "messages": [
                 {
                     "role": "system",
