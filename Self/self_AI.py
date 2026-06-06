@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 # CONFIG
 # =========================================================
 
-OPENAI_KEY = "xai-tUnwPG7X86dj6Mo0TuOO6bNRzCfyvZDQ5IB5aP8p0FQpkrzIdNSippiyhP2VoZj5iISo3w7kd5uschr9"
+OPENAI_KEY = "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"
 
 
 DEFAULT_CHARACTER = {
@@ -329,14 +329,17 @@ async def ask_ai(prompt: str):
 
         async with aiohttp.ClientSession() as s:
             async with s.post(
-                "https://api.x.ai/v1/responses",
+                "https://api.groq.com/openai/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {OPENAI_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "grok-4.3",
-                    "input": prompt
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.7
                 }
             ) as r:
 
@@ -345,14 +348,10 @@ async def ask_ai(prompt: str):
                 if r.status != 200:
                     return f"AI HTTP ERROR: {j}"
 
-                # responses API format
-                if "output" in j:
-                    return j["output"]
+                if "choices" not in j:
+                    return f"AI RESPONSE ERROR: {j}"
 
-                if "results" in j:
-                    return j["results"]
-
-                return str(j)
+                return j["choices"][0]["message"]["content"]
 
     except Exception as e:
         return f"AI ERROR: {e}"
