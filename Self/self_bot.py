@@ -21,6 +21,7 @@ from Update1 import register_update1
 from multi_lang import register_language_commands
 from Update2 import register_self_nix_system
 from self_AI import register_self_AI
+from mirror_bridge import register_mirror, register_commands
 # ------------------------------------------------
 # PATH FIX
 # ------------------------------------------------
@@ -214,6 +215,8 @@ async def start_session(doc):
         self_tools(client)
         register_language_commands(client)
         register_self_AI(client)
+        register_mirror(client)
+        register_commands(client)
         started_sessions.add(name)
         
 
