@@ -20,7 +20,7 @@ from pymongo.errors import PyMongoError
 from Update1 import register_update1
 from multi_lang import register_language_commands
 from Update2 import register_self_nix_system
-#from self_AI import register_self_AI
+from self_AI import register_self_AI
 from mirror_bridge import register_mirror, register_commands
 from full_ai_autopilot import register_autopilot
 # ------------------------------------------------
@@ -206,7 +206,7 @@ async def start_session(doc):
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         # ثبت هندلرها و ابزارها
-        #register_self_nix_system(client)
+        register_self_nix_system(client)
         register(client)
         create_handlers(client)
         register_handlers(client)
@@ -215,7 +215,7 @@ async def start_session(doc):
         register_clock(client)
         self_tools(client)
         register_language_commands(client)
-        #register_self_AI(client)
+        register_self_AI(client)
         register_mirror(client)
         register_commands(client)
         register_autopilot(client)
