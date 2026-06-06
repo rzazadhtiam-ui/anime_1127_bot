@@ -206,7 +206,7 @@ async def start_session(doc):
         await client.send_message("me", "ربات ⦁ Self Nix برای شما فعال شد ✅")
 
         # ثبت هندلرها و ابزارها
-        register_self_nix_system(client)
+        #register_self_nix_system(client)
         register(client)
         create_handlers(client)
         register_handlers(client)
