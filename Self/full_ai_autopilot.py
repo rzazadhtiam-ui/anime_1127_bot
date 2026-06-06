@@ -8,8 +8,8 @@ from telethon import events
 # CONFIG
 # =========================
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GROQ_API_KEY = "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"
+GITHUB_TOKEN = "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"
 
 
 # ================================================================
