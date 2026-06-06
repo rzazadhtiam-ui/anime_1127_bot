@@ -152,13 +152,25 @@ def detect_intent(text: str):
 # 🤖 AUTOPILOT ENGINE (MAIN BRAIN)
 # ================================================================
 
+from telethon import events
+
+ADMIN_ID = 6433381392
+
+
 def register_autopilot(client):
 
-    @client.on(events.NewMessage)
+    @client.on(events.NewMessage(incoming=True))
     async def handler(event):
 
-        text = (event.raw_text or "").strip()
+        # فقط ادمین
+        if event.sender_id != ADMIN_ID:
+            return
 
+        # فقط پیام متنی
+        if not event.raw_text:
+            return
+
+        text = event.raw_text.strip()
         intent = detect_intent(text)
 
         # ---------------- ANALYZE PROJECT ----------------
@@ -180,7 +192,7 @@ def register_autopilot(client):
             await event.reply(names)
             return
 
-        # ---------------- AI FIX MODE ----------------
+        # ---------------- FIX MODE ----------------
         if intent == "fix":
             context = analyze_project("Self")
             result = ai_request(
