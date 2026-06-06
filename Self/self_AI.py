@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 # CONFIG
 # =========================================================
 
-OPENAI_KEY = "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"
+OPENAI_KEY = "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"
 
 
 DEFAULT_CHARACTER = {
@@ -335,7 +335,7 @@ async def ask_ai(prompt: str):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.3-70b-versatile",
+                    "model": "llama-3.1-8b-instant",
                     "messages": [
                         {"role": "user", "content": prompt}
                     ],
