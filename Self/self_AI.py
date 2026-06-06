@@ -335,11 +335,8 @@ async def ask_ai(prompt: str):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.7
+                    "model": "grok-4.3",
+                    "input": prompt
                 }
             ) as r:
 
@@ -348,10 +345,14 @@ async def ask_ai(prompt: str):
                 if r.status != 200:
                     return f"AI HTTP ERROR: {j}"
 
-                if "choices" not in j:
-                    return f"AI RESPONSE ERROR: {j}"
+                # responses API format
+                if "output" in j:
+                    return j["output"]
 
-                return j["choices"][0]["message"]["content"]
+                if "results" in j:
+                    return j["results"]
+
+                return str(j)
 
     except Exception as e:
         return f"AI ERROR: {e}"
