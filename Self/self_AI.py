@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 # CONFIG
 # =========================================================
 
-OPENAI_KEY = "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"
+OPENAI_KEY = "xai-tUnwPG7X86dj6Mo0TuOO6bNRzCfyvZDQ5IB5aP8p0FQpkrzIdNSippiyhP2VoZj5iISo3w7kd5uschr9"
 
 
 DEFAULT_CHARACTER = {
