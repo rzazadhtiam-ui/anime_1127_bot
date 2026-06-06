@@ -60,8 +60,6 @@ client = MongoClient(
 )
 db = client["self_nix"]
 
-characters_col = db["characters"]
-flow_col = db["character_flow"]
 memory_cache = {}
 # =========================================================
 # CHARACTER FLOW (STATE MACHINE)
@@ -105,77 +103,7 @@ def get_flow(user_id: int):
 def clear_flow(user_id: int):
     flow_col.delete_one({"user_id": user_id})
 
-# =========================================================
-# CHARACTER SYSTEM
-# =========================================================
-async def create_character(name, owner_id, data, client=None):
-    if not can_create(owner_id):
-        return "❌ شما به سقف ۱۰ کاراکتر رسیدی"
 
-    if char_exists(name):
-        return "❌ این نام قبلاً استفاده شده"
-    if client:
-        await notify_admin(client, name, owner_id)
-
-    characters_col.insert_one({
-        "name": name,
-        "name_lc": norm(name),
-        "owner_id": owner_id,
-        "status": "pending",
-        "system_prompt": data["system_prompt"],
-        "personality": data.get("personality", ""),
-        "created_at": time.time(),
-        "usage_count": 0
-    })
-
-    return "ok"
-
-
-def get_character(name: str):
-    if not name:
-        return None
-
-    return characters_col.find_one({
-        "name_lc": norm(name)
-    })
-
-
-def get_character_owner(name: str):
-    return characters_col.find_one({
-        "name": name.replace(".", "").strip()
-    })
-
-
-def approve_character(name: str):
-    characters_col.update_one(
-        {"name": name},
-        {"$set": {"status": "global"}}
-    )
-
-
-def reject_character(name: str):
-    characters_col.update_one(
-        {"name": name},
-        {"$set": {"status": "rejected"}}
-    )
-
-# =========================================================
-# ACTIVE CHARACTER PER CHAT (STORAGE IN DB OPTIONAL)
-# =========================================================
-
-active_col = db["active_characters"]
-
-def set_active_character(chat_id: int, name: str):
-    active_col.update_one(
-        {"chat_id": chat_id},
-        {"$set": {"name": name}},
-        upsert=True
-    )
-
-
-def get_active_character(chat_id: int):
-    doc = active_col.find_one({"chat_id": chat_id})
-    return doc["name"] if doc else None
 
 # =========================================================
 # USER MEMORY (OPTIONAL BUT USEFUL)
@@ -276,34 +204,8 @@ class Group:
 group = Group()
 
 
-async def generate_character_ai(name: str):
-    prompt = f"""
-You are a professional AI character designer.
 
-Create a UNIQUE, consistent Telegram AI character.
 
-Rules:
-- No empty fields
-- Make personality logically consistent
-- Avoid generic traits like "kind" unless specified
-- Must be usable for roleplay chatbot
-
-Return ONLY valid JSON:
-
-{{
-"name": "{name}",
-"personality_fa": "detailed psychological profile",
-"tone_fa": "tone description with 2-3 traits",
-"speaking_style_fa": "how it speaks (sentence style, slang, etc)",
-"rules_fa": [
-"rule 1 about behavior consistency",
-"rule 2 about safety/role consistency",
-"rule 3 about identity lock"
-],
-"system_prompt": "You are {name}. Stay strictly in character. Never break role. Never mention AI system. Always respond naturally as {name}."
-}}
-"""
-    return await ask_ai(prompt)
 
 # =========================================================
 # AI ENGINE (FIXED FALLBACK)
@@ -462,43 +364,6 @@ def register_self_AI(client):
 
     # ================= MUTE =================
 
-
-    # ================= CREATE CHARACTER =================
-    @client.on(events.NewMessage)
-    @multi_lang([".char create", ".ساخت کاراکتر"])
-    async def start_char(event):
-        uid = event.sender_id
-
-        set_flow(uid, "WAIT_NAME", {
-    "chat_id": event.chat_id
-})
-
-        await edit_auto(event,
-        "فرآیند ساخت کاراکتر فعال شد.\n"
-        "نام کاراکتر را ارسال کنید."
-    )
-    # ================= EDIT CHARACTER =================
-    @client.on(events.NewMessage)
-    @multi_lang([".char edit", ".ادیت کاراکتر"])
-    async def edit_char(event):
-        parts = event.raw_text.split(maxsplit=3)
-        if len(parts) < 4:
-            return await edit_auto(event, "Usage: .char edit name prompt")
-
-        name = parts[2]
-        prompt = parts[3]
-        chars.edit(event.sender_id, name, prompt)
-        await edit_auto(event, "Character updated")
-
-    # ================= SELECT CHARACTER =================
-    @client.on(events.NewMessage)
-    @multi_lang([".char use", ".کاراکتر"])
-    async def use_char(event):
-        name = event.raw_text.split(maxsplit=1)[1]
-
-        set_active_character(event.chat_id, name)
-
-        await reply_auto(event, f"Active character: {name}")
 
 #════════════════════════
 
