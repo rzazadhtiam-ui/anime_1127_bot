@@ -329,7 +329,7 @@ async def ask_ai(prompt: str):
 
         async with aiohttp.ClientSession() as s:
             async with s.post(
-                "https://api.groq.com/openai/v1/chat/completions",
+                "https://api.x.ai/v1/responses",
                 headers={
                     "Authorization": f"Bearer {OPENAI_KEY}",
                     "Content-Type": "application/json"
