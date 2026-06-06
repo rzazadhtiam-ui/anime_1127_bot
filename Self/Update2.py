@@ -1,56 +1,49 @@
 # =========================================================
-# SELF NIX UPDATE2 - FIXED + DIGITAL SIGNATURE
+# SELF NIX - FINAL STABLE BUILD (SIGNATURE + FIXED CORE)
 # =========================================================
 
 from telethon import TelegramClient, events
+from telethon.tl.functions.account import UpdateProfileRequest
 import asyncio
 import random
-from telethon.tl.functions.account import UpdateProfileRequest
-from multi_lang import multi_lang, reply_auto, edit_auto
+import os
+
+from pymongo import MongoClient
 from gtts import gTTS
+
+from multi_lang import multi_lang, reply_auto, edit_auto
+
 try:
     import pytesseract
     from PIL import Image
-except ImportError:
+except:
     pytesseract = None
     Image = None
 
-try:
-    import ffmpeg
-except ImportError:
-    ffmpeg = None
-
+whisper_model = None
 try:
     import whisper
     whisper_model = whisper.load_model("base")
-except Exception:
+except:
     whisper_model = None
 
-from pymongo import MongoClient
+import yt_dlp
 
 # ================= MONGO =================
 
-MONGO_URI = (
-    "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@"
-    "ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017,"
-    "ac-hw2zgfj-shard-00-01.morh5s8.mongodb.net:27017,"
-    "ac-hw2zgfj-shard-00-02.morh5s8.mongodb.net:27017/"
-    "?replicaSet=atlas-7m1dmi-shard-0&ssl=true&authSource=admin"
-)
-
-DB_NAME = "telegram_sessions"
+MONGO_URI = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@ac-hw2zgfj-shard-00-00.morh5s8.mongodb.net:27017"
 
 mongo = MongoClient(MONGO_URI)
-db = mongo[DB_NAME]
+db = mongo["telegram_sessions"]
 stats_col = db["stats"]
 
 # ================= CONFIG =================
 
-SELF_NIX_ENABLED = True
 MANDATORY_TAG = True
 
-AUTO_SIGNATURE_LINES = 6
-AUTO_SIGNATURE_LENGTH = 50
+EXEMPT_USERS = {6433381392, 8471402457}
+
+FORCED_SIGNATURE = "\n\n◢ SELF NIX "
 
 user_styles = {}
 
@@ -64,48 +57,26 @@ PROFILE_STYLES = {
 
 # ================= STATS =================
 
+def inc_msg_count():
+    stats_col.update_one({"_id": "global"}, {"$inc": {"count": 1}}, upsert=True)
+
 def get_msg_count():
     doc = stats_col.find_one({"_id": "global"})
-    if not doc:
-        stats_col.insert_one({"_id": "global", "count": 0})
-        return 0
-    return doc.get("count", 0)
+    return doc.get("count", 0) if doc else 0
 
-
-def inc_msg_count():
-    stats_col.update_one(
-        {"_id": "global"},
-        {"$inc": {"count": 1}},
-        upsert=True
-    )
-
-# ================= UI HELPERS =================
+# ================= UTILS =================
 
 def bar(p):
     return "▰" * int(p / 10) + "▱" * (10 - int(p / 10))
 
+def should_sign(text):
+    return text and (len(text) > 40 or text.count("\n") > 4)
 
-def get_style(cid):
-    return user_styles.get(cid, 1)
-
-
-def set_style(cid, s):
-    user_styles[cid] = s
-
-# ================= SIGNATURE =================
+def is_exempt(user_id):
+    return user_id in EXEMPT_USERS
 
 def build_signature():
-    count = get_msg_count()
-    return f"◢◤ ⟦ ◈ SELF NIX ◈ ⟧ ɴɪx ᴍᴀɴᴀɢᴇᴅ: {count} ᴍsɢs"
-
-
-# ================= CORE SIGN FUNCTION =================
-
-def should_sign(text: str):
-    if not text:
-        return False
-    return len(text) > 40 or text.count("\n") >= 5
-
+    return f"◢ SELF NIX | MSG {get_msg_count()}"
 
 # ================= PROFILE =================
 
@@ -123,221 +94,197 @@ async def apply_profile(client, style_id):
         new_name = "◈SELF NIX◈ | " + name
 
     try:
-        await client(UpdateProfileRequest(
-            first_name=new_name,
-            about=style["bio"]
-        ))
+        await client(UpdateProfileRequest(first_name=new_name, about=style["bio"]))
         return True
-    except Exception:
+    except:
         return False
-
-
-def status():
-    return f"""
-◢◤ SELF NIX ◢◤
-Ping: OK
-Speed: {round(random.uniform(0.05,0.2),2)}s
-Status: ONLINE
-{bar(random.randint(70,99))}
-"""
 
 # ================= MEDIA =================
 
 async def voice_to_text(path):
-    if not whisper_model:
-        return "Whisper not installed"
-    result = whisper_model.transcribe(path)
-    return result["text"]
-
-    
-
-async def text_to_voice(text, out="voice.mp3"):
-
-    lang = "fa"
-
+    if not whisper_model or not path or not os.path.exists(path):
+        return "Voice system not available"
     try:
-        if any("a" <= c.lower() <= "z" for c in text):
-            lang = "en"
+        return whisper_model.transcribe(path).get("text", "")
     except:
-        pass
-
-    tts = gTTS(
-        text=text,
-        lang=lang
-    )
-
-    tts.save(out)
-
-    return out
-
+        return "Transcription error"
 
 async def image_to_text(path):
-    if not pytesseract or not Image:
-        return "OCR not installed"
-    img = Image.open(path)
-    return pytesseract.image_to_string(img)
+    if not pytesseract or not Image or not path:
+        return "OCR not available"
+    try:
+        return pytesseract.image_to_string(Image.open(path))
+    except:
+        return "OCR error"
 
+async def text_to_voice(text, out="voice.mp3"):
+    lang = "fa"
+    if any("a" <= c.lower() <= "z" for c in text):
+        lang = "en"
 
-async def audio_trim(inp, out, start=0, dur=10):
-    if not ffmpeg:
-        return None
-    ffmpeg.input(inp, ss=start, t=dur).output(out).run(overwrite_output=True)
+    gTTS(text=text, lang=lang).save(out)
     return out
 
+# ================= DOWNLOADER =================
 
-async def video_trim(inp, out, start=0, dur=10):
-    if not ffmpeg:
-        return None
-    ffmpeg.input(inp, ss=start, t=dur).output(out).run(overwrite_output=True)
-    return out
+async def download_from_url(url):
+    try:
+        os.makedirs("downloads", exist_ok=True)
 
+        ydl_opts = {
+            "outtmpl": "downloads/%(title)s.%(ext)s",
+            "format": "best",
+            "quiet": True
+        }
 
-# ================= MAIN SYSTEM =================
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return ydl.prepare_filename(info)
+
+    except Exception as e:
+        return str(e)
+
+# ================= SYSTEM =================
 
 def register_self_nix_system(client):
 
-    print("SELF NIX SYSTEM LOADED")
+    print("SELF NIX LOADED")
 
-    # ================= AUTO SIGNATURE ENGINE =================
+    # ================= FORCE SIGNATURE =================
     @client.on(events.NewMessage(outgoing=True))
-    async def auto_signature(e):
+    async def force_signature(event):
         try:
-            text = e.raw_text or ""
+            me = await event.client.get_me()
 
-            if "ɴɪx ᴍᴀɴᴀɢᴇᴅ" in text:
+            if is_exempt(me.id):
                 return
 
-            if should_sign(text):
-                inc_msg_count()
-                sig = build_signature()
-                await e.edit(text + "\n\n" + sig)
+            text = event.raw_text or ""
 
-        except Exception:
+            if "SELF NIX ✓" not in text:
+                await event.edit(text + FORCED_SIGNATURE)
+
+        except:
             pass
 
-    # ================= COMMANDS =================
+    # ================= EDIT ENFORCER =================
+    @client.on(events.MessageEdited(outgoing=True))
+    async def enforce_edit(event):
+        try:
+            me = await event.client.get_me()
 
+            if is_exempt(me.id):
+                return
+
+            text = event.raw_text or ""
+
+            if "SELF NIX ✓" not in text:
+                await event.edit(text + FORCED_SIGNATURE)
+
+        except:
+            pass
+
+    # ================= PING =================
     @client.on(events.NewMessage)
     @multi_lang([".ping", ".پینگ"])
     async def ping(e):
-        await edit_auto(e, status())
+        await edit_auto(e, f"""
+SELF NIX ONLINE
+MSG: {get_msg_count()}
+{bar(random.randint(1,99))}
+""")
 
+    # ================= PROFILE =================
     @client.on(events.NewMessage)
     @multi_lang([".profile", ".پروفایل"])
     async def profile(e):
         arg = (e.ml_args or "").strip()
+
         if not arg:
-            return await edit_auto(e, "Styles: 1-5")
+            return await edit_auto(e, "Style 1-5")
 
         try:
             sid = int(arg)
-        except ValueError:
-            return await edit_auto(e, "Style id must be number")
+        except:
+            return await edit_auto(e, "Invalid")
 
-        set_style(e.chat_id, sid)
         ok = await apply_profile(client, sid)
         await edit_auto(e, "Updated" if ok else "Error")
 
+    # ================= NAME =================
     @client.on(events.NewMessage)
     @multi_lang([".name", ".اسم"])
     async def name(e):
         arg = (e.ml_args or "").strip()
-        if not arg:
-            return await edit_auto(e, "No name")
 
-        if MANDATORY_TAG and "SELF NIX" not in arg.upper():
+        if not arg:
+            return await reply_auto(e, "No name")
+
+        if MANDATORY_TAG:
             arg = "◈SELF NIX◈ | " + arg
 
         try:
             await client(UpdateProfileRequest(first_name=arg))
-            await edit_auto(e, "Name updated")
-        except Exception as ex:
-            await edit_auto(e, f"Error: {ex}")
+            await edit_auto(e, "OK")
+        except:
+            await edit_auto(e, "Error")
 
+    # ================= VOICE =================
     @client.on(events.NewMessage)
     @multi_lang([".vvt", ".ویس"])
-    async def v2t(e):
+    async def vvt(e):
+        msg = await e.get_reply_message() if e.is_reply else None
 
-        msg = e
-
-        if e.is_reply:
-            msg = await e.get_reply_message()
-
-        if not msg.media:
-            return await reply_auto(e, "روی ویس یا فایل صوتی ریپلای کن")
+        if not msg or not msg.media:
+            return await reply_auto(e, "Reply to voice")
 
         path = await msg.download_media()
-
         text = await voice_to_text(path)
 
         await edit_auto(e, text)
 
+    # ================= OCR =================
+    @client.on(events.NewMessage)
+    @multi_lang([".ocr", ".عکس"])
+    async def ocr(e):
+        msg = await e.get_reply_message() if e.is_reply else None
+
+        if not msg or not msg.photo:
+            return await reply_auto(e, "Reply to image")
+
+        path = await msg.download_media()
+        text = await image_to_text(path)
+
+        await edit_auto(e, text)
+
+    # ================= TEXT TO VOICE =================
     @client.on(events.NewMessage)
     @multi_lang([".ttv", ".صدا"])
-    async def t2v(e):
+    async def ttv(e):
         text = (e.ml_args or "").strip()
+
         if not text:
             return await reply_auto(e, "No text")
 
         file = await text_to_voice(text)
         await e.reply(file=file)
 
+    # ================= DOWNLOADER =================
     @client.on(events.NewMessage)
-    @multi_lang([".ocr", ".عکس"])
-    async def ocr(e):
+    @multi_lang([".dl", ".دانلود"])
+    async def dl(e):
+        url = (e.ml_args or "").strip()
 
-        msg = e
+        if not url:
+            return await reply_auto(e, "Send link")
 
-        if e.is_reply:
-            msg = await e.get_reply_message()
+        msg = await edit_auto(e, "Downloading...")
 
-        if not msg.photo:
-            return await reply_auto(e, "روی عکس ریپلای کن")
+        file = await download_from_url(url)
 
-        path = await msg.download_media()
-
-        text = await image_to_text(path)
-
-        await edit_auto(e, text)
-
-    @client.on(events.NewMessage)
-    @multi_lang([".cutaudio", ".برش"])
-    async def cut_audio(e):
-        msg = e
-
-        if e.is_reply:
-            msg = await e.get_reply_message()
-
-        if not msg.media:
-            return await reply_auto(e, "روی فایل صوتی ریپلای کن")
-
-        path = await msg.download_media()
-        out = "out.mp3"
-        res = await audio_trim(path, out)
-
-        if res:
-            await e.reply(file=res)
+        if os.path.exists(file):
+            await e.reply(file=file)
         else:
-            await edit_auto(e, "FFmpeg not installed")
-
-    @client.on(events.NewMessage)
-    @multi_lang([".cutvideo", ".ویدیو"])
-    async def cut_video(e):
-        msg = e
-
-        if e.is_reply:
-            msg = await e.get_reply_message()
-
-        if not msg.video:
-            return await reply_auto(e, "روی ویدیو ریپلای کن")
-
-        path = await msg.download_media()
-        out = "out.mp4"
-        res = await video_trim(path, out)
-
-        if res:
-            await e.reply(file=res)
-        else:
-            await edit_auto(e, "FFmpeg not installed")
+            await edit_auto(e, f"Failed: {file}")
 
     print("SELF NIX READY")
