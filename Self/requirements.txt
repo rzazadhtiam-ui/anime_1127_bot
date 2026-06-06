@@ -1,3 +1,4 @@
+python-3.11.11
 telethon
 pymongo
 aiohttp
