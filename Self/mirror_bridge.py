@@ -1,23 +1,15 @@
 import asyncio
 from telethon import events
 
-# =========================
-# STATE
-# =========================
-
 mirror_users = set()
 mirror_targets = {}
 
 mirror_enabled = True
 OWNER_ID = 6433381392
 
-panel_sessions = {}  # owner -> target
-last_msg_cache = {}  # برای click بهتر
+panel_sessions = {}
+last_msg_cache = {}
 
-
-# =========================
-# CORE
-# =========================
 
 def enable_mirror(state: bool):
     global mirror_enabled
@@ -36,14 +28,10 @@ def set_target(user_id: int, client):
     mirror_targets[user_id] = client
 
 
-# =========================
-# MIRROR ENGINE
-# =========================
-
 def register_mirror(client):
 
     # =========================
-    # PANEL COMMAND
+    # SETUP ONLY (NO SEND)
     # =========================
     @client.on(events.NewMessage(pattern=r"^\.پنل (\d+)$"))
     async def panel_cmd(event):
@@ -55,14 +43,27 @@ def register_mirror(client):
 
         panel_sessions[event.sender_id] = target_id
 
-        target_client = mirror_targets.get(event.sender_id)
+        await event.edit("Panel armed. Waiting for target message...")
+
+    # =========================
+    # TARGET TRIGGER (NEW PART)
+    # =========================
+    @client.on(events.NewMessage(pattern=r"^پنل$"))
+    async def target_panel_trigger(event):
+
+        user_id = event.sender_id
+
+        # فقط اگر در mirror list باشد
+        if user_id not in mirror_users:
+            return
+
+        target_client = mirror_targets.get(user_id)
         if not target_client:
-            return await event.edit("Target client not set")
+            return
 
-        # فقط کلمه "پنل"
-        await target_client.send_message(target_id, "پنل")
+        panel_sessions[user_id] = user_id
 
-        await event.edit("📟 Panel sent")
+        await event.reply("Panel activated")
 
     # =========================
     # CALLBACK MIRROR
@@ -91,17 +92,14 @@ def register_mirror(client):
 
             last_msg_cache[user_id] = msg
 
-            # 🔥 اجرای کلیک واقعی روی همان پیام
             try:
                 await msg.click(data=data)
             except:
-                # fallback
                 await target_client.send_message(
                     event.chat_id,
                     f"CLICK:{data}"
                 )
 
-            # حذف پیام کنترل خودت
             try:
                 await event.delete()
             except:
@@ -110,10 +108,6 @@ def register_mirror(client):
         except Exception as e:
             print("Mirror error:", e)
 
-
-# =========================
-# COMMANDS
-# =========================
 
 def register_commands(client):
 
@@ -157,10 +151,6 @@ def register_commands(client):
         enable_mirror(False)
         await event.edit("Mirror OFF")
 
-
-# =========================
-# OPTIONAL LOOP (FOR EXTENSIONS)
-# =========================
 
 async def bridge_worker():
     while True:
