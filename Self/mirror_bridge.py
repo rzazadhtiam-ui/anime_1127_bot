@@ -1,16 +1,29 @@
 import asyncio
 from telethon import events
 
-mirror_users = set()
-mirror_targets = {}
-
-mirror_enabled = True
+# =========================
+# CONFIG
+# =========================
 OWNER_ID = 6433381392
 
-panel_sessions = {}
+mirror_enabled = True
+
+# user_id -> True (allowed users)
+mirror_users = set()
+
+# user_id -> Telethon client (target account session)
+mirror_clients = {}
+
+# sender_id -> target_id
+active_targets = {}
+
+# cache last message per user
 last_msg_cache = {}
 
 
+# =========================
+# CORE CONTROL
+# =========================
 def enable_mirror(state: bool):
     global mirror_enabled
     mirror_enabled = state
@@ -24,49 +37,63 @@ def remove_user(user_id: int):
     mirror_users.discard(user_id)
 
 
-def set_target(user_id: int, client):
-    mirror_targets[user_id] = client
+def set_client(user_id: int, client):
+    mirror_clients[user_id] = client
 
 
-def register_mirror(client):
+def set_target(user_id: int, target_id: int):
+    active_targets[user_id] = target_id
+
+
+def get_target_client(user_id: int):
+    target_id = active_targets.get(user_id)
+    if not target_id:
+        return None
+    return mirror_clients.get(target_id)
+
+
+# =========================
+# MAIN REGISTRATION
+# =========================
+def register_mirror(client, client_id: int):
 
     # =========================
-    # SETUP ONLY (NO SEND)
+    # PANEL COMMAND (SEND TO TARGET)
     # =========================
     @client.on(events.NewMessage(pattern=r"^\.پنل (\d+)$"))
     async def panel_cmd(event):
 
         if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
+            return await event.reply("No access")
 
         target_id = int(event.pattern_match.group(1))
 
-        panel_sessions[event.sender_id] = target_id
+        target_client = mirror_clients.get(target_id)
+        if not target_client:
+            return await event.reply("Target client not found")
 
-        await event.edit("Panel armed. Waiting for target message...")
+        set_target(event.sender_id, target_id)
+
+        await target_client.send_message("me", "پنل")
+        await event.reply("Panel sent to target")
 
     # =========================
-    # TARGET TRIGGER (NEW PART)
+    # MANUAL TRIGGER (FROM TARGET SIDE)
     # =========================
     @client.on(events.NewMessage(pattern=r"^پنل$"))
-    async def target_panel_trigger(event):
+    async def panel_trigger(event):
 
-        user_id = event.sender_id
-
-        # فقط اگر در mirror list باشد
-        if user_id not in mirror_users:
+        if event.sender_id not in mirror_users:
             return
 
-        target_client = mirror_targets.get(user_id)
+        target_client = get_target_client(event.sender_id)
         if not target_client:
             return
 
-        panel_sessions[user_id] = user_id
-
-        await event.reply("Panel activated")
+        await event.reply("Panel active")
 
     # =========================
-    # CALLBACK MIRROR
+    # CALLBACK HANDLER (FIXED CLICK)
     # =========================
     @client.on(events.CallbackQuery)
     async def callback_handler(event):
@@ -79,79 +106,62 @@ def register_mirror(client):
         if user_id not in mirror_users:
             return
 
-        target_client = mirror_targets.get(user_id)
-        if not target_client:
-            return
-
         try:
-            data = event.data.decode()
-
             msg = await event.get_message()
             if not msg:
                 return
 
             last_msg_cache[user_id] = msg
 
-            try:
-                await msg.click(data=data)
-            except:
-                await target_client.send_message(
-                    event.chat_id,
-                    f"CLICK:{data}"
-                )
-
-            try:
-                await event.delete()
-            except:
-                pass
+            # ✅ correct Telethon click
+            await event.answer()
+            await msg.click()
 
         except Exception as e:
-            print("Mirror error:", e)
+            print("Callback error:", e)
 
 
+# =========================
+# ADMIN COMMANDS
+# =========================
 def register_commands(client):
 
     @client.on(events.NewMessage(pattern=r"^\.افزودن کاربر (\d+)$"))
     async def add_cmd(event):
         if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
+            return await event.reply("No access")
 
         add_user(int(event.pattern_match.group(1)))
-        await event.edit("User added")
+        await event.reply("User added")
 
     @client.on(events.NewMessage(pattern=r"^\.حذف کاربر (\d+)$"))
     async def remove_cmd(event):
         if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
+            return await event.reply("No access")
 
         remove_user(int(event.pattern_match.group(1)))
-        await event.edit("User removed")
-
-    @client.on(events.NewMessage(pattern=r"^\.تعیین هدف (\d+)$"))
-    async def target_cmd(event):
-        if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
-
-        set_target(event.sender_id, client)
-        await event.edit("Target set")
+        await event.reply("User removed")
 
     @client.on(events.NewMessage(pattern=r"^\.میرور روشن$"))
     async def on_cmd(event):
         if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
+            return await event.reply("No access")
 
         enable_mirror(True)
-        await event.edit("Mirror ON")
+        await event.reply("Mirror ON")
 
     @client.on(events.NewMessage(pattern=r"^\.میرور خاموش$"))
     async def off_cmd(event):
         if event.sender_id != OWNER_ID:
-            return await event.edit("No access")
+            return await event.reply("No access")
 
         enable_mirror(False)
-        await event.edit("Mirror OFF")
+        await event.reply("Mirror OFF")
 
 
+# =========================
+# BACKGROUND LOOP (optional)
+# =========================
 async def bridge_worker():
     while True:
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(1)
