@@ -169,21 +169,6 @@ async def is_admin(client, chat):
         pass
     return False
 
-async def delete_fast(client, ids):
-    deleted = 0
-    for i in range(0, len(ids), 100):
-        try:
-            await client(DeleteMessagesRequest(
-                id=ids[i:i + 100],
-                revoke=True
-            ))
-            deleted += len(ids[i:i + 100])
-        except MessageDeleteForbiddenError:
-            pass
-        except:
-            pass
-        await asyncio.sleep(0.05)
-    return deleted
 
 
 async def can_delete_all(client, chat_id):
@@ -204,6 +189,76 @@ async def delete_fast(client, chat_id, ids):
             await client.delete_messages(chat_id, ids[i:i+100])
     except:
         pass
+        
+        
+last_id = None
+
+async def delete_batch(client, chat_id, ids):
+    for i in range(0, len(ids), 100):
+        try:
+            await client.delete_messages(chat_id, ids[i:i+100])
+        except:
+            pass
+
+async def bulk_delete(client, event, limit=None):
+
+    me = await client.get_me()
+    chat_id = event.chat_id
+
+    is_private = event.is_private
+    can_full = await can_delete_all(client, chat_id)
+
+    deleted = 0
+    last_id = None
+
+    while True:
+
+        buffer = []
+
+        async for msg in client.iter_messages(
+            chat_id,
+            limit=2000,
+            offset_id=last_id
+        ):
+
+            if msg.id == event.id:
+                continue
+
+            # ================= PV MODE =================
+            if is_private:
+                if msg.sender_id != me.id:
+                    continue
+
+            # ================= GROUP MODE =================
+            else:
+                if not can_full and msg.sender_id != me.id:
+                    continue
+
+            buffer.append(msg.id)
+
+            if len(buffer) >= 100:
+                await delete_batch(client, chat_id, buffer)
+                deleted += len(buffer)
+                buffer.clear()
+
+                if limit and deleted >= limit:
+                    return deleted
+
+        if not buffer:
+            break
+
+        last_id = buffer[-1]
+
+        await delete_batch(client, chat_id, buffer)
+        deleted += len(buffer)
+
+        if limit and deleted >= limit:
+            break
+
+        await asyncio.sleep(0.2)
+
+    return deleted
+
 
 # ===================== ماژول اصلی =====================
 def self_tools(client):
@@ -294,45 +349,12 @@ def self_tools(client):
 
         await edit_auto(event, "⏳ در حال حذف...")
 
-        me = await client.get_me()
-        is_private = event.is_private
-        can_full = await can_delete_all(client, event.chat_id)
-
-        collected = []
-        deleted = 0
-
-        async for msg in client.iter_messages(event.chat_id, limit=2000):
-
-            if msg.id == event.id:
-                continue
-
-        # PV → فقط پیام خودت
-            if is_private:
-                if msg.sender_id != me.id:
-                    continue
-
-        # Group → اگر ادمین نیستی محدود
-            else:
-                if not can_full and msg.sender_id != me.id:
-                    continue
-    
-            collected.append(msg.id)
-
-            if len(collected) >= 100:
-                await delete_fast(client, event.chat_id, collected)
-                deleted += len(collected)
-                collected.clear()
-
-            if deleted >= limit:
-               break
-
-        if collected:
-            await delete_fast(client, event.chat_id, collected)
-            deleted += len(collected)
+        deleted = await bulk_delete(client, event, limit)
 
         await edit_auto(event, f"✅ حذف شد: {deleted}")
 
-    # ===================== DELETE ALL =====================
+
+
     @client.on(events.NewMessage)
     @multi_lang([".حذف همه", ".delete all"])
     async def delete_all(event):
@@ -342,34 +364,6 @@ def self_tools(client):
 
         await edit_auto(event, "⏳ حذف کامل...")
 
-        me = await client.get_me()
-        is_private = event.is_private
-        can_full = await can_delete_all(client, event.chat_id)
-
-        collected = []
-        deleted = 0
-
-        async for msg in client.iter_messages(event.chat_id, limit=2000):
-
-            if msg.id == event.id:
-                continue
-
-            if is_private:
-                if msg.sender_id != me.id:
-                    continue
-            else:
-                if not can_full and msg.sender_id != me.id:
-                    continue
-
-            collected.append(msg.id)
-
-            if len(collected) >= 100:
-                await delete_fast(client, event.chat_id, collected)
-                deleted += len(collected)
-                collected.clear()
-    
-        if collected:
-            await delete_fast(client, event.chat_id, collected)
-            deleted += len(collected)
+        deleted = await bulk_delete(client, event)
 
         await edit_auto(event, f"✅ حذف کامل: {deleted}")
