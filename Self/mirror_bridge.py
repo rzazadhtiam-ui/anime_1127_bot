@@ -55,7 +55,7 @@ def get_target_client(user_id: int):
 # =========================
 # MAIN REGISTRATION
 # =========================
-def register_mirror(client, client_id: int):
+def register_mirror(client):
 
     # =========================
     # PANEL COMMAND (SEND TO TARGET)
