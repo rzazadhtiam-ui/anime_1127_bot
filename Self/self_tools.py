@@ -312,34 +312,35 @@ def self_tools(client):
         except:
             return await edit_auto(event, "❌ عدد معتبر نیست")
 
-        await edit_auto(event, "⏳ در حال پاکسازی پیام‌ها ...")
+        msg = await edit_auto(event, "⏳ در حال پاکسازی پیام‌ها ...")
 
         revoke = event.is_private or await can_delete_all(client, event.chat_id)
 
         collected = []
         deleted_total = 0
 
-        async for msg in client.iter_messages(event.chat_id, limit=5000):
+        async for message in client.iter_messages(event.chat_id):
 
-            if msg.id == event.id:
+            if message.id == event.id:
                 continue
 
-            if not revoke and not msg.out:
+        # اگر ادمین نیستی فقط پیام‌های خودت
+            if not revoke and message.sender_id != (await client.get_me()).id:
                 continue
 
-            collected.append(msg.id)
-
+            collected.append(message.id)
+    
             if len(collected) >= 100:
-                deleted_total += await delete_fast(client, collected, revoke)
+                deleted_total += await delete_fast(client, event.chat_id, collected, revoke)
                 collected.clear()
 
             if deleted_total >= limit:
                 break
 
-        if collected and deleted_total < limit:
-            deleted_total += await delete_fast(client, collected, revoke)
+        if collected:
+            deleted_total += await delete_fast(client, event.chat_id, collected, revoke)
 
-        await edit_auto(event, f"✅ تعداد {deleted_total} پیام پاک شد")
+        await edit_auto(event, f"✅ حذف شد: {deleted_total}")
 
     # ===================== DELETE ALL =====================
     @client.on(events.NewMessage)
@@ -349,28 +350,28 @@ def self_tools(client):
         if not await owner_only(event):
             return
 
-        await edit_auto(event, "⏳ در حال پاکسازی تمامی پیام‌ها ...")
+        await edit_auto(event, "⏳ در حال پاکسازی کامل پیام‌ها ...")
 
         revoke = event.is_private or await can_delete_all(client, event.chat_id)
 
         collected = []
         deleted_total = 0
 
-        async for msg in client.iter_messages(event.chat_id, limit=5000):
+        async for message in client.iter_messages(event.chat_id):
 
-            if msg.id == event.id:
+            if message.id == event.id:
                 continue
 
-            if not revoke and not msg.out:
+            if not revoke and message.sender_id != (await client.get_me()).id:
                 continue
 
-            collected.append(msg.id)
+            collected.append(message.id)
 
             if len(collected) >= 100:
-                deleted_total += await delete_fast(client, collected, revoke)
-                collected.clear()
-
+                deleted_total += await delete_fast(client, event.chat_id, collected, revoke)
+            collected.clear()
+    
         if collected:
-            deleted_total += await delete_fast(client, collected, revoke)
+            deleted_total += await delete_fast(client, event.chat_id, collected, revoke)
 
-        await edit_auto(event, f"✅ تعداد {deleted_total} پیام پاک شد")
+        await edit_auto(event, f"✅ حذف کامل انجام شد: {deleted_total}")
