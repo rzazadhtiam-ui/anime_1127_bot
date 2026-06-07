@@ -4,42 +4,16 @@ import base64
 import requests
 from telethon import events
 
-#=========================
-
-#CONFIG
-
-#=========================
+# ================= CONFIG =================
 
 GROQ_API_KEY = "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"
 GITHUB_TOKEN = "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"
 
-#================================================================
+BASE_DIR = "Self"
 
-#🧠 AI CORE
+ADMIN_ID = 6433381392
 
-#================================================================
-
-def ai_router(text, files):
-    return ai_request(f"""
-تو یک AI Agent هستی.
-
-فایل های پروژه:
-
-{files}
-
-فقط یکی از خروجی های زیر را برگردان:
-
-READ_FILE:<path>
-SHOW_LINES:<path>
-GET_LINE:<path>:<number>
-ANALYZE_PROJECT
-ANSWER:<text>
-
-هیچ توضیح اضافه ننویس.
-
-درخواست کاربر:
-{text}
-""").strip()
+# ================= AI =================
 
 def ai_request(prompt: str):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -54,54 +28,9 @@ def ai_request(prompt: str):
             "model": "llama-3.1-8b-instant",
             "messages": [
                 {
-    "role": "system",
-    "content": """
-تو Self Nix AI هستی؛ یک دستیار حرفه‌ای برنامه‌نویسی، تحلیلگر کد و مدیر پروژه.
-
-قوانین:
-
-- همیشه به زبان فارسی پاسخ بده.
-- لحن طبیعی، روان، دوستانه و فنی داشته باش.
-- از ترجمه ماشینی، عبارت‌های عجیب و واژه‌های غیرطبیعی استفاده نکن.
-- پاسخ‌ها را واضح، دقیق و کاربردی بنویس.
-- اگر کاربر سلام یا گفت‌وگوی عادی داشت، طبیعی پاسخ بده.
-- اگر سؤال برنامه‌نویسی پرسید، پاسخ فنی و عملی ارائه کن.
-- اگر اطلاعات کافی نداری، حدس نزن و سؤال بپرس.
-- اگر مطمئن نیستی، این موضوع را اعلام کن.
-
-قوانین فایل و پروژه:
-
-- فقط از فایل‌ها و پوشه‌هایی که واقعاً در پروژه وجود دارند استفاده کن.
-- هرگز نام فایل، تابع، کلاس یا ماژول خیالی نساز.
-- اگر فایل موردنظر پیدا نشد، صریحاً بگو «فایل پیدا نشد».
-- اگر کاربر درخواست خواندن فایل کرد، ابتدا فایل را بررسی کن و سپس پاسخ بده.
-- اگر کاربر درخواست تعداد خطوط فایل را داد، تعداد خطوط را اعلام کن.
-- اگر کاربر درخواست مشاهده یک خط خاص را داد، فقط همان خط را نمایش بده.
-- اگر کاربر درخواست تحلیل فایل را داد، ساختار، مشکلات، باگ‌های احتمالی و پیشنهادهای بهبود را توضیح بده.
-- اگر کاربر درخواست تحلیل پروژه را داد، فایل‌های مهم، وابستگی‌ها، معماری و مشکلات احتمالی را بررسی کن.
-- اگر کاربر درخواست رفع باگ داد، علت باگ، محل احتمالی و راه‌حل را توضیح بده.
-- اگر کاربر درخواست بهبود کد داد، تغییرات کمینه، منطقی و امن پیشنهاد کن.
-- هرگز بدون درخواست کاربر فایل‌ها را تغییر نده.
-- هرگز اطلاعات ساختگی تولید نکن.
-
-تخصص‌ها:
-
-- Python
-- Telethon
-- Telegram UserBot
-- Telegram Bot
-- MongoDB
-- AsyncIO
-- APIs
-- GitHub
-- Software Architecture
-- Debugging
-
-هدف اصلی:
-
-کمک به توسعه، تحلیل، اشکال‌زدایی و مدیریت پروژه Self Nix با بیشترین دقت ممکن و ارائه پاسخ‌های فارسی، فنی و قابل اجرا.
-"""
-},
+                    "role": "system",
+                    "content": "You are Self Nix AI"
+                },
                 {"role": "user", "content": prompt}
             ]
         }
@@ -109,18 +38,47 @@ def ai_request(prompt: str):
 
     return res.json()["choices"][0]["message"]["content"]
 
-#================================================================
 
-#📁 LOCAL PROJECT ENGINE
+def ai_router(text, files):
+    return ai_request(f"""
+تو یک AI Agent برای مدیریت پروژه هستی.
 
-#================================================================
-def scan_files(base="Self"):
-    result = []
-    for root, _, files in os.walk(base):
-        for f in files:
-            if f.endswith(".py"):
-                result.append(os.path.join(root, f))
-    return result
+فایل ها:
+{files}
+
+فقط یکی از این خروجی ها:
+
+READ_FILE:<path>
+SHOW_LINES:<path>
+GET_LINE:<path>:<num>
+ANALYZE_PROJECT
+LIST_FILES
+PROJECT_TREE
+SEARCH:<keyword>
+
+CREATE_FILE:<path>
+DELETE_FILE:<path>
+WRITE_FILE:<path>
+APPEND_FILE:<path>
+RENAME_FILE:<old>:<new>
+REPLACE_FILE:<path>
+
+DEBUG_FILE:<path>
+ANSWER:<text>
+
+درخواست:
+{text}
+""").strip()
+
+# ================= FILE ENGINE =================
+
+def scan_files(base=BASE_DIR):
+    out = []
+    for r, _, f in os.walk(base):
+        for i in f:
+            if i.endswith(".py"):
+                out.append(os.path.join(r, i))
+    return out
 
 
 def read_file(path):
@@ -131,10 +89,45 @@ def read_file(path):
         return ""
 
 
-def extract_imports(code):
-    return list(set(
-        re.findall(r"^(?:import|from)\s+([\w\.]+)", code, re.M)
-    ))
+def write_file(path, content):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def append_file(path, content):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(content)
+
+
+def delete_file(path):
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def list_files():
+    return scan_files()
+
+
+def search_files(keyword):
+    res = []
+    for f in scan_files():
+        if keyword.lower() in f.lower():
+            res.append(f)
+    return res
+
+
+def resolve_path(path, base=BASE_DIR):
+    if os.path.exists(path):
+        return path
+
+    for r, _, files in os.walk(base):
+        for f in files:
+            full = os.path.join(r, f)
+            if f.lower() == path.lower():
+                return full
+            if full.lower().endswith(path.lower()):
+                return full
+    return None
 
 
 def get_lines(path):
@@ -145,82 +138,24 @@ def get_lines(path):
         return []
 
 
-def analyze_project(base="Self"):
-    files = scan_files(base)
-    imports = set()
-
-    for f in files:
-        content = read_file(f)
-        imports.update(extract_imports(content))
-
+def analyze_project():
+    files = scan_files()
     return {
         "files": len(files),
-        "imports": list(imports)
     }
 
-#================================================================
+# ================= DEBUG =================
 
-#🧬 GITHUB ENGINE
+def debug_file(path):
+    code = read_file(path)
+    return ai_request(f"""
+این فایل را دیباگ کن:
 
-#================================================================
+کد:
+{code}
+""")
 
-def gh_headers():
-    return {
-"Authorization": f"Bearer {GITHUB_TOKEN}",
-"Accept": "application/vnd.github+json"
-}
-
-def github_list():
-    return requests.get(
-"https://api.github.com/user/repos",
-    headers=gh_headers()
-    ).json()
-
-def github_create(name):
-    return requests.post(
-"https://api.github.com/user/repos",
-    headers=gh_headers(),
-    json={"name": name, "private": True}
-    ).json()
-
-def github_read(owner, repo, path):
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    return requests.get(url, headers=gh_headers()).json()
-
-def github_write(owner, repo, path, content):
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    encoded = base64.b64encode(content.encode()).decode()
-
-    return requests.put(  
-    url,  
-    headers=gh_headers(),  
-    json={  
-        "message": "auto update by AI agent",  
-        "content": encoded  
-    }  
-).json()
-
-#================================================================
-
-#🧠 INTENT DETECTOR (NO COMMANDS)
-
-#================================================================
-
-def find_file(name, base="Self"):
-    for root, _, files in os.walk(base):
-        for f in files:
-            if name.lower() in f.lower():
-                return os.path.join(root, f)
-    return None
-#================================================================
-
-#🤖 AUTOPILOT ENGINE (MAIN BRAIN)
-
-#================================================================
-
-from telethon import events
-
-ADMIN_ID = 6433381392
+# ================= CORE HANDLER =================
 
 def register_autopilot(client):
 
@@ -228,33 +163,24 @@ def register_autopilot(client):
     async def handler(event):
 
         me = await client.get_me()
-
         if event.chat_id != me.id:
             return
 
         text = event.raw_text.strip()
 
-        if not text.startswith(".tjm "):
+        if not text.startswith(".tjm"):
             return
 
-        text = text[5:].strip()
+        query = text[4:].strip()
 
-        files = scan_files("Self")
+        files = "\n".join(scan_files())
 
-        decision = ai_router(text, "\n".join(files)).strip()
+        decision = ai_router(query, files)
 
-        # ---------------- GET_LINE ----------------
+        # ========== GET LINE ==========
         if decision.startswith("GET_LINE:"):
-
-            parts = decision.split(":")
-
-            if len(parts) != 3:
-                await event.reply("فرمت اشتباه")
-                return
-
-            _, path, num = parts
-
-            path = resolve_path(path)  # ❌ این تابع الان نداری!
+            _, path, num = decision.split(":")
+            path = resolve_path(path)
 
             if not path:
                 await event.reply("فایل پیدا نشد")
@@ -262,15 +188,62 @@ def register_autopilot(client):
 
             try:
                 num = int(num)
-            except:
-                await event.reply("شماره خط اشتباه است")
-                return
-
-            lines = get_lines(path)
-
-            if 0 < num <= len(lines):
+                lines = get_lines(path)
                 await event.reply(lines[num - 1])
-            else:
-                await event.reply("خط وجود ندارد")
+            except:
+                await event.reply("خطا در خواندن خط")
+            return
 
+        # ========== READ ==========
+        if decision.startswith("READ_FILE:"):
+            path = resolve_path(decision.split(":")[1])
+            await event.reply(read_file(path)[:4000])
+            return
+
+        # ========== LIST ==========
+        if decision == "LIST_FILES":
+            await event.reply("\n".join(list_files())[:4000])
+            return
+
+        # ========== SEARCH ==========
+        if decision.startswith("SEARCH:"):
+            key = decision.split(":", 1)[1]
+            res = search_files(key)
+            await event.reply("\n".join(res)[:4000])
+            return
+
+        # ========== CREATE FILE ==========
+        if decision.startswith("CREATE_FILE:"):
+            path = decision.split(":", 1)[1]
+            write_file(path, "")
+            await event.reply("ساخته شد")
+            return
+
+        # ========== DELETE ==========
+        if decision.startswith("DELETE_FILE:"):
+            path = resolve_path(decision.split(":", 1)[1])
+            delete_file(path)
+            await event.reply("حذف شد")
+            return
+
+        # ========== WRITE ==========
+        if decision.startswith("WRITE_FILE:"):
+            try:
+                _, path, content = decision.split(":", 2)
+                write_file(path, content)
+                await event.reply("آپدیت شد")
+            except:
+                await event.reply("خطا در نوشتن")
+            return
+
+        # ========== DEBUG ==========
+        if decision.startswith("DEBUG_FILE:"):
+            path = resolve_path(decision.split(":")[1])
+            result = debug_file(path)
+            await event.reply(result[:4000])
+            return
+
+        # ========== ANSWER ==========
+        if decision.startswith("ANSWER:"):
+            await event.reply(decision[7:])
             return
