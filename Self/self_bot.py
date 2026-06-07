@@ -216,8 +216,8 @@ async def start_session(doc):
         self_tools(client)
         register_language_commands(client)
         register_self_AI(client)
-        register_mirror(client)
-        register_commands(client)
+        register_auto(client)
+        register_controller(client)
         register_autopilot(client)
         started_sessions.add(name)
         
