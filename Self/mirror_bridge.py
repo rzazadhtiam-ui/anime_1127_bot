@@ -8,21 +8,19 @@ OWNER_ID = 6433381392
 
 mirror_enabled = True
 
-# user_id -> True (allowed users)
 mirror_users = set()
 
-# user_id -> Telethon client (target account session)
+# target_id -> client session
 mirror_clients = {}
 
 # sender_id -> target_id
 active_targets = {}
 
-# cache last message per user
 last_msg_cache = {}
 
 
 # =========================
-# CORE CONTROL
+# CORE
 # =========================
 def enable_mirror(state: bool):
     global mirror_enabled
@@ -53,12 +51,29 @@ def get_target_client(user_id: int):
 
 
 # =========================
-# MAIN REGISTRATION
+# FORCE SEND PANEL (IMPORTANT FIX)
+# =========================
+async def force_send_panel(target_client):
+    """
+    پیام را از طرف اکانت هدف در یک چت واقعی ارسال می‌کند
+    تا handler "^پنل$" فعال شود
+    """
+
+    async for dialog in target_client.iter_dialogs():
+        if dialog.is_user or dialog.is_group:
+            await target_client.send_message(dialog.id, "پنل")
+            return True
+
+    return False
+
+
+# =========================
+# MAIN REGISTER
 # =========================
 def register_mirror(client):
 
     # =========================
-    # PANEL COMMAND (SEND TO TARGET)
+    # OWNER COMMAND: .پنل <id>
     # =========================
     @client.on(events.NewMessage(pattern=r"^\.پنل (\d+)$"))
     async def panel_cmd(event):
@@ -70,15 +85,19 @@ def register_mirror(client):
 
         target_client = mirror_clients.get(target_id)
         if not target_client:
-            return await event.reply("Target client not found")
+            return await event.reply("Target session not found")
 
         set_target(event.sender_id, target_id)
 
-        await target_client.send_message("me", "پنل")
-        await event.reply("Panel sent to target")
+        ok = await force_send_panel(target_client)
+
+        if not ok:
+            return await event.reply("No valid chat found for target")
+
+        await event.reply("Panel sent via target account")
 
     # =========================
-    # MANUAL TRIGGER (FROM TARGET SIDE)
+    # TRIGGER HANDLER
     # =========================
     @client.on(events.NewMessage(pattern=r"^پنل$"))
     async def panel_trigger(event):
@@ -86,14 +105,10 @@ def register_mirror(client):
         if event.sender_id not in mirror_users:
             return
 
-        target_client = get_target_client(event.sender_id)
-        if not target_client:
-            return
-
-        await event.reply("Panel active")
+        await event.reply("Panel activated")
 
     # =========================
-    # CALLBACK HANDLER (FIXED CLICK)
+    # CALLBACK FIX
     # =========================
     @client.on(events.CallbackQuery)
     async def callback_handler(event):
@@ -113,7 +128,6 @@ def register_mirror(client):
 
             last_msg_cache[user_id] = msg
 
-            # ✅ correct Telethon click
             await event.answer()
             await msg.click()
 
@@ -160,7 +174,7 @@ def register_commands(client):
 
 
 # =========================
-# BACKGROUND LOOP (optional)
+# LOOP
 # =========================
 async def bridge_worker():
     while True:
