@@ -18,6 +18,9 @@ from telethon.errors import MessageDeleteForbiddenError
 from collections import defaultdict, deque
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator
+import time
+from collections import defaultdict, deque
+
 # ===================== فونت‌ها =====================
 
 fonts_list = [
@@ -246,17 +249,26 @@ def self_tools(client):
         await edit_auto(event, result)
 
     # ===================== Anti Spam =====================
+
+    spam_db = defaultdict(lambda: deque())
+
+    WINDOW = 10        # بازه زمانی بررسی
+    LIMIT = 8         # تعداد مجاز پیام در WINDOW
+    CLEAN_AFTER = 30  # پاکسازی حافظه کاربران غیرفعال
+
+    last_seen = defaultdict(float)
+
     @client.on(events.NewMessage)
     async def anti_spam(event):
 
-        if not event.text:
+        if not event.raw_text:
             return
 
         # ignore commands
-        if event.text.startswith("."):
+        if event.raw_text.startswith("."):
             return
 
-        # ignore private chats
+        # ignore private
         if event.is_private:
             return
 
@@ -265,19 +277,30 @@ def self_tools(client):
 
         q = spam_db[uid]
         q.append(now)
+        last_seen[uid] = now
 
-        # remove old messages outside 3s window
-        while q and now - q[0] > 3:
+        # remove old timestamps
+        while q and now - q[0] > WINDOW:
             q.popleft()
 
-        # threshold check
-        if len(q) >= 6:
+        # 🔥 spam detected
+        if len(q) >= LIMIT:
+
             try:
                 await event.delete()
             except:
                 pass
 
             q.clear()
+
+            # optional: slow down user by adding fake delay memory
+            spam_db[uid].append(now + 10)
+
+        # 🧹 memory cleanup (prevent RAM leak)
+        for k in list(last_seen.keys()):
+            if now - last_seen[k] > CLEAN_AFTER:
+                spam_db.pop(k, None)
+                last_seen.pop(k, None)
 
     # ===================== DELETE N =====================
     @client.on(events.NewMessage)
@@ -288,47 +311,56 @@ def self_tools(client):
             return
 
         try:
-            limit = int(re.findall(r"\d+", event.raw_text)[0])
+            limit = int(event.raw_text.split()[1])
         except:
             return await edit_auto(event, "❌ عدد نامعتبر")
 
-        await edit_auto(event, "⏳ در حال حذف...")
+        await edit_auto(event, "🧹 در حال حذف...")
 
         me = await client.get_me()
+        chat_id = event.chat_id
         is_private = event.is_private
-        can_full = await can_delete_all(client, event.chat_id)
+        full_admin = await is_full_admin(client, chat_id)
 
         collected = []
-        deleted = 0
 
-        async for msg in client.iter_messages(event.chat_id, limit=2000):
+    # 🔥 فقط تا جایی جمع کن که N لازم است
+        async for msg in client.iter_messages(chat_id, limit=5000):
 
             if msg.id == event.id:
                 continue
 
-        # PV → فقط پیام خودت
+        # PV → فقط پیام‌های خودت
             if is_private:
                 if msg.sender_id != me.id:
                     continue
 
         # Group → اگر ادمین نیستی محدود
             else:
-                if not can_full and msg.sender_id != me.id:
+                if not full_admin and msg.sender_id != me.id:
                     continue
-    
+
             collected.append(msg.id)
 
-            if len(collected) >= 100:
-                await delete_fast(client, event.chat_id, collected)
-                deleted += len(collected)
-                collected.clear()
+            if len(collected) >= limit:
+                break
 
-            if deleted >= limit:
-               break
+        deleted = 0
 
-        if collected:
-            await delete_fast(client, event.chat_id, collected)
-            deleted += len(collected)
+    # 🔥 chunk 1999 + pause 5s بین هر chunk
+        for i in range(0, len(collected), 1999):
+
+            chunk = collected[i:i+1999]
+
+            try:
+                await client.delete_messages(chat_id, chunk, revoke=True)
+                deleted += len(chunk)
+            except:
+                pass
+
+        # 🔥 اگر chunk بعدی وجود دارد → استپ 5 ثانیه
+            if i + 1999 < len(collected):
+                await asyncio.sleep(5)
 
         await edit_auto(event, f"✅ حذف شد: {deleted}")
 
@@ -340,16 +372,16 @@ def self_tools(client):
         if not await owner_only(event):
             return
 
-        await edit_auto(event, "⏳ حذف کامل...")
+        await edit_auto(event, "🧹 حذف کامل...")
 
         me = await client.get_me()
+        chat_id = event.chat_id
         is_private = event.is_private
-        can_full = await can_delete_all(client, event.chat_id)
+        full_admin = await is_full_admin(client, chat_id)
 
         collected = []
-        deleted = 0
 
-        async for msg in client.iter_messages(event.chat_id, limit=2000):
+        async for msg in client.iter_messages(chat_id, limit=5000):
 
             if msg.id == event.id:
                 continue
@@ -358,18 +390,24 @@ def self_tools(client):
                 if msg.sender_id != me.id:
                     continue
             else:
-                if not can_full and msg.sender_id != me.id:
+                if not full_admin and msg.sender_id != me.id:
                     continue
 
             collected.append(msg.id)
 
-            if len(collected) >= 100:
-                await delete_fast(client, event.chat_id, collected)
-                deleted += len(collected)
-                collected.clear()
-    
-        if collected:
-            await delete_fast(client, event.chat_id, collected)
-            deleted += len(collected)
+        deleted = 0
 
-        await edit_auto(event, f"✅ حذف کامل: {deleted}")
+        for i in range(0, len(collected), 1999):
+
+            chunk = collected[i:i+1999]
+
+            try:
+                await client.delete_messages(chat_id, chunk, revoke=True)
+                deleted += len(chunk)
+            except:
+                pass
+
+            if i + 1999 < len(collected):
+                await asyncio.sleep(5)
+
+        await edit_auto(event, f"✅ کامل حذف شد: {deleted}")
