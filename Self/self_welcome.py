@@ -399,7 +399,7 @@ def register_group_handlers(client, owner_id):
 
     # فعال کردن خوش‌آمد
     @client.on(events.NewMessage)
-    @multi_lang([".خوشامد روشن", ".welcome on"])
+    @multi_lang([".خوشامدگویی روشن", ".welcome on"])
     async def welcome_on(event):
         if not owner_only(event, owner_id):
             return
@@ -412,7 +412,7 @@ def register_group_handlers(client, owner_id):
 
     # غیرفعال کردن خوش‌آمد
     @client.on(events.NewMessage)
-    @multi_lang([".خوشامد خاموش", ".welcome off"])
+    @multi_lang([".خوشامدگویی خاموش", ".welcome off"])
     async def welcome_off(event):
         if not owner_only(event, owner_id):
             return
@@ -425,7 +425,7 @@ def register_group_handlers(client, owner_id):
 
     # تنظیم متن خوش‌آمد
     @client.on(events.NewMessage)
-    @multi_lang([".تنظیم خوشامد", ".set welcome"])
+    @multi_lang([".متن خوشامدگویی", ".set welcome"])
     async def set_welcome(event):
         if not owner_only(event, owner_id):
             return
@@ -441,7 +441,7 @@ def register_group_handlers(client, owner_id):
 
     # مشاهده وضعیت خوش‌آمد
     @client.on(events.NewMessage)
-    @multi_lang([".وضعیت خوشامد", ".welcome status"])
+    @multi_lang([".نمایش خوشامدگویی", ".welcome status"])
     async def welcome_status(event):
         if not owner_only(event, owner_id):
             return
