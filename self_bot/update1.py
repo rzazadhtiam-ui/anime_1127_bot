@@ -188,7 +188,7 @@ class PanelManager:
             )
 
         # ===== INLINE =====
-        @self.bot.inline_handler(func=lambda q: True)
+        @self.bot.inline_handler(func=lambda q: q.query and q.query.strip() == "self-nix-panel-tjm")
         def inline_handler(q):
 
             uid = q.from_user.id
