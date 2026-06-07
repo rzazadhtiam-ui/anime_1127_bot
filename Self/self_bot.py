@@ -21,7 +21,7 @@ from Update1 import register_update1
 from multi_lang import register_language_commands
 from Update2 import register_self_nix_system
 from self_AI import register_self_AI
-from mirror_bridge import register_mirror, register_commands
+from mirror_bridge import register_controller, register_auto
 from full_ai_autopilot import register_autopilot
 # ------------------------------------------------
 # PATH FIX
