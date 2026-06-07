@@ -161,11 +161,11 @@ def register_update1(client):
     # دستور راهنما اینلاین
     # =========================
     @client.on(events.NewMessage)
-    @multi_lang([".راهنما", ".Guide"])
+    @multi_lang([".راهنما", ".Guide", ".پنل", ".panel", "پنل", "panel", "راهنما", "Guide"])
     async def help_inline(event):
 
         try:
-            results = await client.inline_query("self_nix_bot", "پنل سلف")
+            results = await client.inline_query("self_nix_bot", "self-nix-panel-tjm")
 
             if not results:
                 return await reply_auto(event, "❌ نتیجه‌ای پیدا نشد")
