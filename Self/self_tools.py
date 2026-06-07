@@ -193,24 +193,37 @@ async def can_delete_all(client, chat_id):
 
         return isinstance(
             p.participant,
-            (ChannelParticipantAdmin, ChannelParticipantCreator)
+            (
+                ChannelParticipantAdmin,
+                ChannelParticipantCreator,
+                ChannelParticipantEditor
+            )
         )
     except:
         return False
 
+async def delete_fast(client, chat_id, msg_ids, revoke=False):
+    deleted = 0
 
-async def fast_delete(client, chat_id, msg_ids, revoke=False):
-    try:
-        for i in range(0, len(msg_ids), 100):
+    for i in range(0, len(msg_ids), 100):
+        batch = msg_ids[i:i + 100]
+
+        try:
             await client(DeleteMessagesRequest(
-                id=msg_ids[i:i+100],
+                id=batch,
                 revoke=revoke
             ))
-    except MessageDeleteForbiddenError:
-        pass
-    except:
-        pass
+            deleted += len(batch)
 
+        except MessageDeleteForbiddenError:
+            # دسترسی نداری
+            break
+
+        except Exception as e:
+            # مهم: سکوت نکن
+            print(f"Delete error: {e}")
+
+    return deleted
 
 # ===================== ماژول اصلی =====================
 def self_tools(client):
