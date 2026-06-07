@@ -233,7 +233,7 @@ def register_autopilot(client):
             return
 
         text = event.raw_text.strip()
-        
+
         if not text.startswith(".tjm "):
             return
 
@@ -241,50 +241,36 @@ def register_autopilot(client):
 
         files = scan_files("Self")
 
-        decision = ai_router(text, "\n".join(files))
+        decision = ai_router(text, "\n".join(files)).strip()
 
-        decision = decision.strip()
-    # ---------------- ANALYZE PROJECT ----------------  
-        if decision.startswith("READ_FILE:"):
-            path = decision.split(":", 1)[1].strip()
-
-        if not os.path.exists(path):
-            path = find_file(path)
-
-        if not path:
-            await event.reply("فایل پیدا نشد")
-            return
-
-
-        if decision.startswith("SHOW_LINES:"):
-            path = decision.split(":", 1)[1].strip()
-
-            lines = get_lines(path)
-
-            await event.reply(str(len(lines)))
-            return
-
-
+        # ---------------- GET_LINE ----------------
         if decision.startswith("GET_LINE:"):
-            _, path, num = decision.split(":")
-            num = int(num)
+
+            parts = decision.split(":")
+
+            if len(parts) != 3:
+                await event.reply("فرمت اشتباه")
+                return
+
+            _, path, num = parts
+
+            path = resolve_path(path)  # ❌ این تابع الان نداری!
+
+            if not path:
+                await event.reply("فایل پیدا نشد")
+                return
+
+            try:
+                num = int(num)
+            except:
+                await event.reply("شماره خط اشتباه است")
+                return
 
             lines = get_lines(path)
 
-            if num <= len(lines):
+            if 0 < num <= len(lines):
                 await event.reply(lines[num - 1])
             else:
                 await event.reply("خط وجود ندارد")
 
-            return
-
-
-        if decision.startswith("ANALYZE_PROJECT"):
-            data = analyze_project("Self")
-            await event.reply(str(data))
-            return
-
-
-        if decision.startswith("ANSWER:"):
-            await event.reply(decision.replace("ANSWER:", "", 1))
             return
