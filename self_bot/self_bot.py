@@ -1098,6 +1098,75 @@ def open_support_menu(call):
         reply_markup=new_markup
     )
 
+
+
+
+
+import threading
+import time
+import requests
+
+URL = "https://self-bot-zva7.onrender.com"
+
+tasks = {}  # chat_id -> {"stop": Event, "thread": Thread}
+
+
+def ping_worker(chat_id, stop_event):
+    while not stop_event.is_set():
+        try:
+            r = requests.get(URL, timeout=10)
+            print(f"[PING] {r.status_code}")
+        except Exception as e:
+            print(f"[ERROR] {e}")
+
+        # هر 5 دقیقه
+        for _ in range(300):
+            if stop_event.is_set():
+                return
+            time.sleep(1)
+
+
+@bot.message_handler(commands=["ping_on"])
+def start_ping(message):
+    chat_id = message.chat.id
+
+    if chat_id in tasks:
+        bot.reply_to(message, "⚠️ قبلاً فعال شده")
+        return
+
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=ping_worker,
+        args=(chat_id, stop_event),
+        daemon=True
+    )
+
+    tasks[chat_id] = {
+        "stop": stop_event,
+        "thread": thread
+    }
+
+    thread.start()
+    bot.reply_to(message, "✅ شروع شد (هر ۵ دقیقه درخواست ارسال میشه)")
+
+
+@bot.message_handler(commands=["ping_off"])
+def stop_ping(message):
+    chat_id = message.chat.id
+
+    task = tasks.get(chat_id)
+    if not task:
+        bot.reply_to(message, "❌ چیزی فعال نیست")
+        return
+
+    task["stop"].set()
+    del tasks[chat_id]
+
+    bot.reply_to(message, "⛔️ متوقف شد")
+
+
+bot.infinity_polling()
+
   #===========================  
 app = Flask(__name__)
 
