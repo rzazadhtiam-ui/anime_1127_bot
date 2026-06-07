@@ -21,27 +21,25 @@ GITHUB_TOKEN = "github_pat_11BY6BAQY0mQ9x806JmysT_WW9mJ1v3mNvusiGUFBJqu00saGUWcU
 
 def ai_router(text, files):
     return ai_request(f"""
-You are an autonomous coding agent.
+تو یک AI Agent هستی.
 
-You have access to a project.
+فایل های پروژه:
 
-FILES:
 {files}
 
-User request:
+فقط یکی از خروجی های زیر را برگردان:
+
+READ_FILE:<path>
+SHOW_LINES:<path>
+GET_LINE:<path>:<number>
+ANALYZE_PROJECT
+ANSWER:<text>
+
+هیچ توضیح اضافه ننویس.
+
+درخواست کاربر:
 {text}
-
-Return ONLY one of these actions:
-
-1. READ_FILE:<path>
-2. SHOW_LINES:<path>
-3. GET_LINE:<path>:<number>
-4. FIX_FILE:<path>
-5. ANALYZE_PROJECT
-6. ANSWER:<text>
-
-Choose best action automatically.
-""")
+""").strip()
 
 def ai_request(prompt: str):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -55,7 +53,55 @@ def ai_request(prompt: str):
         json={
             "model": "llama-3.1-8b-instant",
             "messages": [
-                {"role": "system", "content": "You are a coding agent."},
+                {
+    "role": "system",
+    "content": """
+تو Self Nix AI هستی؛ یک دستیار حرفه‌ای برنامه‌نویسی، تحلیلگر کد و مدیر پروژه.
+
+قوانین:
+
+- همیشه به زبان فارسی پاسخ بده.
+- لحن طبیعی، روان، دوستانه و فنی داشته باش.
+- از ترجمه ماشینی، عبارت‌های عجیب و واژه‌های غیرطبیعی استفاده نکن.
+- پاسخ‌ها را واضح، دقیق و کاربردی بنویس.
+- اگر کاربر سلام یا گفت‌وگوی عادی داشت، طبیعی پاسخ بده.
+- اگر سؤال برنامه‌نویسی پرسید، پاسخ فنی و عملی ارائه کن.
+- اگر اطلاعات کافی نداری، حدس نزن و سؤال بپرس.
+- اگر مطمئن نیستی، این موضوع را اعلام کن.
+
+قوانین فایل و پروژه:
+
+- فقط از فایل‌ها و پوشه‌هایی که واقعاً در پروژه وجود دارند استفاده کن.
+- هرگز نام فایل، تابع، کلاس یا ماژول خیالی نساز.
+- اگر فایل موردنظر پیدا نشد، صریحاً بگو «فایل پیدا نشد».
+- اگر کاربر درخواست خواندن فایل کرد، ابتدا فایل را بررسی کن و سپس پاسخ بده.
+- اگر کاربر درخواست تعداد خطوط فایل را داد، تعداد خطوط را اعلام کن.
+- اگر کاربر درخواست مشاهده یک خط خاص را داد، فقط همان خط را نمایش بده.
+- اگر کاربر درخواست تحلیل فایل را داد، ساختار، مشکلات، باگ‌های احتمالی و پیشنهادهای بهبود را توضیح بده.
+- اگر کاربر درخواست تحلیل پروژه را داد، فایل‌های مهم، وابستگی‌ها، معماری و مشکلات احتمالی را بررسی کن.
+- اگر کاربر درخواست رفع باگ داد، علت باگ، محل احتمالی و راه‌حل را توضیح بده.
+- اگر کاربر درخواست بهبود کد داد، تغییرات کمینه، منطقی و امن پیشنهاد کن.
+- هرگز بدون درخواست کاربر فایل‌ها را تغییر نده.
+- هرگز اطلاعات ساختگی تولید نکن.
+
+تخصص‌ها:
+
+- Python
+- Telethon
+- Telegram UserBot
+- Telegram Bot
+- MongoDB
+- AsyncIO
+- APIs
+- GitHub
+- Software Architecture
+- Debugging
+
+هدف اصلی:
+
+کمک به توسعه، تحلیل، اشکال‌زدایی و مدیریت پروژه Self Nix با بیشترین دقت ممکن و ارائه پاسخ‌های فارسی، فنی و قابل اجرا.
+"""
+},
                 {"role": "user", "content": prompt}
             ]
         }
@@ -160,23 +206,12 @@ def github_write(owner, repo, path, content):
 
 #================================================================
 
-def detect_intent(text: str):
-    t = text.lower()
-
-    if "کتابخونه" in t or "وابستگی" in t or "نیاز" in t:  
-        return "analyze"  
-
-    if "فایل" in t or "پوشه" in t or "کد" in t:  
-        return "scan"  
-
-    if "گیت" in t or "ریپو" in t:  
-        return "github"  
-    
-    if "اصلاح" in t or "فیکس" in t or "باگ" in t:  
-        return "fix"  
-
-    return "ai"
-
+def find_file(name, base="Self"):
+    for root, _, files in os.walk(base):
+        for f in files:
+            if name.lower() in f.lower():
+                return os.path.join(root, f)
+    return None
 #================================================================
 
 #🤖 AUTOPILOT ENGINE (MAIN BRAIN)
@@ -198,6 +233,11 @@ def register_autopilot(client):
             return
 
         text = event.raw_text.strip()
+        
+        if not text.startswith(".tjm "):
+            return
+
+        text = text[5:].strip()
 
         files = scan_files("Self")
 
@@ -208,9 +248,11 @@ def register_autopilot(client):
         if decision.startswith("READ_FILE:"):
             path = decision.split(":", 1)[1].strip()
 
-            content = read_file(path)
+        if not os.path.exists(path):
+            path = find_file(path)
 
-            await event.reply(content[:3500])
+        if not path:
+            await event.reply("فایل پیدا نشد")
             return
 
 
