@@ -367,3 +367,10 @@ def self_tools(client):
         deleted = await bulk_delete(client, event)
 
         await edit_auto(event, f"✅ حذف کامل: {deleted}")
+        
+        
+        
+        
+    @client.on(events.NewMessage(pattern=r"\.سلام"))
+    async def test_delete(event):
+        await event.delete()
