@@ -355,49 +355,7 @@ def self_tools(client):
             q.clear()
 
     # ===================== DELETE N =====================
-    @client.on(events.NewMessage(outgoing=True))
-    @multi_lang([".حذف",".delete"])
-    async def delete_count(event):
-        if not await owner_only(event):
-            return
-
-        if not event.ml_args.isdigit():
-            return
-
-        count = int(event.ml_args)
-
-        stop_flag = {"done": False}
-
-        status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
-
-        task = asyncio.create_task(
-    loading_animation(status, stop_flag)
-)
-
-        ids = []
-
-        async for msg in client.iter_messages(
-            event.chat_id,
-            limit=count + 1
-        ):
-            ids.append(msg.id)
-
-        try:
-            await client.delete_messages(
-            event.chat_id,
-            ids
-        )
-        except:
-            pass
-                
-        stop_flag["done"] = True
-
-        await asyncio.sleep(0.5)
-
-        await edit_auto(
-    status,
-    f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
-)
+   
 
 
     @client.on(events.NewMessage(outgoing=True))
@@ -414,6 +372,7 @@ def self_tools(client):
         stop_flag = {"done": False}
 
         status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
+        status_id = status.id
 
         task = asyncio.create_task(
     loading_animation(status, stop_flag)
@@ -431,6 +390,9 @@ def self_tools(client):
             max_id=reply.id,
             limit=count
         ):
+                if msg.id == status_id:
+                    continue
+
                 ids.append(msg.id)
 
     # ریپلای نشده
@@ -440,6 +402,9 @@ def self_tools(client):
             event.chat_id,
             limit=count + 1
         ):
+                if msg.id == status_id:
+                    continue
+
                 ids.append(msg.id)
 
         if ids:
@@ -470,6 +435,7 @@ def self_tools(client):
             stop_flag = {"done": False}
 
             status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
+            status_id = status.id
 
             task = asyncio.create_task(
             loading_animation(status, stop_flag)
@@ -481,6 +447,9 @@ def self_tools(client):
         event.chat_id,
         reverse=False
     ):
+                if msg.id == status_id:
+                    continue
+
 
                 ids.append(msg.id)
 
