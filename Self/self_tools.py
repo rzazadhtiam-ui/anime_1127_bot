@@ -11,6 +11,13 @@ from telethon.tl.functions.messages import DeleteMessagesRequest
 from telethon.tl.types import ChannelParticipantsAdmins
 from telethon.errors import MessageDeleteForbiddenError
 from multi_lang import multi_lang, reply_auto, edit_auto
+import re
+import asyncio
+from telethon.tl.functions.messages import DeleteMessagesRequest
+from telethon.errors import MessageDeleteForbiddenError
+from collections import defaultdict, deque
+from telethon.tl.functions.channels import GetParticipantRequest
+from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator
 # ===================== فونت‌ها =====================
 
 fonts_list = [
@@ -175,13 +182,45 @@ async def delete_fast(client, ids):
             pass
         except:
             pass
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.05)
     return deleted
+
+
+async def can_delete_all(client, chat_id):
+    try:
+        me = await client.get_me()
+        p = await client(GetParticipantRequest(chat_id, me.id))
+
+        return isinstance(
+            p.participant,
+            (ChannelParticipantAdmin, ChannelParticipantCreator)
+        )
+    except:
+        return False
+
+
+async def fast_delete(client, chat_id, msg_ids, revoke=False):
+    try:
+        for i in range(0, len(msg_ids), 100):
+            await client(DeleteMessagesRequest(
+                id=msg_ids[i:i+100],
+                revoke=revoke
+            ))
+    except MessageDeleteForbiddenError:
+        pass
+    except:
+        pass
+
 
 # ===================== ماژول اصلی =====================
 def self_tools(client):
 
-    # -------- امروز --------
+    import time
+    from collections import defaultdict, deque
+
+    spam_db = defaultdict(lambda: deque())
+
+    # ===================== امروز =====================
     @client.on(events.NewMessage)
     @multi_lang([".امروز", ".today"])
     async def today_handler(event):
@@ -189,10 +228,7 @@ def self_tools(client):
             return
         await edit_auto(event, today_text())
 
-
-
-
-    # -------- فونت --------
+    # ===================== فونت =====================
     @client.on(events.NewMessage)
     @multi_lang([".فونت", ".font"])
     async def font_handler(event):
@@ -204,72 +240,124 @@ def self_tools(client):
             await edit_auto(event, "❌ لطفاً متن وارد کنید")
             return
 
-        # حالت Fancy Unicode
         fancy_lines = fancy_sentence(text).split("\n")
-        # هر خط داخل بک‌تیک برای کپی راحت
         unicode_result = "\n".join([f"`{line}`" for line in fancy_lines])
 
-        # حالت Mono / کد
         mono_result = f"```\n{text}\n```"
 
-        # ترکیب خروجی: اول حالت Mono، بعد فونت‌های مختلف
-        result = f"📜 حالت Mono:\n{mono_result}\n\n🎨 فونت‌ها:\n{unicode_result}"
+        result = (
+            f"📜 حالت Mono:\n{mono_result}\n\n"
+            f"🎨 فونت‌ها:\n{unicode_result}"
+        )
 
         await edit_auto(event, result)
 
-    # -------- حذف با عدد (تعداد مشخص) --------
+    # ===================== Anti Spam =====================
+    @client.on(events.NewMessage)
+    async def anti_spam(event):
+
+        if not event.text:
+            return
+
+        # ignore commands
+        if event.text.startswith("."):
+            return
+
+        # ignore private chats
+        if event.is_private:
+            return
+
+        uid = event.sender_id
+        now = time.time()
+
+        q = spam_db[uid]
+        q.append(now)
+
+        # remove old messages outside 3s window
+        while q and now - q[0] > 3:
+            q.popleft()
+
+        # threshold check
+        if len(q) >= 6:
+            try:
+                await event.delete()
+            except:
+                pass
+
+            q.clear()
+
+    # ===================== DELETE N =====================
     @client.on(events.NewMessage)
     @multi_lang([".حذف ", ".delete "])
     async def delete_number(event):
+
         if not await owner_only(event):
             return
 
-        limit = int(event.pattern_match.group(1))
+        try:
+            limit = int(re.findall(r"\d+", event.raw_text)[0])
+        except:
+            return await edit_auto(event, "❌ عدد معتبر نیست")
+
         await edit_auto(event, "⏳ در حال پاکسازی پیام‌ها ...")
+
+        revoke = event.is_private or await can_delete_all(client, event.chat_id)
 
         collected = []
         deleted_total = 0
 
-        async for msg in client.iter_messages(event.chat_id):
-            if msg.id == event.message.id:
+        async for msg in client.iter_messages(event.chat_id, limit=5000):
+
+            if msg.id == event.id:
+                continue
+
+            if not revoke and not msg.out:
                 continue
 
             collected.append(msg.id)
 
-            if len(collected) == 100 or (deleted_total + len(collected)) >= limit:
-                deleted_total += await delete_fast(client, collected)
+            if len(collected) >= 100:
+                deleted_total += await delete_fast(client, collected, revoke)
                 collected.clear()
 
             if deleted_total >= limit:
                 break
 
         if collected and deleted_total < limit:
-            deleted_total += await delete_fast(client, collected)
+            deleted_total += await delete_fast(client, collected, revoke)
 
         await edit_auto(event, f"✅ تعداد {deleted_total} پیام پاک شد")
 
-    # -------- حذف همه پیام‌ها --------
+    # ===================== DELETE ALL =====================
     @client.on(events.NewMessage)
     @multi_lang([".حذف همه", ".delete all"])
     async def delete_all(event):
+
         if not await owner_only(event):
             return
 
         await edit_auto(event, "⏳ در حال پاکسازی تمامی پیام‌ها ...")
 
+        revoke = event.is_private or await can_delete_all(client, event.chat_id)
+
         collected = []
         deleted_total = 0
 
-        async for msg in client.iter_messages(event.chat_id):
-            if msg.id == event.message.id:
+        async for msg in client.iter_messages(event.chat_id, limit=5000):
+
+            if msg.id == event.id:
                 continue
+
+            if not revoke and not msg.out:
+                continue
+
             collected.append(msg.id)
 
             if len(collected) >= 100:
-                deleted_total += await delete_fast(client, collected)
+                deleted_total += await delete_fast(client, collected, revoke)
                 collected.clear()
 
         if collected:
-            deleted_total += await delete_fast(client, collected)
+            deleted_total += await delete_fast(client, collected, revoke)
 
         await edit_auto(event, f"✅ تعداد {deleted_total} پیام پاک شد")
