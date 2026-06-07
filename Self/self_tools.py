@@ -354,13 +354,11 @@ def self_tools(client):
 
             q.clear()
 
-    # ===================== DELETE N =====================
-   
-
-
+    # ===================== DELETE COUNT / REPLY =====================
     @client.on(events.NewMessage(outgoing=True))
-    @multi_lang([".حذف",".delete"])
+    @multi_lang([".حذف", ".delete"])
     async def delete_count(event):
+
         if not await owner_only(event):
             return
 
@@ -374,112 +372,112 @@ def self_tools(client):
         status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
         status_id = status.id
 
-        task = asyncio.create_task(
-    loading_animation(status, stop_flag)
-)
+        asyncio.create_task(
+            loading_animation(status, stop_flag)
+        )
 
         ids = []
+        deleted = 0
 
-    # ریپلای شده
+        # ===================== REPLY MODE =====================
         if event.is_reply:
 
             reply = await event.get_reply_message()
 
             async for msg in client.iter_messages(
-            event.chat_id,
-            max_id=reply.id,
-            limit=count
-        ):
+                event.chat_id,
+                max_id=reply.id,
+                limit=count
+            ):
+
                 if msg.id == status_id:
                     continue
 
                 ids.append(msg.id)
 
-    # ریپلای نشده
+        # ===================== NORMAL MODE =====================
         else:
 
             async for msg in client.iter_messages(
-            event.chat_id,
-            limit=count + 1
-        ):
+                event.chat_id,
+                limit=count + 1
+            ):
+
                 if msg.id == status_id:
                     continue
 
                 ids.append(msg.id)
 
+        # ===================== DELETE =====================
         if ids:
-
             try:
-                await client.delete_messages(
-                event.chat_id,
-                ids
-            )
+                await client.delete_messages(event.chat_id, ids)
+                deleted = len(ids)
             except:
-                pass
-                
+                deleted = 0
+
         stop_flag["done"] = True
 
         await asyncio.sleep(0.5)
 
         await edit_auto(
-    status,
-    f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
-)
+            status,
+            f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
+        )
 
+    # ===================== DELETE ALL =====================
     @client.on(events.NewMessage(outgoing=True))
-    @multi_lang([".حذف همه",".delete all"])
+    @multi_lang([".حذف همه", ".delete all"])
     async def delete_all(event):
-    	if not await owner_only(event):
+
+        if not await owner_only(event):
             return
 
-            stop_flag = {"done": False}
+        stop_flag = {"done": False}
 
-            status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
-            status_id = status.id
+        status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
+        status_id = status.id
 
-            task = asyncio.create_task(
+        asyncio.create_task(
             loading_animation(status, stop_flag)
-)
+        )
 
-            ids = []
+        ids = []
+        deleted = 0
 
-            async for msg in client.iter_messages(
-        event.chat_id,
-        reverse=False
-    ):
-                if msg.id == status_id:
-                    continue
+        async for msg in client.iter_messages(
+            event.chat_id,
+            reverse=False
+        ):
 
+            if msg.id == status_id:
+                continue
 
-                ids.append(msg.id)
+            ids.append(msg.id)
 
-                if len(ids) >= 100:
-
-                    try:
-                        await client.delete_messages(
-                    event.chat_id,
-                    ids
-                )
-                    except:
-                        pass
-
-                    ids = []
-
-            if ids:
+            if len(ids) >= 100:
 
                 try:
-                    await client.delete_messages(
-                event.chat_id,
-                ids
-            )
+                    await client.delete_messages(event.chat_id, ids)
+                    deleted += len(ids)
                 except:
                     pass
-                
-            stop_flag["done"] = True
 
-            await asyncio.sleep(0.5)
+                ids = []
 
-            await edit_auto(
-    status,
-    f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
-)
+        if ids:
+
+            try:
+                await client.delete_messages(event.chat_id, ids)
+                deleted += len(ids)
+            except:
+                pass
+
+        stop_flag["done"] = True
+
+        await asyncio.sleep(0.5)
+
+        await edit_auto(
+            status,
+            f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
+    )
