@@ -850,7 +850,7 @@ def register_commands(bot):
         # ارسال پیام و ذخیره خروجی
         msg = bot.send_photo(
             message.chat.id,
-            photo="AgACAgQAAxkBAAIC9WmZQ9dVGfZiGKrsKmUYM1rwKD69AAIYDWsbhfrIUMGsjEIGjVOsAQADAgADeQADOgQ",
+            photo="AgACAgQAAxkBAAIQOGomwAElJ01xGW8i6IphXFJ_vO-4AAJXDWsbWXPZUPjJMRVOGCYiAQADAgADeQADOwQ",
             caption=caption,
             reply_markup=markup
         )
