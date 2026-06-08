@@ -112,18 +112,19 @@ class PanelManager:
                 self.bot.edit_message_text(
                     text,
                     inline_message_id=call.inline_message_id,
-                    reply_markup=markup
+                    reply_markup=markup,
+                    parse_mode="HTML"
                 )
             else:
                 self.bot.edit_message_text(
                 text,
-                inline_message_id=call.inline_message_id,
+                call.message.chat.id,
+                call.message.message_id,
                 reply_markup=markup,
                 parse_mode="HTML"
             )
-        except:
-            pass
-
+        except Exception as e:
+            print(e)
     # ---------- ثبت هندلر ----------
     def register_handlers(self):
 
