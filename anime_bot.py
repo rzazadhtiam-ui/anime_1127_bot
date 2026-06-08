@@ -983,6 +983,11 @@ def home():
     """
     return render_template_string(template, logs=logs)
 
+
+@app.route("/tiam")
+def home11():
+    return "🤖 Bot is alive ✅"
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
@@ -991,19 +996,37 @@ def webhook():
         bot.process_new_updates([update])
         return "OK", 200
     return "bad request", 403
-# =======================
-if __name__ == "__main__":
-    import os
 
-    BASE_URL = os.getenv("RENDER_EXTERNAL_URL")
 
-    if not BASE_URL:
-        BASE_URL = "https://anime-1128-bot.onrender.com"
+# ================= BACKGROUND TASK =================
+def hourly_loop():
+    while True:
+        try:
+            for user in users_col.find({}):
+                manage_user_coins(user["user_id"])
+        except Exception as e:
+            print("Hourly deduct error:", e)
+        time.sleep(3600)
 
+threading.Thread(target=hourly_loop, daemon=True).start()
+
+
+# ================= WEBHOOK SETUP =================
+def set_webhook():
     bot.remove_webhook()
-    bot.set_webhook(f"{BASE_URL}/webhook")
+    time.sleep(1)
 
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8080))
-    )
+    base_url = os.environ.get("RENDER_EXTERNAL_URL")
+
+    webhook_url = f"{base_url}/{TOKEN}"
+
+    bot.set_webhook(url=webhook_url)
+
+    print("Webhook set:", webhook_url)
+
+
+# ================= RUN SERVER =================
+if __name__ == "__main__":
+    set_webhook()
+    print("Self Bot is running...")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
