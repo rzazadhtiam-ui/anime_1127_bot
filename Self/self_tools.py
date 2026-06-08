@@ -152,7 +152,7 @@ async def owner_only(event):
 def today_text():
     now = datetime.datetime.now()
     j_now = jdatetime.datetime.fromgregorian(datetime=now)
-    return f"📅 {j_now.strftime('%Y/%m/%d')}\n⏰ {j_now.strftime('%H:%M:%S')}"
+    return f"**📅 {j_now.strftime('%Y/%m/%d')}\n⏰ {j_now.strftime('%H:%M:%S')}**"
 
 def fancy_sentence(text):
     out = []
@@ -270,7 +270,7 @@ async def loading_animation(event, stop_flag):
 
         try:
             await event.edit(
-                f"🗑 درحال حذف پیام لطفا منتظر بمانید {dots[i]}"
+                f"**🗑 درحال حذف پیام لطفا منتظر بمانید {dots[i]}**"
             )
         except:
             pass
@@ -303,23 +303,33 @@ def self_tools(client):
         if not await owner_only(event):
             return
 
-        text = event.ml_args
+        text = event.ml_args.strip()
+
         if not text:
-            await edit_auto(event, "❌ لطفاً متن وارد کنید")
+            await edit_auto(event, "**❌ لطفاً متن وارد کنید**")
             return
 
         fancy_lines = fancy_sentence(text).split("\n")
-        unicode_result = "\n".join([f"`{line}`" for line in fancy_lines])
+
+        formatted_lines = []
+
+        for line in fancy_lines:
+            if "_ " in line:
+                num, font_text = line.split("_ ", 1)
+                formatted_lines.append(f"{num}_ `{font_text}`")
+            else:
+                formatted_lines.append(f"`{line}`")
+
+        unicode_result = "\n".join(formatted_lines)
 
         mono_result = f"```\n{text}\n```"
 
         result = (
-            f"📜 حالت Mono:\n{mono_result}\n\n"
-            f"🎨 فونت‌ها:\n{unicode_result}"
+            f"**📜 {mono_result}**\n\n"
+            f"**🎨 فونت‌ها:**\n{unicode_result}"
         )
 
         await edit_auto(event, result)
-
     # ===================== Anti Spam =====================
     @client.on(events.NewMessage)
     async def anti_spam(event):
@@ -369,7 +379,7 @@ def self_tools(client):
 
         stop_flag = {"done": False}
 
-        status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
+        status = await event.edit("**🗑 درحال حذف پیام لطفا منتظر بمانید .**")
         status_id = status.id
 
         asyncio.create_task(
@@ -422,7 +432,7 @@ def self_tools(client):
 
         await edit_auto(
             status,
-            f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
+            f"**🗑 حذف کامل شد\n\nتعداد: {deleted}**"
         )
 
     # ===================== DELETE ALL =====================
@@ -435,7 +445,7 @@ def self_tools(client):
 
         stop_flag = {"done": False}
 
-        status = await event.edit("🗑 درحال حذف پیام لطفا منتظر بمانید .")
+        status = await event.edit("**🗑 درحال حذف پیام لطفا منتظر بمانید .**")
         status_id = status.id
 
         asyncio.create_task(
@@ -479,5 +489,5 @@ def self_tools(client):
 
         await edit_auto(
             status,
-            f"🗑 حذف کامل شد\n\nتعداد: {deleted}"
+            f"**🗑 حذف کامل شد\n\nتعداد: {deleted}**"
     )
