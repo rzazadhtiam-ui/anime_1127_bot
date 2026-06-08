@@ -116,11 +116,11 @@ class PanelManager:
                 )
             else:
                 self.bot.edit_message_text(
-                    text,
-                    call.message.chat.id,
-                    call.message.message_id,
-                    reply_markup=markup
-                )
+                text,
+                inline_message_id=call.inline_message_id,
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
         except:
             pass
 
