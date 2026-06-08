@@ -1174,7 +1174,7 @@ app = Flask(__name__)
 def home():
     return "🤖 Bot is alive ✅"
 
-@app.route("/webhook", methods=["POST"])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
         json_string = request.get_data().decode("utf-8")
