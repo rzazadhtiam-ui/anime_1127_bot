@@ -1166,7 +1166,6 @@ def stop_ping(message):
     bot.reply_to(message, "⛔️ متوقف شد")
 
 
-bot.infinity_polling()
 
   #===========================  
 app = Flask(__name__)
