@@ -4,7 +4,7 @@ from pymongo import MongoClient
 import certifi
 
 MAIN_TEXT = "📖  ⦁ Self Nix پنل راهنما ربات  :"
-OWNER_ID = 8588914809
+OWNER_ID = 6433381392
 
 # ================= Mongo =================
 mongo_uri = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@" \
