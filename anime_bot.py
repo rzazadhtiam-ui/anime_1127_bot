@@ -843,6 +843,7 @@ KEEP_ALIVE_URLS = [
     "https://self-bot-tv3l.onrender.com",
     "https://anime-1127-bot-x0nn.onrender.com",
     "https://anime-1127-bot-uspd.onrender.com", 
+    "https://self-nix-bot-o9d5.onrender.com"
 ] 
 
 KEEP_ALIVE_INTERVAL = 150  # هر چند ثانیه پینگ شود (۵ دقیقه)
