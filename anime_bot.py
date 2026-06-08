@@ -982,20 +982,14 @@ def home():
     """
     return render_template_string(template, logs=logs)
 
-@app.route("/webhook", methods=["POST"])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    print("🔥 WEBHOOK HIT")
-
-    try:
-        update = telebot.types.Update.de_json(
-            request.get_data().decode("utf-8")
-        )
-
+    if request.headers.get("content-type") == "application/json":
+        json_string = request.get_data().decode("utf-8")
+        update = Update.de_json(json_string)
+        bot.process_new_updates([update])
         return "OK", 200
-
-    except Exception as e:
-        print("ERROR:", e)
-        return "OK", 200
+    return "bad request", 403
 # =======================
 if __name__ == "__main__":
     import os
