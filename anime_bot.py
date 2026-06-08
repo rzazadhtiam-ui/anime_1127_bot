@@ -9,7 +9,8 @@ from flask import Flask, request, render_template_string
 from datetime import datetime
 import random
 import string
-
+from telebot import types
+from telebot.types import Update
 # =========================
 # CONFIG
 # =========================
@@ -992,11 +993,10 @@ def home11():
 def webhook():
     if request.headers.get("content-type") == "application/json":
         json_string = request.get_data().decode("utf-8")
-        update = Update.de_json(json_string)
+        update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return "OK", 200
     return "bad request", 403
-
 
 # ================= BACKGROUND TASK =================
 def hourly_loop():
