@@ -16,10 +16,10 @@ TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
 #BOT_URL = "https://self-bot-ssvq.onrender.com"
 MIN_COINS = 10
-REFERRAL_REWARD = 25
+REFERRAL_REWARD = 6
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
-MIN_COINS_FOR_SESSION = 10 # حداقل سکه برای ادامه سشن
+MIN_COINS_FOR_SESSION = 2 # حداقل سکه برای ادامه سشن
 BOT_USERNAME = "tiam"
 PRICE_PER_50 = 5000 
 CARD_NUMBER = "6219861457618899"
@@ -301,7 +301,7 @@ def manage_user_coins(uid):
                 try:
                     bot.send_message(
                         uid,
-                        "✅ سکه‌های شما شارژ شد!\nسشن‌هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
+                        "✅ سکه‌های شما شارژ شد!\اکانت هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
                     )
                 except Exception as e:
                     print(f"[AUTO RESUME MESSAGE ERROR] User {uid}: {e}")
@@ -349,7 +349,8 @@ KEEP_ALIVE_URLS = [
     "https://anime-1128-bot.onrender.com",
     "https://self-nix-bot.onrender.com",
     "https://self-nix-app.onrender.com",
-    "https://self-bot-ssvq.onrender.com"
+    "https://self-bot-ssvq.onrender.com",
+    "https://self-bot-zva7.onrender.com"
 ]
 KEEP_ALIVE_INTERVAL = 150  # ثانیه
 keep_alive_running = False
@@ -667,11 +668,11 @@ def handle_callbacks(call):
 
     elif data == "selfbot_referral":
         referral_link = f"https://t.me/self_nix_bot?start={uid}"
-        msg = f"🌟 لینک اختصاصی زیر مجموعه شما:\n{referral_link}\nهر زیر مجموعه: {REFERRAL_REWARD} سکه✨️"
+        msg = f"🌟 لینک اختصاصی زیر مجموعه شما:\n{referral_link}\nهر زیر مجموعه: {REFERRAL_REWARD} سکه✨️\n معادل 3 ساعت استفاده از سلف"
         safe_edit(call, msg, get_back_panel())
 
     elif data == "selfbot_buy_coins":
-        msg = "تعداد سکه مورد نظر خود را ارسال کنید.\nهر ۵۰ سکه = ۵,۰۰۰ تومان"
+        msg = "تعداد سکه مورد نظر خود را ارسال کنید.\nهر ۵۰ سکه = ۵,۰۰۰ تومان\n هر 2 سکه معادل 1 ساعت میباشد"
         safe_edit(call, msg, get_back_panel())
         user_state[uid] = "await_buy_amount"
 
