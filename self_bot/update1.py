@@ -197,7 +197,7 @@ class PanelManager:
             result = types.InlineQueryResultArticle(
                 id="panel",
                 title="📋 پنل سلف",
-                input_message_content=types.InputTextMessageContent(MAIN_TEXT),
+                input_message_content=types.InputTextMessageContent(MAIN_TEXT, parse_mode="HTML"),
                 reply_markup=self.main_panel(uid)
             )
 
