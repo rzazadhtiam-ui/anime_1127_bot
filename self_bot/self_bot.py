@@ -21,7 +21,13 @@ TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
 MIN_COINS_FOR_SESSION = 2 # حداقل سکه برای ادامه سشن
 BOT_USERNAME = "tiam"
-PRICE_PER_50 = 5000 
+COIN_PRICES = {
+    50: 5000,
+    100: 9000,
+    250: 20000,
+    500: 35000,
+    1000: 65000
+}
 CARD_NUMBER = "6219861457618899"
 CARD_NAME = "تیام رضازاده"
 admin_messages = {} 
@@ -742,7 +748,13 @@ def handle_messages(message):
             bot.send_message(uid, "❌ حداقل خرید 50 سکه است.")
             return
 
-        total = int((amount / 50) * PRICE_PER_50)
+        if amount in COIN_PRICES:
+            total = COIN_PRICES[amount]
+        else:
+    # اگر عدد سفارشی داد (مثلاً 150 یا 300)
+    # محاسبه تقریبی بر اساس 50 سکه
+            base = COIN_PRICES[50] / 50
+            total = int(amount * base)
 
         temp_data[uid] = {
         "buy_amount": amount,
