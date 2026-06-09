@@ -231,6 +231,16 @@ def leaderboard_coins(bot, message):
     bot.reply_to(message, text)
 
 # ---------- REGISTER COMMANDS ----------
+
+# ========== محدود کردن به گروه خاص ==========
+ALLOWED_GROUP = "Self_Nix_Group"   # فقط در این گروه کار می‌کند
+
+def is_allowed_group(chat):
+    """بررسی می‌کند که چت فعلی گروه مجاز باشد"""
+    
+    return getattr(chat, "username", None) == ALLOWED_GROUP
+# ============================================
+
 def register_commands(bot):
 #==============helper=================
     def send_coin_log(text, parse_mode=None):
@@ -446,6 +456,8 @@ def register_commands(bot):
     # بررسی بن بودن
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return
 
     # ساخت کیبورد
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -468,7 +480,11 @@ def register_commands(bot):
     def balance_cmd(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return
+
         my_coins(bot, message)
+
 
     # ---------- /id ----------
     @bot.message_handler(commands=["id"])
@@ -477,6 +493,9 @@ def register_commands(bot):
     def profile_cmd(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
+            
         my_id(bot, message)
 
     # ---------- /daily ----------
@@ -485,6 +504,9 @@ def register_commands(bot):
     @anti_spam
     def daily_cmd(message):
         uid = message.from_user.id
+        if not is_allowed_group(message.chat):
+            return 
+               
         ensure_user(message.from_user)
         if is_banned(uid):
             return
@@ -503,52 +525,7 @@ def register_commands(bot):
         )
         bot.reply_to(message, "🎁 0.2 سکه دریافت کردی!")
 
-    # ---------- ایموجی ----------
-    @bot.message_handler(func=lambda m: m.text and m.text.startswith("ایموجی"))
-    @require_join
-    @anti_spam
-    def emoji_from_link(message):
-        import re
 
-        parts = message.text.split(maxsplit=1)
-        if len(parts) < 2:
-            return bot.reply_to(message, "فرمت: ایموجی <link یا name>")
-
-        raw = parts[1].strip()
-
-        match = re.search(r"t\.me/addemoji/([A-Za-z0-9_]+)", raw)
-        pack_name = match.group(1) if match     else raw
-
-        try:
-            pack = bot.get_sticker_set(pack_name)
-        except:
-            return bot.reply_to(message, "❌ پک پیدا نشد")
-
-        kb = types.InlineKeyboardMarkup()
-        emoji_shop_sessions[message.from_user.id] = {}
-
-        count = 0
-
-        for st in pack.stickers:
-            if count >= MAX_PACK_LIMIT:
-                break
-
-        # مهم: هیچ فیلتر custom_emoji_id نزن
-            emoji_shop_sessions[message.from_user.id][st.file_id] = st.file_id
-
-            kb.add(
-                types.InlineKeyboardButton(
-                text="🧩 انتخاب",
-                callback_data=f"buy_emoji|{st.file_id}"
-            )
-        )
-
-            count += 1
-
-        if count == 0:
-            return bot.reply_to(message, "❌ این پک قابل استفاده نیست")
-
-        bot.send_message(message.chat.id, "یکی از آیتم‌ها رو انتخاب کن:", reply_markup=kb)
     # ---------- /leader_board ----------
     @bot.message_handler(commands=["leader_board"])
     @require_join
@@ -556,6 +533,8 @@ def register_commands(bot):
     def leaderboard_cmd(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
         leaderboard_coins(bot, message)
 
     # ---------- /ban ----------
@@ -566,6 +545,8 @@ def register_commands(bot):
         ADMIN_ID = 6433381392
         if message.from_user.id != ADMIN_ID:
             return
+        if not is_allowed_group(message.chat):
+            return            
         try:
             target_id = int(message.text.split()[1])
         except:
@@ -583,6 +564,8 @@ def register_commands(bot):
         ADMIN_ID = 6433381392
         if message.from_user.id != ADMIN_ID:
             return
+        if not is_allowed_group(message.chat):
+            return            
         try:
             target_id = int(message.text.split()[1])
         except:
@@ -597,6 +580,8 @@ def register_commands(bot):
     def leaderboard_wins_cmd(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return           
         leaderboard_wins(bot, message)
 
     # ---------- TEXT BUTTONS ----------
@@ -606,6 +591,8 @@ def register_commands(bot):
     def show_coins(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
         my_coins(bot, message)
 
     @bot.message_handler(func=lambda m: m.text and m.text.strip() == "حساب کاربری")
@@ -614,6 +601,8 @@ def register_commands(bot):
     def show_id(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
         my_id(bot, message)
 
     @bot.message_handler(func=lambda m: m.text and m.text.strip() == "آمار سکه")
@@ -622,6 +611,8 @@ def register_commands(bot):
     def show_leaderboard(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
         leaderboard_coins(bot, message)
 
     # ---------- انتقال سکه یکجا ----------
@@ -634,6 +625,9 @@ def register_commands(bot):
         uid = from_user.id
 
         ensure_user(from_user)
+
+        if not is_allowed_group(message.chat):
+            return
 
         sender = users_col.find_one({"user_id": uid}) or {}
 
@@ -795,6 +789,8 @@ def register_commands(bot):
     def create_xo_room(message):
         if is_banned(message.from_user.id):
             return
+        if not is_allowed_group(message.chat):
+            return            
         leaderboard_wins(bot, message)
 
 #==============دوز==================
@@ -805,6 +801,8 @@ def register_commands(bot):
     	
         uid = message.from_user.id
         ensure_user(message.from_user)
+        if not is_allowed_group(message.chat):
+            return
 
         # گرفتن مبلغ شرط
         try:
@@ -850,7 +848,7 @@ def register_commands(bot):
         # ارسال پیام و ذخیره خروجی
         msg = bot.send_photo(
             message.chat.id,
-            photo="AgACAgQAAxkBAAIQOGomwAElJ01xGW8i6IphXFJ_vO-4AAJXDWsbWXPZUPjJMRVOGCYiAQADAgADeQADOwQ",
+            photo="AgACAgEAAxkBAAICsWobYfUR7HLQlNTiTEZgajXcWSU2AAInDGsb6w_hRDTL1z2cCp5MAQADAgADeQADOwQ",
             caption=caption,
             reply_markup=markup
         )
@@ -1048,6 +1046,8 @@ def register_commands(bot):
         # بررسی بن بودن
             if is_banned(new_user.id):
                 continue
+            if not is_allowed_group(message.chat):
+                return                          
 
         # ساخت کیبورد پنل
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -1065,25 +1065,3 @@ def register_commands(bot):
                 reply_markup=markup
     )
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("buy_emoji|"))
-    @require_join
-    def buy_emoji(call):
-        uid = call.from_user.id
-        ensure_user(call.from_user)
-
-        file_id = call.data.split("|")[1]
-
-        user = users_col.find_one({"user_id": uid})
-
-        if not user or user.get("coins", 0) < DEFAULT_EMOJI_PRICE:
-            return bot.answer_callback_query(call.id, "سکه کافی نیست ❌")
-
-        users_col.update_one(
-        {"user_id": uid},
-        {
-            "$inc": {"coins": -DEFAULT_EMOJI_PRICE},
-            "$set": {"last_emoji": file_id}
-        }
-    )
-
-        bot.answer_callback_query(call.id, "خرید انجام شد ✅")
