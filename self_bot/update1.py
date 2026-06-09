@@ -2,9 +2,12 @@ import telebot
 from telebot import types
 from pymongo import MongoClient
 import certifi
+import threading
+import time
 
 MAIN_TEXT = "📖  ⦁ Self Nix پنل راهنما ربات  :"
 OWNER_ID = 6433381392
+PANEL_TIMEOUT = 180  # ثانیه = ۳ دقیقه
 
 # ================= Mongo =================
 mongo_uri = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@" \
@@ -16,8 +19,7 @@ mongo_uri = "mongodb://strawhatmusicdb_db_user:db_strawhatmusic@" \
 client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
 db = client["self_panel_db"]
 buttons_col = db["buttons"]
-
-buttons_col.create_index("name", unique=True)
+buttons_col.create_index("name")
 
 
 class PanelManager:
@@ -25,62 +27,117 @@ class PanelManager:
     def __init__(self, bot):
         self.bot = bot
         self.waiting_position = {}
+        self.pending_panel = {}
         self.history = {}
+        self.ROOT = "root"
+
+        # ── تایمر: {uid: {"timer": Timer, "inline_id": str, "chat_id": int, "msg_id": int}}
+        self._timers = {}
 
         self.register_handlers()
 
-    # ---------- گرفتن دکمه ----------
-    def get_button(self, name):
-        return buttons_col.find_one({"name": name})
+    # ========================================================
+    #  تایمر بی‌فعالیت
+    # ========================================================
 
-    # ---------- ساخت پنل ----------
-    def main_panel(self, user_id, show_back=False):
+    def _reset_timer(self, uid: int, call):
+        """هر بار که کاربر روی پنل کلیک می‌کند تایمر ریست می‌شود."""
+        self._cancel_timer(uid)
 
+        inline_id = getattr(call, "inline_message_id", None)
+        chat_id   = call.message.chat.id if not inline_id else None
+        msg_id    = call.message.message_id if not inline_id else None
+
+        def _expire():
+            self._close_panel(
+                uid,
+                inline_id=inline_id,
+                chat_id=chat_id,
+                msg_id=msg_id,
+                reason="timeout"
+            )
+
+        t = threading.Timer(PANEL_TIMEOUT, _expire)
+        t.daemon = True
+        t.start()
+        self._timers[uid] = t
+
+    def _cancel_timer(self, uid: int):
+        if uid in self._timers:
+            self._timers.pop(uid).cancel()
+
+    def _close_panel(self, uid: int, *, inline_id=None, chat_id=None, msg_id=None, reason="manual"):
+        """پنل را می‌بندد؛ reason: 'manual' یا 'timeout'."""
+        self._cancel_timer(uid)
+        self.history.pop(uid, None)
+
+        if reason == "timeout":
+            text = "⏱ <b>پنل به دلیل عدم فعالیت بسته شد</b>"
+        else:
+            text = "✅ <b>پنل با موفقیت بسته شد</b>"
+
+        try:
+            if inline_id:
+                self.bot.edit_message_text(
+                    text,
+                    inline_message_id=inline_id,
+                    parse_mode="HTML"
+                )
+            elif chat_id and msg_id:
+                self.bot.edit_message_text(
+                    text,
+                    chat_id,
+                    msg_id,
+                    parse_mode="HTML"
+                )
+        except Exception as e:
+            print(f"close_panel error: {e}")
+
+    # ========================================================
+    #  سازنده markup ها
+    # ========================================================
+
+    def _green_btn(self, label: str, cb: str) -> types.InlineKeyboardButton:
+        """دکمه سبز — تلگرام با ایموجی 🟢 پس‌زمینه سبز نمی‌دهد؛
+        بهترین راه قابل‌اعتماد روی همه کلاینت‌ها استفاده از
+        InlineKeyboardButton با text خالص + web_app یا url نیست.
+        تنها گزینه واقعی برای رنگ کامل دکمه، استفاده از
+        login_url / pay است که اینجا کاربرد ندارد.
+        پس متن دکمه را با نشانه‌ی سبز می‌سازیم تا کاملاً سبز به‌نظر برسد."""
+        return types.InlineKeyboardButton(f" {label}", callback_data=cb)
+
+    def main_panel(self, user_id, parent="root", show_back=False):
         markup = types.InlineKeyboardMarkup()
-        rows = {}
 
-        buttons = list(buttons_col.find())
-
+        buttons = list(buttons_col.find({"parent": parent}))
         for btn in buttons:
-            r = btn.get("row", 0)
-            rows.setdefault(r, []).append(btn)
-
-        for r in sorted(rows.keys()):
-            sorted_cols = sorted(rows[r], key=lambda x: x.get("col", 0))
-
-            markup.row(*[
+            markup.add(
                 types.InlineKeyboardButton(
-                    b["name"],
-                    callback_data=f"btn_{user_id}_{b['name']}"
+                    btn["name"],
+                    callback_data=f"open_{user_id}_{btn['name']}_{parent}"
                 )
-                for b in sorted_cols
-            ])
+            )
 
-        if show_back:
-            markup.row(
+        if show_back and parent != "root":
+            markup.add(self._green_btn("بازگشت", f"back_{user_id}_{parent}"))
+
+        if parent == "root":
+            markup.add(
                 types.InlineKeyboardButton(
-                    "🔙 بازگشت",
-                    callback_data=f"back_{user_id}"
+                    "❌ بستن پنل",
+                    callback_data=f"close_{user_id}"
                 )
             )
 
         return markup
 
-    # ---------- فقط بازگشت ----------
-    def back_only_panel(self, user_id):
+    def back_only_panel(self, user_id, parent="root"):
         markup = types.InlineKeyboardMarkup()
-        markup.row(
-            types.InlineKeyboardButton(
-                "🔙 بازگشت",
-                callback_data=f"back_{user_id}"
-            )
-        )
+        markup.row(self._green_btn("بازگشت", f"back_{user_id}_{parent}"))
         return markup
 
-    # ---------- پنل حذف ----------
     def remove_panel(self):
         markup = types.InlineKeyboardMarkup()
-
         for btn in buttons_col.find():
             markup.add(
                 types.InlineKeyboardButton(
@@ -88,13 +145,10 @@ class PanelManager:
                     callback_data=f"remove_{btn['name']}"
                 )
             )
-
         return markup
 
-    # ---------- پنل ادمین ----------
     def admin_panel(self):
         markup = types.InlineKeyboardMarkup()
-
         for btn in buttons_col.find():
             markup.add(
                 types.InlineKeyboardButton(
@@ -102,13 +156,15 @@ class PanelManager:
                     callback_data=f"editpos_{btn['name']}"
                 )
             )
-
         return markup
 
-    # ---------- ادیت امن ----------
+    # ========================================================
+    #  ابزارها
+    # ========================================================
+
     def safe_edit(self, call, text, markup):
         try:
-            if call.inline_message_id:
+            if getattr(call, "inline_message_id", None):
                 self.bot.edit_message_text(
                     text,
                     inline_message_id=call.inline_message_id,
@@ -117,71 +173,124 @@ class PanelManager:
                 )
             else:
                 self.bot.edit_message_text(
-                text,
-                call.message.chat.id,
-                call.message.message_id,
-                reply_markup=markup,
-                parse_mode="HTML"
-            )
+                    text,
+                    call.message.chat.id,
+                    call.message.message_id,
+                    reply_markup=markup,
+                    parse_mode="HTML"
+                )
         except Exception as e:
             print(e)
-    # ---------- ثبت هندلر ----------
+
+    def safe_answer(self, call, text="done"):
+        try:
+            self.bot.answer_callback_query(call.id, text)
+        except:
+            pass
+
+    # ========================================================
+    #  ثبت هندلرها
+    # ========================================================
+
     def register_handlers(self):
 
-        # ===== افزودن =====
+        # ===== /add =====
         @self.bot.message_handler(commands=['add'])
         def add_button(message):
-
             if message.from_user.id != OWNER_ID:
                 return
 
-            msg = self.bot.send_message(message.chat.id, "اسم دکمه را بفرست")
+            msg = self.bot.send_message(message.chat.id, "اسم دکمه را بفرست:")
 
             def get_name(m):
                 name = m.text.strip()
 
-                msg2 = self.bot.send_message(m.chat.id, "متن دکمه را بفرست")
+                step_msg = self.bot.send_message(
+                    m.chat.id,
+                    "نوع دکمه را انتخاب کن:\n"
+                    "1 = panel  (زیرمنو — سطح ۱)\n"
+                    "2 = text_panel  (متن — سطح ۲)"
+                )
 
-                def get_text(t):
-                    try:
-                        buttons_col.insert_one({
-                            "name": name,
-                            "text": t.text,
-                            "row": 0,
-                            "col": buttons_col.count_documents({})
-                        })
-                        self.bot.send_message(t.chat.id, "✅ اضافه شد")
-                    except:
-                        self.bot.send_message(t.chat.id, "❌ دکمه با این نام وجود دارد")
+                def get_type(t):
+                    ttype = t.text.strip()
 
-                self.bot.register_next_step_handler(msg2, get_text)
+                    # ---------- TEXT PANEL (سطح ۲) ----------
+                    if ttype == "2":
+                        # نمایش پنل‌های سطح ۱ برای انتخاب والد
+                        panels = list(buttons_col.find({"type": "panel"}))
+
+                        if not panels:
+                            self.bot.send_message(
+                                t.chat.id,
+                                "⚠️ ابتدا باید یک دکمه panel (سطح ۱) بسازی.\n"
+                                "دکمه text_panel باید زیر یک panel قرار بگیرد."
+                            )
+                            return
+
+                        markup = types.InlineKeyboardMarkup()
+                        for p in panels:
+                            markup.add(
+                                types.InlineKeyboardButton(
+                                    f"📁 {p['name']}",
+                                    callback_data=f"set_textparent||{name}||{p['name']}"
+                                )
+                            )
+
+                        self.bot.send_message(
+                            t.chat.id,
+                            f"دکمه «{name}» زیر کدام پنل (سطح ۱) قرار بگیرد؟",
+                            reply_markup=markup
+                        )
+                        return
+
+                    # ---------- PANEL (سطح ۱) ----------
+                    panels = list(buttons_col.find({"type": "panel"}))
+
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(
+                        types.InlineKeyboardButton(
+                            "📁 root  (پنل اصلی)",
+                            callback_data=f"set_parent||{name}||root"
+                        )
+                    )
+                    for p in panels:
+                        markup.add(
+                            types.InlineKeyboardButton(
+                                p["name"],
+                                callback_data=f"set_parent||{name}||{p['name']}"
+                            )
+                        )
+
+                    self.bot.send_message(
+                        t.chat.id,
+                        "این پنل زیر کدام پنل ساخته شود؟",
+                        reply_markup=markup
+                    )
+
+                self.bot.register_next_step_handler(step_msg, get_type)
 
             self.bot.register_next_step_handler(msg, get_name)
 
-        # ===== حذف =====
-        @self.bot.message_handler(commands=['remov'])
+        # ===== /remove =====
+        @self.bot.message_handler(commands=['remove'])
         def remove_cmd(message):
-
             if message.from_user.id != OWNER_ID:
                 return
-
             if buttons_col.count_documents({}) == 0:
                 self.bot.send_message(message.chat.id, "هیچ دکمه‌ای نیست")
                 return
-
             self.bot.send_message(
                 message.chat.id,
                 "کدام دکمه حذف شود؟",
                 reply_markup=self.remove_panel()
             )
 
-        # ===== پنل ادمین =====
+        # ===== /panel_admin =====
         @self.bot.message_handler(commands=['panel_admin'])
         def admin_cmd(message):
-
             if message.from_user.id != OWNER_ID:
                 return
-
             self.bot.send_message(
                 message.chat.id,
                 "یک دکمه انتخاب کن و مختصات بده\nمثال: 1 2",
@@ -191,68 +300,111 @@ class PanelManager:
         # ===== INLINE =====
         @self.bot.inline_handler(func=lambda q: q.query and q.query.strip() == "self-nix-panel-tjm")
         def inline_handler(q):
-
             uid = q.from_user.id
-            self.history[uid] = [MAIN_TEXT]
+            self.history[uid] = ["root"]
 
             result = types.InlineQueryResultArticle(
                 id="panel",
                 title="📋 پنل سلف",
-                input_message_content=types.InputTextMessageContent(MAIN_TEXT, parse_mode="HTML"),
-                reply_markup=self.main_panel(uid)
+                input_message_content=types.InputTextMessageContent(
+                    MAIN_TEXT,
+                    parse_mode="HTML"
+                ),
+                reply_markup=self.main_panel(uid, parent="root")
             )
 
             self.bot.answer_inline_query(q.id, [result], cache_time=0)
 
         # ===== CALLBACK =====
-        @self.bot.callback_query_handler(func=lambda c: c.data.startswith(("btn_", "remove_", "editpos_", "back_")))
+        @self.bot.callback_query_handler(
+            func=lambda c: c.data.startswith((
+                "open_", "remove_", "editpos_",
+                "back_", "set_parent||", "set_textparent||",
+                "set_textcontent||", "close_"
+            ))
+        )
         def callback(call):
-
             data = call.data
-            uid = call.from_user.id
+            uid  = call.from_user.id
 
-            # ---------- ورود دکمه ----------
-            if data.startswith("btn_"):
-
-                _, owner_id, name = data.split("_", 2)
+            # ---------- open ----------
+            if data.startswith("open_"):
+                _, owner_id, name, parent = data.split("_", 3)
 
                 if int(owner_id) != uid:
                     return
 
-                btn = self.get_button(name)
+                btn = buttons_col.find_one({"name": name, "parent": parent})
+
                 if not btn:
+                    self.safe_answer(call, "not found")
                     return
 
-                self.history.setdefault(uid, []).append(btn["text"])
+                self._reset_timer(uid, call)
 
-                self.safe_edit(call, btn["text"], self.back_only_panel(uid))
+                if btn.get("type") != "panel":
+                    # سطح ۲: نمایش متن + دکمه بازگشت سبز
+                    self.safe_edit(
+                        call,
+                        btn.get("text", ""),
+                        self.back_only_panel(uid, parent)
+                    )
+                    return
 
-            # ---------- بازگشت ----------
+                # سطح ۱: نمایش زیردکمه‌ها
+                self.history.setdefault(uid, []).append(name)
+
+                children = list(buttons_col.find({"parent": name}))
+                markup = types.InlineKeyboardMarkup()
+
+                for c in children:
+                    markup.add(
+                        types.InlineKeyboardButton(
+                            c["name"],
+                            callback_data=f"open_{uid}_{c['name']}_{name}"
+                        )
+                    )
+
+                if not children:
+                    markup.add(types.InlineKeyboardButton("📭 خالی", callback_data="noop"))
+
+                markup.add(self._green_btn("بازگشت", f"back_{uid}_{name}"))
+
+                self.safe_edit(call, f"📂 {name}", markup)
+
+            # ---------- back ----------
             elif data.startswith("back_"):
+                _, uid_str, parent = data.split("_", 2)
+                uid = int(uid_str)
 
-                if len(self.history.get(uid, [])) <= 1:
-                    self.safe_edit(call, MAIN_TEXT, self.main_panel(uid))
+                if uid != call.from_user.id:
                     return
 
-                self.history[uid].pop()
-                last = self.history[uid][-1]
+                self._reset_timer(uid, call)
+
+                hist = self.history.get(uid, ["root"])
+
+                if len(hist) <= 1:
+                    self.safe_edit(call, MAIN_TEXT, self.main_panel(uid, "root"))
+                    return
+
+                hist.pop()
+                last = hist[-1]
+                self.history[uid] = hist
 
                 self.safe_edit(
                     call,
-                    last,
-                    self.main_panel(uid, len(self.history[uid]) > 1)
+                    MAIN_TEXT,
+                    self.main_panel(uid, last, show_back=(last != "root"))
                 )
 
-            # ---------- حذف ----------
+            # ---------- remove ----------
             elif data.startswith("remove_"):
-
                 if uid != OWNER_ID:
                     return
 
                 name = data.replace("remove_", "")
-
                 buttons_col.delete_one({"name": name})
-
                 self.bot.answer_callback_query(call.id, "حذف شد")
 
                 if buttons_col.count_documents({}) > 0:
@@ -268,9 +420,8 @@ class PanelManager:
                         call.message.message_id
                     )
 
-            # ---------- تغییر موقعیت ----------
+            # ---------- editpos ----------
             elif data.startswith("editpos_"):
-
                 if uid != OWNER_ID:
                     return
 
@@ -281,12 +432,70 @@ class PanelManager:
                     call.message.chat.id,
                     f"مختصات جدید {name} بده\nمثال: 1 2"
                 )
-
                 self.bot.register_next_step_handler(msg, self.set_position)
 
-    # ---------- ثبت مختصات ----------
-    def set_position(self, message):
+            # ---------- set_parent (panel سطح ۱) ----------
+            elif data.startswith("set_parent||"):
+                parts  = data.split("||")
+                name   = parts[1]
+                parent = parts[2]
 
+                if parent == name:
+                    parent = "root"
+
+                buttons_col.insert_one({
+                    "name":   name,
+                    "parent": parent,
+                    "type":   "panel",
+                    "text":   ""
+                })
+
+                self.safe_answer(call, "✅ ساخته شد")
+                self.safe_edit(call, MAIN_TEXT, self.main_panel(uid, "root"))
+
+            # ---------- set_textparent (text_panel سطح ۲ — انتخاب والد) ----------
+            elif data.startswith("set_textparent||"):
+                parts       = data.split("||")
+                name        = parts[1]
+                parent_name = parts[2]
+
+                # حالا متن را می‌خواهیم
+                msg = self.bot.send_message(
+                    call.message.chat.id,
+                    f"متن نمایشی دکمه «{name}» را بفرست:"
+                )
+
+                def save_text_panel(txt):
+                    buttons_col.insert_one({
+                        "name":   name,
+                        "parent": parent_name,
+                        "type":   "text_panel",
+                        "text":   txt.text
+                    })
+                    self.bot.send_message(txt.chat.id, f"✅ دکمه «{name}» زیر «{parent_name}» ساخته شد")
+
+                self.bot.register_next_step_handler(msg, save_text_panel)
+                self.safe_answer(call, "متن را بفرست")
+
+            # ---------- close ----------
+            elif data.startswith("close_"):
+                inline_id = getattr(call, "inline_message_id", None)
+                chat_id   = call.message.chat.id if not inline_id else None
+                msg_id    = call.message.message_id if not inline_id else None
+
+                self._close_panel(
+                    uid,
+                    inline_id=inline_id,
+                    chat_id=chat_id,
+                    msg_id=msg_id,
+                    reason="manual"
+                )
+
+    # ========================================================
+    #  ثبت مختصات
+    # ========================================================
+
+    def set_position(self, message):
         uid = message.from_user.id
 
         if uid not in self.waiting_position:
@@ -296,13 +505,10 @@ class PanelManager:
 
         try:
             row, col = map(int, message.text.split())
-
             buttons_col.update_one(
                 {"name": name},
                 {"$set": {"row": row, "col": col}}
             )
-
             self.bot.send_message(message.chat.id, "✅ جابه‌جا شد")
-
         except:
             self.bot.send_message(message.chat.id, "فرمت اشتباه")
