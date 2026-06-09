@@ -333,6 +333,7 @@ class PanelManager:
 
                 if int(owner_id) != uid:
                     return
+                            
 
                 btn = buttons_col.find_one({"name": name, "parent": parent})
 
@@ -343,6 +344,7 @@ class PanelManager:
                 self._reset_timer(uid, call)
 
                 if btn.get("type") != "panel":
+                    self.history.setdefault(uid, []).append(name)
                     # سطح ۲: نمایش متن + دکمه بازگشت سبز
                     self.safe_edit(
                         call,
