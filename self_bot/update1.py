@@ -110,24 +110,42 @@ class PanelManager:
         markup = types.InlineKeyboardMarkup()
 
         buttons = list(buttons_col.find({"parent": parent}))
+
+    # ساخت grid بر اساس row/col
+        grid = {}
+
         for btn in buttons:
-            markup.add(
-                types.InlineKeyboardButton(
-                    btn["name"],
-                    callback_data=f"open_{user_id}_{btn['name']}_{parent}"
-                )
-            )
+            r = btn.get("row", 0)
+            c = btn.get("col", 0)
+
+            if r not in grid:
+                grid[r] = {}
+
+            grid[r][c] = types.InlineKeyboardButton(
+                btn["name"],
+            callback_data=f"open_{user_id}_{btn['name']}_{parent}"
+        )
+
+    # مرتب‌سازی row
+        for r in sorted(grid.keys()):
+            row_buttons = []
+
+        # مرتب‌سازی col
+        for c in sorted(grid[r].keys()):
+            row_buttons.append(grid[r][c])
+
+            markup.row(*row_buttons)
 
         if show_back and parent != "root":
             markup.add(self._green_btn("بازگشت", f"back_{user_id}_{parent}"))
 
         if parent == "root":
             markup.add(
-                types.InlineKeyboardButton(
-                    "❌ بستن پنل",
-                    callback_data=f"close_{user_id}"
-                )
+            types.InlineKeyboardButton(
+                "❌ بستن پنل",
+                callback_data=f"close_{user_id}"
             )
+        )
 
         return markup
 
