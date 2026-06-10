@@ -4,7 +4,7 @@ from pymongo import MongoClient
 import certifi
 import threading
 import time
-
+import uuid
 MAIN_TEXT = "📖  ⦁ Self Nix پنل راهنما ربات  :"
 OWNER_ID = 6433381392
 PANEL_TIMEOUT = 180  # ثانیه = ۳ دقیقه
@@ -149,13 +149,15 @@ class PanelManager:
 
     def admin_panel(self):
         markup = types.InlineKeyboardMarkup()
+
         for btn in buttons_col.find():
             markup.add(
-                types.InlineKeyboardButton(
-                    f"{btn['name']} ({btn.get('row',0)},{btn.get('col',0)})",
-                    callback_data=f"editpos_{btn['name']}"
-                )
-            )
+    types.InlineKeyboardButton(
+        f"{btn['name']} | {btn['type']}",
+        callback_data=f"edit_menu||{btn['_id']}"
+    )
+)
+
         return markup
 
     # ========================================================
@@ -318,10 +320,13 @@ class PanelManager:
         # ===== CALLBACK =====
         @self.bot.callback_query_handler(
             func=lambda c: c.data.startswith((
-                "open_", "remove_", "editpos_",
-                "back_", "set_parent||", "set_textparent||",
-                "set_textcontent||", "close_"
-            ))
+    "open_", "delete||",
+    "edit_menu||", "rename||",
+    "edit_text||", "move||",
+    "move_pos||", "set_parent||",
+    "set_textparent||", "set_new_parent||",
+    "back_", "close_"
+))
         )
         def callback(call):
             data = call.data
@@ -335,7 +340,10 @@ class PanelManager:
                     return
                             
 
-                btn = buttons_col.find_one({"name": name, "parent": parent})
+                btn = buttons_col.find_one({
+            "name": name,
+            "parent": parent
+        })
 
                 if not btn:
                     self.safe_answer(call, "not found")
@@ -401,26 +409,18 @@ class PanelManager:
                 )
 
             # ---------- remove ----------
-            elif data.startswith("remove_"):
+            
+
+            elif data.startswith("delete||"):
                 if uid != OWNER_ID:
                     return
+    
+                btn_id = data.split("||")[1]
 
-                name = data.replace("remove_", "")
-                buttons_col.delete_one({"name": name})
-                self.bot.answer_callback_query(call.id, "حذف شد")
+                buttons_col.delete_one({"_id": btn_id})
 
-                if buttons_col.count_documents({}) > 0:
-                    self.bot.edit_message_reply_markup(
-                        call.message.chat.id,
-                        call.message.message_id,
-                        reply_markup=self.remove_panel()
-                    )
-                else:
-                    self.bot.edit_message_text(
-                        "همه دکمه‌ها حذف شدند",
-                        call.message.chat.id,
-                        call.message.message_id
-                    )
+                self.safe_answer(call, "حذف شد")
+                self.safe_edit(call, MAIN_TEXT, self.admin_panel())
 
             # ---------- editpos ----------
             elif data.startswith("editpos_"):
@@ -445,12 +445,10 @@ class PanelManager:
                 if parent == name:
                     parent = "root"
 
-                buttons_col.insert_one({
-                    "name":   name,
-                    "parent": parent,
-                    "type":   "panel",
-                    "text":   ""
-                })
+                buttons_col.update_one(
+    {"name": name},
+    {"$set": {"parent": parent}}
+)
 
                 self.safe_answer(call, "✅ ساخته شد")
                 self.safe_edit(call, MAIN_TEXT, self.main_panel(uid, "root"))
@@ -469,11 +467,14 @@ class PanelManager:
 
                 def save_text_panel(txt):
                     buttons_col.insert_one({
-                        "name":   name,
-                        "parent": parent_name,
-                        "type":   "text_panel",
-                        "text":   txt.text
-                    })
+    "_id": str(uuid.uuid4()),
+    "name": name,
+    "parent": parent_name,
+    "type": "text_panel",
+    "text": txt.text,
+    "row": 0,
+    "col": 0
+})
                     self.bot.send_message(txt.chat.id, f"✅ دکمه «{name}» زیر «{parent_name}» ساخته شد")
 
                 self.bot.register_next_step_handler(msg, save_text_panel)
@@ -493,6 +494,100 @@ class PanelManager:
                     reason="manual"
                 )
 
+            elif data.startswith("edit_menu||"):
+                if uid != OWNER_ID:
+                    return
+
+                btn_id = data.split("||")[1]
+                btn = buttons_col.find_one({"_id": btn_id})
+
+                markup = types.InlineKeyboardMarkup()
+
+                markup.add(types.InlineKeyboardButton(
+        "✏️ تغییر نام",
+        callback_data=f"rename||{btn_id}"
+    ))
+
+                markup.add(types.InlineKeyboardButton(
+        "📝 تغییر متن",
+        callback_data=f"edit_text||{btn_id}"
+    ))
+
+                markup.add(types.InlineKeyboardButton(
+        "📂 تغییر والد (جابجایی)",
+        callback_data=f"move||{btn_id}"
+    ))
+
+                markup.add(types.InlineKeyboardButton(
+        "📍 تغییر مختصات",
+        callback_data=f"move_pos||{btn_id}"
+    ))
+
+                markup.add(types.InlineKeyboardButton(
+        "🗑 حذف",
+        callback_data=f"delete||{btn_id}"
+    ))
+
+                self.safe_edit(call, "⚙️ ویرایش دکمه:", markup)
+
+            elif data.startswith("rename||"):
+                btn_id = data.split("||")[1]
+
+                msg = self.bot.send_message(call.message.chat.id, "نام جدید:")
+
+                def save(m):
+                    buttons_col.update_one(
+            {"_id": btn_id},
+            {"$set": {"name": m.text}}
+        )
+                    self.bot.send_message(m.chat.id, "✅ تغییر کرد")
+
+                self.bot.register_next_step_handler(msg, save)
+
+            elif data.startswith("edit_text||"):
+                btn_id = data.split("||")[1]
+
+                msg = self.bot.send_message(call.message.chat.id, "متن جدید:")
+
+                def save(m):
+                    buttons_col.update_one(
+            {"_id": btn_id},
+            {"$set": {"text": m.text}}
+        )
+                    self.bot.send_message(m.chat.id, "✅ متن آپدیت شد")
+
+                self.bot.register_next_step_handler(msg, save)
+
+            elif data.startswith("move||"):
+                btn_id = data.split("||")[1]
+
+                panels = list(buttons_col.find({"type": "panel"}))
+
+                markup = types.InlineKeyboardMarkup()
+
+                for p in panels:
+                    markup.add(types.InlineKeyboardButton(
+            p["name"],
+            callback_data=f"set_new_parent||{btn_id}||{p['_id']}"
+        ))
+
+                markup.add(types.InlineKeyboardButton(
+        "root",
+        callback_data=f"set_new_parent||{btn_id}||root"
+    ))
+
+                self.safe_edit(call, "انتخاب پنل جدید:", markup)
+
+            elif data.startswith("set_new_parent||"):
+                _, btn_id, parent_id = data.split("||")
+
+                buttons_col.update_one(
+        {"_id": btn_id},
+        {"$set": {"parent": parent_id}}
+    )
+
+                self.safe_answer(call, "منتقل شد")
+
     # ========================================================
     #  ثبت مختصات
     # ========================================================
@@ -503,14 +598,17 @@ class PanelManager:
         if uid not in self.waiting_position:
             return
 
-        name = self.waiting_position.pop(uid)
+        btn_id = self.waiting_position.pop(uid)
 
         try:
             row, col = map(int, message.text.split())
+
             buttons_col.update_one(
-                {"name": name},
-                {"$set": {"row": row, "col": col}}
-            )
+            {"_id": btn_id},
+            {"$set": {"row": row, "col": col}}
+        )
+
             self.bot.send_message(message.chat.id, "✅ جابه‌جا شد")
+
         except:
             self.bot.send_message(message.chat.id, "فرمت اشتباه")
