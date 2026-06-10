@@ -6,9 +6,14 @@ from telethon.tl.types import (
     SendMessageRecordVideoAction,
     SendMessageGamePlayAction
 )
+from multi_lang import multi_lang, reply_auto, edit_auto
 
+# فرض بر این است که این دو قبلاً در پروژه‌ات وجود دارند
+# from multi_lang import multi_lang
+# from edit_auto import edit_auto
 
 class SelfStatusBot:
+
     def __init__(self, client):
         self.client = client
         self.me_id = None
@@ -29,18 +34,27 @@ class SelfStatusBot:
         self.me_id = me.id
 
     async def add_chat(self, chat_id):
-        self.chat_list.add(chat_id)
+        if chat_id:
+            self.chat_list.add(chat_id)
 
     def register_handlers(self):
 
-        # ثبت چت‌هایی که در آن‌ها پیام می‌دهی
-        @self.client.on(events.NewMessage(outgoing=True))
-        async def track_chats(event):
-            await self.add_chat(event.chat_id)
+        client = self.client
 
-        # سین خودکار (فقط پیوی و گروه – بدون کانال)
-        @self.client.on(events.NewMessage(incoming=True))
+        # ------------------------
+        # Track Chats
+        # ------------------------
+        @client.on(events.NewMessage(outgoing=True))
+        async def track_chats(event):
+            if event.chat_id:
+                await self.add_chat(event.chat_id)
+
+        # ------------------------
+        # Auto Read
+        # ------------------------
+        @client.on(events.NewMessage(incoming=True))
         async def auto_read_handler(event):
+
             if not self.auto_read:
                 return
 
@@ -54,114 +68,195 @@ class SelfStatusBot:
                 return
 
             try:
-                await self.client.send_read_acknowledge(
+                await client.send_read_acknowledge(
                     event.chat_id,
                     max_id=event.id
                 )
             except Exception as e:
                 print(f"[AUTO READ ERROR] {e}")
 
-        # دستورات کنترلی
-        @self.client.on(events.NewMessage(outgoing=True))
-        async def command_handler(event):
-            if event.sender_id != self.me_id:
+        # ==============================
+        # Online / Offline
+        # ==============================
+
+        @client.on(events.NewMessage)
+        @multi_lang([".انلاین", ".Online"])
+        async def online_handler(event):
+            if not event.out:
                 return
 
-            text = event.raw_text.strip()
+            self.online = True
+            await client(functions.account.UpdateStatusRequest(offline=False))
+            await edit_auto(event,"اکانت آنلاین شد.")
 
-            if text == ".آنلاین":
-                self.online = True
-                await self.client(functions.account.UpdateStatusRequest(offline=False))
-                await event.respond("اکانت آنلاین شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".افلاین", ".Ofline"])
+        async def offline_handler(event):
+            if not event.out:
+                return
 
-            elif text == ".آفلاین":
-                self.online = False
-                await self.client(functions.account.UpdateStatusRequest(offline=True))
-                await event.respond("اکانت آفلاین شد.")
+            self.online = False
+            await client(functions.account.UpdateStatusRequest(offline=True))
+            await edit_auto(event,"اکانت آفلاین شد.")
 
-            elif text == ".سین روشن":
-                self.auto_read = True
-                await event.respond("سین خودکار روشن شد.")
+        # ==============================
+        # Auto Read Commands
+        # ==============================
 
-            elif text == ".سین خاموش":
-                self.auto_read = False
-                await event.respond("سین خودکار خاموش شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".سین روشن", ".autoread on"])
+        async def autoread_on(event):
+            if not event.out:
+                return
 
-            elif text == ".تایپ روشن":
-                self.status_flags["typing"][event.chat_id] = True
-                await event.respond("تایپ روشن شد.")
+            self.auto_read = True
+            await edit_auto(event,"سین خودکار روشن شد.")
 
-            elif text == ".تایپ خاموش":
-                self.status_flags["typing"][event.chat_id] = False
-                await event.respond("تایپ خاموش شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".سین خاموش", ".autoread off"])
+        async def autoread_off(event):
+            if not event.out:
+                return
 
-            elif text == ".ویس روشن":
-                self.status_flags["recording_voice"][event.chat_id] = True
-                await event.respond("ویس روشن شد.")
+            self.auto_read = False
+            await edit_auto(event,"سین خودکار خاموش شد.")
 
-            elif text == ".ویس خاموش":
-                self.status_flags["recording_voice"][event.chat_id] = False
-                await event.respond("ویس خاموش شد.")
+        # ==============================
+        # Typing
+        # ==============================
 
-            elif text == ".فیلم روشن":
-                self.status_flags["recording_video"][event.chat_id] = True
-                await event.respond("فیلم روشن شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".تایپ روشن", ".typing on"])
+        async def typing_on(event):
+            if not event.out:
+                return
 
-            elif text == ".فیلم خاموش":
-                self.status_flags["recording_video"][event.chat_id] = False
-                await event.respond("فیلم خاموش شد.")
+            self.status_flags["typing"][event.chat_id] = True
+            await edit_auto(event,"تایپ روشن شد.")
 
-            elif text == ".بازی روشن":
-                self.status_flags["playing_game"][event.chat_id] = True
-                await event.respond("بازی روشن شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".تایپ خاموش", ".typing off"])
+        async def typing_off(event):
+            if not event.out:
+                return
 
-            elif text == ".بازی خاموش":
-                self.status_flags["playing_game"][event.chat_id] = False
-                await event.respond("بازی خاموش شد.")
+            self.status_flags["typing"][event.chat_id] = False
+            await edit_auto(event,"تایپ خاموش شد.")
 
-            elif text == ".تایپ همگانی فعال":
-                for c in self.chat_list:
-                    self.status_flags["typing"][c] = True
-                await event.respond("تایپ همگانی فعال شد.")
+        # ==============================
+        # Voice Recording
+        # ==============================
 
-            elif text == ".تایپ همگانی غیرفعال":
-                for c in self.chat_list:
-                    self.status_flags["typing"][c] = False
-                await event.respond("تایپ همگانی غیرفعال شد.")
+        @client.on(events.NewMessage)
+        @multi_lang([".وس روشن", ".voice on"])
+        async def voice_on(event):
+            if not event.out:
+                return
+
+            self.status_flags["recording_voice"][event.chat_id] = True
+            await edit_auto(event,"ویس روشن شد.")
+
+        @client.on(events.NewMessage)
+        @multi_lang([".ویس خاموش", ".voice off"])
+        async def voice_off(event):
+            if not event.out:
+                return
+
+            self.status_flags["recording_voice"][event.chat_id] = False
+            await edit_auto(event,"ویس خاموش شد.")
+
+        # ==============================
+        # Video Recording
+        # ==============================
+
+        @client.on(events.NewMessage)
+        @multi_lang([".فیلم خاموش", ".video off"])
+        async def video_on(event):
+            if not event.out:
+                return
+
+            self.status_flags["recording_video"][event.chat_id] = True
+            await edit_auto(event,"فیلم روشن شد.")
+
+        @client.on(events.NewMessage)
+        @multi_lang([".فیلم خاموش", ".video off"])
+        async def video_off(event):
+            if not event.out:
+                return
+
+            self.status_flags["recording_video"][event.chat_id] = False
+            await edit_auto(event,"فیلم خاموش شد.")
+
+        # ==============================
+        # Game
+        # ==============================
+
+        @client.on(events.NewMessage)
+        @multi_lang([".بازی روشن", ".game on"])
+        async def game_on(event):
+            if not event.out:
+                return
+
+            self.status_flags["playing_game"][event.chat_id] = True
+            await edit_auto(event,"بازی روشن شد.")
+
+        @client.on(events.NewMessage)
+        @multi_lang([".بازی خاموش", ".game off"])
+        async def game_off(event):
+            if not event.out:
+                return
+
+            self.status_flags["playing_game"][event.chat_id] = False
+            await edit_auto(event,"بازی خاموش شد.")
+
+    # =========================================
+    # Optimized Status Loop
+    # =========================================
 
     async def status_loop(self):
+
+        actions_map = {
+            "typing": SendMessageTypingAction(),
+            "recording_voice": SendMessageRecordAudioAction(),
+            "recording_video": SendMessageRecordVideoAction(),
+            "playing_game": SendMessageGamePlayAction()
+        }
+
         while True:
+
             for chat_id in list(self.chat_list):
-                try:
-                    if self.status_flags["typing"].get(chat_id):
-                        async with self.client.action(chat_id, SendMessageTypingAction()):
-                            await asyncio.sleep(25)
 
-                    if self.status_flags["recording_voice"].get(chat_id):
-                        async with self.client.action(chat_id, SendMessageRecordAudioAction()):
-                            await asyncio.sleep(25)
+                for key, action in actions_map.items():
 
-                    if self.status_flags["recording_video"].get(chat_id):
-                        async with self.client.action(chat_id, SendMessageRecordVideoAction()):
-                            await asyncio.sleep(25)
+                    if self.status_flags[key].get(chat_id):
 
-                    if self.status_flags["playing_game"].get(chat_id):
-                        async with self.client.action(chat_id, SendMessageGamePlayAction()):
-                            await asyncio.sleep(25)
+                        try:
+                            async with self.client.action(chat_id, action):
+                                await asyncio.sleep(4)
+                        except Exception as e:
+                            print(f"[STATUS LOOP ERROR] {e}")
 
-                except Exception as e:
-                    print(f"[STATUS LOOP ERROR] {e}")
+            await asyncio.sleep(1)
 
-            await asyncio.sleep(0.1)
+    # =========================================
+    # Keep Online
+    # =========================================
 
     async def keep_online(self):
         while True:
             if self.online:
                 try:
-                    await self.client(functions.account.UpdateStatusRequest(offline=False))
+                    await self.client(
+                        functions.account.UpdateStatusRequest(offline=False)
+                    )
                 except Exception as e:
                     print(f"[KEEP ONLINE ERROR] {e}")
+
             await asyncio.sleep(60)
+
+    # =========================================
+    # Start
+    # =========================================
 
     async def start(self):
         await self.init_owner()
