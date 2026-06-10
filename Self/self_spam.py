@@ -265,7 +265,7 @@ def register_handlers(client, owner_check_fn=None):
         await edit_auto(event, f"⚡ اسپم {tp} در حال انجام است (تعداد: {cnt})")
 
     @client.on(events.NewMessage)
-    @multi_lang([".توف اسپم", ".Stop spam"])
+    @multi_lang([".توقف اسپم", ".Stop spam"])
     async def stop_cmd(event):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
