@@ -97,12 +97,12 @@ def register(client):
         try:
             await client(functions.account.UpdateProfileRequest(first_name=new_name))
             await edit_auto(event, 
-                f"⚠️ اسم عوض شد\n"
-                f"اسم قبلی: {old_name}\n"
-                f"اسم فعلی: {new_name}"
+                f"**⚠️ اسم عوض شد\n**"
+                f"**اسم قبلی: {old_name}\n**"
+                f"**اسم فعلی: {new_name}**"
             )
         except Exception:
-            await edit_auto(event, "⚠️ خطا در تغییر اسم")
+            await edit_auto(event, "**⚠️ خطا در تغییر اسم**")
 
     # ==============================
     # .تنظیم فامیل
@@ -120,12 +120,12 @@ def register(client):
         try:
             await client(functions.account.UpdateProfileRequest(last_name=new_last))
             await edit_auto(event, 
-                f"⚠️ فامیل عوض شد\n"
-                f"فامیل قبلی: {old_last}\n"
-                f"فامیل فعلی: {new_last}"
+                f"*،⚠️ فامیل عوض شد\n**"
+                f"**فامیل قبلی: {old_last}\n**"
+                f"**فامیل فعلی: {new_last}**"
             )
         except Exception:
-            await edit_auto(event, "⚠️ خطا در تغییر فامیل")
+            await edit_auto(event, "**⚠️ خطا در تغییر فامیل**")
 
     # ==============================
     # .تنظیم بیو
@@ -143,14 +143,14 @@ def register(client):
         try:
             await client(functions.account.UpdateProfileRequest(about=new_bio))
             await edit_auto(event, 
-                f"⚠️ بیو عوض شد\n"
-                f"بیو قبلی: {old_bio}\n"
-                f"بیو فعلی: {new_bio}"
+                f"**⚠️ بیو عوض شد\n**"
+                f"**بیو قبلی: {old_bio}\n**"
+                f"**بیو فعلی: {new_bio}**"
             )
         except AboutTooLongError:
-            await edit_auto(event, "⚠️ بیو بیش از حد مجاز است")
+            await edit_auto(event, "**⚠️ بیو بیش از حد مجاز است**")
         except Exception:
-            await edit_auto(event, "⚠️ خطا در تغییر بیو")
+            await edit_auto(event, "**⚠️ خطا در تغییر بیو**")
 
     # ==============================
     # .تنظیم یوزرنیم
@@ -168,16 +168,16 @@ def register(client):
         try:
             await client(functions.account.UpdateUsernameRequest(username=new_username))
             await edit_auto(event, 
-                f"⚠️ یوزرنیم عوض شد\n"
-                f"یوزرنیم قبلی: {old_username}\n"
-                f"یوزرنیم فعلی: @{new_username}"
+                f"**⚠️ یوزرنیم عوض شد\n**"
+                f"**یوزرنیم قبلی: {old_username}\n**"
+                f"**یوزرنیم فعلی: @{new_username}**"
             )
         except UsernameOccupiedError:
-            await edit_auto(event, "⚠️ یوزرنیم قبلا گرفته شده")
+            await edit_auto(event, "**⚠️ یوزرنیم قبلا گرفته شده**")
         except UsernameInvalidError:
-            await edit_auto(event, "⚠️ یوزرنیم نامعتبر است")
+            await edit_auto(event, "**⚠️ یوزرنیم نامعتبر است")
         except Exception:
-            await edit_auto(event, "⚠️ خطا در تغییر یوزرنیم")
+            await edit_auto(event, "**⚠️ خطا در تغییر یوزرنیم**")
 
     # ==============================
     # .تنظیم عکس (ریپلای)
@@ -189,12 +189,12 @@ def register(client):
             return
 
         if not event.is_reply:
-            await edit_auto(event, "⚠️ باید روی عکس ریپلای شود")
+            await edit_auto(event, "**⚠️ باید روی عکس ریپلای شود**")
             return
 
         reply = await event.get_reply_message()
         if not reply.photo:
-            await edit_auto(event, "⚠️ پیام ریپلای‌شده عکس نیست")
+            await edit_auto(event, "*،*⚠️ پیام ریپلای‌شده عکس نیست**")
             return
 
         try:
@@ -206,13 +206,13 @@ def register(client):
                 ))
                 # ارسال پیام داخل بلوک تا فایل هنوز موجود باشه
                 await edit_auto(event, 
-                    "⚠️ عکس پروفایل عوض شد\n"
-                    "عکس قبلی و عکس جدید ثبت شد"
+                    "**⚠️ عکس پروفایل عوض شد\n**"
+                    "**عکس قبلی و عکس جدید ثبت شد**"
                 )
         except FloodWaitError:
-            await edit_auto(event, "⚠️ محدودیت زمانی تلگرام")
+            await edit_auto(event, "**⚠️ محدودیت زمانی تلگرام**")
         except Exception:
-            await edit_auto(event, "⚠️ خطا در تغییر عکس پروفایل")
+            await edit_auto(event, "**⚠️ خطا در تغییر عکس پروفایل**")
 
 # ============================================================
 # End of file
