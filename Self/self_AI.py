@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 # CONFIG
 # =========================================================
 
-OPENAI_KEY = "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"
+OPENAI_KEY = os.getenv("GROQ_API_KEY")
 
 
 DEFAULT_CHARACTER = {
