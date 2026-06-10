@@ -106,48 +106,50 @@ class PanelManager:
         پس متن دکمه را با نشانه‌ی سبز می‌سازیم تا کاملاً سبز به‌نظر برسد."""
         return types.InlineKeyboardButton(f" {label}", callback_data=cb)
 
-    def main_panel(self, user_id, parent="root", show_back=False):
+
+    def build_panel_markup(self, user_id: int, parent: str, show_back=False):
+        """ساخت markup با رعایت row/col برای همه سطوح (root و پنل‌های سطح ۱)"""
         markup = types.InlineKeyboardMarkup()
 
         buttons = list(buttons_col.find({"parent": parent}))
 
-    # ساخت grid بر اساس row/col
         grid = {}
 
         for btn in buttons:
-            r = btn.get("row", 0)
-            c = btn.get("col", 0)
+            r = int(btn.get("row", 0))
+            c = int(btn.get("col", 0))
 
-            if r not in grid:
-                grid[r] = {}
-
-            grid[r][c] = types.InlineKeyboardButton(
+            grid.setdefault(r, {})[c] = types.InlineKeyboardButton(
                 btn["name"],
-            callback_data=f"open_{user_id}_{btn['name']}_{parent}"
-        )
+                callback_data=f"open_{user_id}_{btn['name']}_{parent}"
+            )
 
-    # مرتب‌سازی row
+        # ساخت ردیف‌ها بر اساس grid
         for r in sorted(grid.keys()):
             row_buttons = []
+            for c in sorted(grid[r].keys()):
+                row_buttons.append(grid[r][c])
 
-        # مرتب‌سازی col
-        for c in sorted(grid[r].keys()):
-            row_buttons.append(grid[r][c])
-
-            markup.row(*row_buttons)
+            if row_buttons:
+                markup.row(*row_buttons)
 
         if show_back and parent != "root":
-            markup.add(self._green_btn("بازگشت", f"back_{user_id}_{parent}"))
+            markup.add(
+                self._green_btn("بازگشت", f"back_{user_id}_{parent}")
+            )
 
         if parent == "root":
             markup.add(
-            types.InlineKeyboardButton(
-                "❌ بستن پنل",
-                callback_data=f"close_{user_id}"
+                types.InlineKeyboardButton(
+                    "❌ بستن پنل",
+                    callback_data=f"close_{user_id}"
+                )
             )
-        )
 
         return markup
+
+    def main_panel(self, user_id, parent="root", show_back=False):
+        return self.build_panel_markup(user_id, parent, show_back)
 
     def back_only_panel(self, user_id, parent="root"):
         markup = types.InlineKeyboardMarkup()
@@ -379,26 +381,20 @@ class PanelManager:
                     )
                     return
 
-                # سطح ۱: نمایش زیردکمه‌ها
+                # سطح ۱: نمایش زیردکمه‌ها با رعایت row/col (بار اول هم درست)
                 self.history.setdefault(uid, []).append(name)
 
-                children = list(buttons_col.find({"parent": name}))
-                markup = types.InlineKeyboardMarkup()
+                markup = self.build_panel_markup(uid, parent=name, show_back=True)
 
-                for c in children:
-                    markup.add(
-                        types.InlineKeyboardButton(
-                            c["name"],
-                            callback_data=f"open_{uid}_{c['name']}_{name}"
-                        )
-                    )
-
-                if not children:
+                # اگر پنل خالی بود
+                if not buttons_col.find_one({"parent": name}):
+                    markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("📭 خالی", callback_data="noop"))
+                    markup.add(self._green_btn("بازگشت", f"back_{uid}_{name}"))
 
-                markup.add(self._green_btn("بازگشت", f"back_{uid}_{name}"))
+                text_to_show = btn.get("text") or f"📂 {name}"
 
-                self.safe_edit(call, f"📂 {name}", markup)
+                self.safe_edit(call, text_to_show, markup)
 
             # ---------- back ----------
             elif data.startswith("back_"):
