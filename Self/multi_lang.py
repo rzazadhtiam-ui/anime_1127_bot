@@ -5,9 +5,6 @@ from functools import wraps
 
 BASE_LANG = "fa"
 
-# ===============================
-# Supported Languages
-# ===============================
 SUPPORTED_LANGS = {
     "en": "English",
     "fa": "Persian",
@@ -23,14 +20,16 @@ SUPPORTED_LANGS = {
 _translate_cache = {}
 user_langs = {}
 
-# ===============================
-# Language Utils
-# ===============================
-def get_lang(chat_id):
-    return user_langs.get(chat_id, BASE_LANG)
+# ==========================================
+# Language
+# ==========================================
+
+def get_lang_from_user(user):
+    lang = getattr(user, "language_code", None)
+    return lang if lang in SUPPORTED_LANGS else BASE_LANG
 
 def set_lang(chat_id, lang):
-    lang = lang.lower()
+    lang = str(lang).lower()
 
     if lang not in SUPPORTED_LANGS:
         return False
@@ -39,41 +38,55 @@ def set_lang(chat_id, lang):
     return True
 
 def get_lang_list_text():
-    txt = "🌐 Choose Language:\n\n"
+    txt = "🌐 Languages\n\n"
+
     for code, name in SUPPORTED_LANGS.items():
         txt += f"{code} → {name}\n"
+
     return txt
 
-# ===============================
-# Translation Core
-# ===============================
+# ==========================================
+# Translator
+# ==========================================
+
 async def translate(text, target):
 
     if not text:
-        return text
-
-    key = f"{text}:{target}"
-
-    if key in _translate_cache:
-        return _translate_cache[key]
+        return ""
 
     try:
+
+        key = f"{text}:{target}"
+
+        if key in _translate_cache:
+            return _translate_cache[key]
+
         result = await asyncio.to_thread(
-            lambda: GoogleTranslator(source="auto", target=target).translate(text)
+            lambda: GoogleTranslator(
+                source="auto",
+                target=target
+            ).translate(text)
         )
 
+        if not result:
+            return text
+
         _translate_cache[key] = result
+
+        if len(_translate_cache) > 500:
+            _translate_cache.clear()
+
         return result
 
     except:
         return text
 
-# ===============================
-# 
-# ===============================
-# 🛑 قوانین Ignore مرکزی برای جلوگیری از تداخل دستورات مشابه
+# ==========================================
+# Ignore Rules
+# ==========================================
+
 IGNORE_RULES = {
-    # بخش ساعت (فارسی و انگلیسی)
+
     ".ساعت": [
         ".ساعت خاموش",
         ".ساعت اسم",
@@ -81,196 +94,214 @@ IGNORE_RULES = {
         ".ساعت کلی",
         ".ساعت جهانی",
         ".ساعت منطقه",
-        ".ساعا فونت",
+        ".ساعت فونت"
     ],
+
     ".clock": [
-        ".clock utc",
-        ".clock all",
-        ".clock bio",
-        ".clock name",
-        ".clock font",
         ".clock off",
+        ".clock name",
+        ".clock bio",
+        ".clock all",
+        ".clock utc",
         ".clock region",
-    ],
-
-    ".بازی": [ 
-        ".بازی روشن",
-        ".بازی خاموش",
-    ],
-
-    ".سکوت": [ 
-        ".سکوت گپ", 
-    ],
-
-    ".حذف سکوت": [
-        ".حذف سکوت گپ",
-    ],
-
-    ".حذف":[
-        ".حذف سکوت",
-        ".حذف سکوت گپ",
-        ".حذف پین", 
-        ".حذف بن",
-        ".حذف همه",
-    ],
+        ".clock font"
+    ]
 }
 
-def _norm_cmd(s: str) -> str:
-    """نرمال‌سازی متن برای مقایسه دقیق و بدون مشکل فاصله اضافی"""
-    return " ".join((s or "").strip().lower().split())
+def _norm(text):
 
-def _get_auto_ignore_for_patterns(patterns):
-    """پیدا کردن خودکار قوانین ignore بر اساس الگوی ورودی"""
-    auto_ignores = []
+    return " ".join(
+        str(text).strip().lower().split()
+    )
+
+def _auto_ignore(patterns):
+
+    result = []
+
     for p in patterns:
-        key = _norm_cmd(p)
-        if key in IGNORE_RULES:
-            auto_ignores.extend(IGNORE_RULES[key])
-    return list(dict.fromkeys(auto_ignores))
 
-def _should_ignore(raw_text: str, ignores) -> bool:
-    """بررسی اینکه آیا پیام فعلی باید نادیده گرفته شود یا خیر"""
-    t = _norm_cmd(raw_text)
+        p = _norm(p)
+
+        if p in IGNORE_RULES:
+            result.extend(IGNORE_RULES[p])
+
+    return list(dict.fromkeys(result))
+
+def _should_ignore(text, ignores):
+
+    t = _norm(text)
+
     for ign in ignores:
-        ign_n = _norm_cmd(ign)
-        if t.startswith(ign_n):
+
+        if t.startswith(_norm(ign)):
             return True
+
     return False
 
-# ===============================
+# ==========================================
 # Multi Language Decorator
-# ===============================
+# ==========================================
+
 def multi_lang(patterns, ignore=None, use_auto_ignore=True):
+
     if isinstance(patterns, str):
         patterns = [patterns]
 
-    if ignore and isinstance(ignore, str):
+    if isinstance(ignore, str):
         ignore = [ignore]
 
-    # ignore مرکزی + ignore دستی
-    auto_ignores = _get_auto_ignore_for_patterns(patterns) if use_auto_ignore else []
-    manual_ignores = ignore or []
-    final_ignores = list(dict.fromkeys(auto_ignores + manual_ignores))
+    auto = _auto_ignore(patterns) if use_auto_ignore else []
+
+    ignores = list(
+        dict.fromkeys(
+            auto + (ignore or [])
+        )
+    )
 
     def decorator(func):
+
         @wraps(func)
         async def wrapper(event):
-            if not event.out:
-                return
 
-            raw_text = (event.raw_text or "").strip()
-            if not raw_text:
-                return
+            try:
 
-            user_lang = get_lang(event.chat_id)
+                if not getattr(event, "out", False):
+                    return
 
-            # ------------------------------
-            # اگر پیام جزو ignore ها بود، این handler اجرا نشود
-            # ------------------------------
-            if final_ignores and _should_ignore(raw_text, final_ignores):
-                return
+                raw = getattr(event, "raw_text", None)
 
-            # ------------------------------
-            # ترجمه ورودی برای match کردن
-            # ------------------------------
-            if user_lang != "en":
-                normalized = await translate(raw_text, "fa")
-            else:
-                normalized = raw_text
+                if not isinstance(raw, str):
+                    return
 
-            text = normalized.lower()
+                raw = raw.strip()
 
-            for pattern in patterns:
-                if text.startswith(pattern.lower()):
-                    event.ml_text = text
-                    event.ml_args = text[len(pattern):].strip()
-                    event.user_lang = user_lang
-                    return await func(event)
+                if not raw:
+                    return
+
+                if ignores and _should_ignore(raw, ignores):
+                    return
+
+                text = raw.lower()
+
+                for pattern in patterns:
+
+                    p = pattern.lower()
+
+                    if text.startswith(p):
+
+                        event.ml_text = text
+                        event.ml_args = text[len(p):].strip()
+                        event.user_lang = get_lang(event.chat_id)
+
+                        return await func(event)
+
+            except Exception as e:
+
+                print(
+                    f"[MULTI_LANG ERROR] "
+                    f"{func.__name__}: {e}"
+                )
 
         return wrapper
 
     return decorator
 
-# ===============================
-# Auto Reply (ترجمه پاسخ به زبان کاربر)
-# ===============================
-async def reply_auto(event, text):
+# ==========================================
+# Auto Reply
+# ==========================================
 
-    lang = getattr(event, "user_lang", get_lang(event.chat_id))
+async def reply_auto(event, text, file=None, **kwargs):
+    try:
 
-    if lang == BASE_LANG:
-        return await event.reply(text)
-
-    # خروجی فارسی ربات به زبان کاربر ترجمه میشه
-    translated = await translate(text, lang)
-    return await event.reply(translated)
-
-# ===============================
-# Auto Edit (ترجمه پاسخ به زبان کاربر)
-# ===============================
-async def edit_auto(event, text):
-
-    lang = getattr(event, "user_lang", get_lang(event.chat_id))
-
-    if lang == BASE_LANG:
-        return await event.edit(text)
-
-    # خروجی فارسی ربات به زبان کاربر ترجمه میشه
-    translated = await translate(text, lang)
-    return await event.edit(translated)
-# ===============================
-# Register Commands
-# ===============================
-def register_language_commands(client):
-
-    # ask language on activation
-    @client.on(events.NewMessage(
-        incoming=True,
-        func=lambda e: e.is_private and "Self Nix" in (e.raw_text or "")
-    ))
-    async def ask_language(event):
-
-        if event.chat_id not in user_langs:
-            await event.reply(get_lang_list_text())
-
-    # change language
-    @client.on(events.NewMessage(
-        outgoing=True,
-        pattern=r"\.(?:زبان|language)\s+(\w+)"
-    ))
-    async def change_lang(event):
-
-        lang = event.pattern_match.group(1).lower()
-
-        if not set_lang(event.chat_id, lang):
-            return await reply_auto(event, "Unsupported language")
-
-        await reply_auto(
+        lang = getattr(
             event,
-            f"Language changed to {SUPPORTED_LANGS[lang]}"
+            "user_lang",
+            get_lang_from_user(event.sender)
         )
 
-    # show language list
+        if lang == BASE_LANG:
+            return await event.reply(text, file=file, **kwargs)
+
+        translated = await translate(text, lang)
+
+        return await event.reply(translated, file=file, **kwargs)
+
+    except Exception as e:
+        print(f"[REPLY_AUTO] {e}")
+# ==========================================
+# Auto Edit
+# ==========================================
+
+async def edit_auto(event, text, file=None, **kwargs):
+    try:
+
+        lang = getattr(
+            event,
+            "user_lang",
+            get_lang_from_user(event.sender)
+        )
+
+        if lang == BASE_LANG:
+            return await event.edit(text, file=file, **kwargs)
+
+        translated = await translate(text, lang)
+
+        return await event.edit(translated, file=file, **kwargs)
+
+    except Exception as e:
+        print(f"[EDIT_AUTO] {e}")
+
+# ==========================================
+# Register Commands
+# ==========================================
+
+def register_language_commands(client):
+
     @client.on(events.NewMessage(
         outgoing=True,
         pattern=r"\.(?:زبان|language)$"
     ))
     async def show_lang(event):
 
-        await event.reply(get_lang_list_text())
+        await event.edit(
+            get_lang_list_text()
+        )
 
-    # manual translate
+    @client.on(events.NewMessage(
+        outgoing=True,
+        pattern=r"\.(?:زبان|language)\s+(\w+)"
+    ))
+    async def set_language(event):
+
+        lang = event.pattern_match.group(1).lower()
+
+        if not set_lang(event.chat_id, lang):
+            return await event.edit(
+                "Invalid language"
+            )
+
+        await event.edit(
+            f"Language changed to {SUPPORTED_LANGS[lang]}"
+        )
+
     @client.on(events.NewMessage(
         outgoing=True,
         pattern=r"\.(?:ترجمه|translate)\s+(\w+)\s+(.+)"
     ))
-    async def translate_command(event):
+    async def translate_cmd(event):
 
         lang = event.pattern_match.group(1).lower()
+
         text = event.pattern_match.group(2)
 
         if lang not in SUPPORTED_LANGS:
-            return await event.reply("Invalid language")
+            return await event.edit(
+                "Invalid language"
+            )
 
-        result = await translate(text, lang)
-        await event.reply(result)
+        result = await translate(
+            text,
+            lang
+        )
+
+        await event.edit(result)
