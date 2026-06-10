@@ -298,16 +298,16 @@ def register_clock(client):
             if not tz:
                 return await edit_auto(
                     event,
-                    "❌ شهر پیدا نشد." if is_fa else "❌ City not found."
+                    "**❌ شهر پیدا نشد.**" if is_fa else "**❌ City not found.**"
                 )
 
         now = datetime.now(pytz.timezone(tz))
         city_name = tz.split("/")[-1].replace("_", " ")
 
         if is_fa:
-            await edit_auto(event, f"🕒 ساعت {city_name}: {now.strftime('%H:%M')}")
+            await edit_auto(event, f"**🕒 ساعت {city_name}: {now.strftime('%H:%M')}**")
         else:
-            await edit_auto(event, f"🕒 Time in {city_name}: {now.strftime('%H:%M')}")
+            await edit_auto(event, f"**🕒 Time in {city_name}: {now.strftime('%H:%M')}**")
 
 # =========================
 # ثبت دستورات ساعت جهانی و کلی
@@ -327,7 +327,7 @@ def register_clock(client):
             return
 
         now = datetime.utcnow()
-        await edit_auto(event, f"🌐 UTC: {now.strftime('%H:%M')}")
+        await edit_auto(event, f"**🌐 UTC: {now.strftime('%H:%M')}**")
 
     # =========================
     # 🕒 ساعت کلی (همه شهرها)
@@ -342,14 +342,14 @@ def register_clock(client):
         if sender.id != me.id:
             return
 
-        text = "🕒 لیست ساعت شهرها:\n\n"
+        text = "**🕒 لیست ساعت شهرها:\n\n**"
 
         for city, tz in city_timezones.items():
             try:
                 now = datetime.now(pytz.timezone(tz))
-                text += f"{city}: {now.strftime('%H:%M')}\n"
+                text += f"**{city}: {now.strftime('%H:%M')}\n**"
             except Exception:
-                text += f"{city}: خطا ❌\n"
+                text += f"**{city}: خطا ❌\n**"
 
         await edit_auto(event, text)
 
@@ -373,7 +373,7 @@ def register_clock(client):
                 live_clock_user(client, user_id)
             )
 
-        await edit_auto(event, "✅ ساعت روی بیو فعال شد.")
+        await edit_auto(event, "**✅ ساعت روی بیو فعال شد.**")
 
     # =========================
     # فعال‌سازی نام
@@ -395,7 +395,7 @@ def register_clock(client):
                 live_clock_user(client, user_id)
             )
 
-        await edit_auto(event, "✅ ساعت روی اسم فعال شد.")
+        await edit_auto(event, "**✅ ساعت روی اسم فعال شد.**")
 
     # =========================
     # تنظیم فونت
@@ -413,19 +413,19 @@ def register_clock(client):
         parts = query.split()
 
         if not parts:
-            return await edit_auto(event, "❌ فرمت درست: `.ساعت فونت <شماره>`")
+            return await edit_auto(event, "**❌ فرمت درست: `.ساعت فونت <شماره>`**")
 
         try:
             fid = int(parts[0])
         except ValueError:
-            return await edit_auto(event, "❌ شماره فونت باید عدد باشد.")
+            return await edit_auto(event, "**❌ شماره فونت باید عدد باشد.**")
 
         if fid not in FONT_TABLE:
-            return await edit_auto(event, "❌ این فونت وجود ندارد.")
+            return await edit_auto(event, "**❌ این فونت وجود ندارد.**")
 
         set_clock(user_id, "font_id", fid)
 
-        await edit_auto(event, f"✅ فونت {fid} فعال شد.")
+        await edit_auto(event, f"**✅ فونت {fid} فعال شد.**")
 
     # =========================
     # نمایش فونت‌ها
@@ -438,7 +438,7 @@ def register_clock(client):
         if sender.id != me.id:
             return
 
-        msg = "📜 لیست فونت‌ها:\n"
+        msg = "**📜 لیست فونت‌ها:\n**"
         for fid, digits in FONT_TABLE.items():
             msg += f"{fid}: {''.join(digits)}\n"
 
@@ -480,7 +480,7 @@ def register_clock(client):
         clock["original_profile"] = {}
         save_clock(user_id, clock)
 
-        await edit_auto(event, "🛑 ساعت خاموش شد و پروفایل بازیابی شد.")
+        await edit_auto(event, "**🛑 ساعت خاموش شد و پروفایل بازیابی شد.**")
 
     # =========================
     # تنظیم منطقه
@@ -497,11 +497,11 @@ def register_clock(client):
         query = getattr(event, "ml_args", "").strip()
 
         if not query:
-            return await edit_auto(event, "❌ استفاده صحیح: `.ساعت منطقه <شهر>`")
+            return await edit_auto(event, "**❌ استفاده صحیح: `.ساعت منطقه <شهر>`**")
 
         if query not in city_timezones:
-            return await edit_auto(event, "❌ چنین شهری ثبت نشده.")
+            return await edit_auto(event, "**❌ چنین شهری ثبت نشده.*؟")
 
         set_clock(user_id, "timezone", city_timezones[query])
 
-        await edit_auto(event, f"🌍 منطقه روی {query} تنظیم شد.")
+        await edit_auto(event, f"**🌍 منطقه روی {query} تنظیم شد.**")
