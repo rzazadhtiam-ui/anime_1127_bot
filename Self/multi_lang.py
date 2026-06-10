@@ -45,6 +45,9 @@ def get_lang_list_text():
 
     return txt
 
+def get_lang(user):
+    return get_lang_from_user(user)
+
 # ==========================================
 # Translator
 # ==========================================
