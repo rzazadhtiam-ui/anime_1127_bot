@@ -147,7 +147,7 @@ def register_self_AI(client):
 
     # .ai command
     @client.on(events.NewMessage)
-    @multi_lang([".ai", ".ای"])
+    @multi_lang([".ai", "ai"])
     async def ai_question(event):
         text = (event.raw_text or "").strip()
         if not text.startswith((".ai", ".ای")):
