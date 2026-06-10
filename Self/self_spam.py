@@ -234,14 +234,14 @@ def register_handlers(client, owner_check_fn=None):
         # گرفتن آرگومان‌ها از متن
         args = event.ml_args.split(maxsplit=2)  # تفکیک به tp, cnt, متن
         if len(args) < 2:
-            await edit_auto(event, "❌ لطفاً نوع اسپم و تعداد را وارد کنید\nمثال: `.اسپم متن 5 سلام`")
+            await edit_auto(event, "**❌ لطفاً نوع اسپم و تعداد را وارد کنید\nمثال: `.اسپم متن 5 سلام`**")
             return
 
         tp = args[0]                     # نوع اسپم
         try:
             cnt = int(args[1])           # تعداد
         except ValueError:
-            await edit_auto(event, "❌ تعداد باید عدد باشد")
+            await edit_auto(event, "**❌ تعداد باید عدد باشد**")
             return
 
         txt = args[2] if len(args) > 2 else ""  # متن اسپم
@@ -249,7 +249,7 @@ def register_handlers(client, owner_check_fn=None):
             reply_msg = await event.get_reply_message()
             txt = reply_msg.message if reply_msg else ""
         if not txt:
-            txt = "سلام"
+            txt = "**سلام**"
 
         # اجرای اسپم
         await start_spam(
@@ -262,7 +262,7 @@ def register_handlers(client, owner_check_fn=None):
     )
 
         # پیام نتیجه
-        await edit_auto(event, f"⚡ اسپم {tp} در حال انجام است (تعداد: {cnt})")
+        await edit_auto(event, f"**⚡ اسپم {tp} در حال انجام است (تعداد: {cnt})**")
 
     @client.on(events.NewMessage)
     @multi_lang([".توقف اسپم", ".Stop spam"])
@@ -270,7 +270,7 @@ def register_handlers(client, owner_check_fn=None):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         await stop_chat_spams(owner_id, event.chat_id)
-        await edit_auto(event, "اسپم متوقف شد.")
+        await edit_auto(event, "**اسپم متوقف شد.**")
 
     # MUTE / UNMUTE
     @client.on(events.NewMessage)
@@ -283,7 +283,7 @@ def register_handlers(client, owner_check_fn=None):
             uid = await get_me_id()
             name = await get_name(client, uid)
         mute_user(owner_id, uid, name)
-        await edit_auto(event, f"کاربر {name} ({uid}) سکوت شد.")
+        await edit_auto(event, f"**کاربر {name}|`{uid}` سکوت شد.**")
 
     @client.on(events.NewMessage)
     @multi_lang([".حذف سکوت", ".unmute"])
@@ -295,7 +295,7 @@ def register_handlers(client, owner_check_fn=None):
             uid = await get_me_id()
             name = await get_name(client, uid)
         unmute_user(owner_id, uid)
-        await edit_auto(event, f"{name} ({uid}) از سکوت خارج شد.")
+        await edit_auto(event, f"**{name}|`{uid}` از سکوت خارج شد.**")
 
     # BLOCK / UNBLOCK
     @client.on(events.NewMessage)
@@ -304,10 +304,10 @@ def register_handlers(client, owner_check_fn=None):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         uid, name = await resolve_target(client, event)
-        if not uid: return await edit_auto(event, "کاربر پیدا نشد.")
+        if not uid: return await edit_auto(event, "**کاربر پیدا نشد.**")
         ok = await block_user(event.client, owner_id, uid, name)
-        if ok: await edit_auto(event, f"{name} ({uid}) بلاک شد.")
-        else: await edit_auto(event, "❌ خطا در بلاک کردن.")
+        if ok: await edit_auto(event, f"**{name}|`{uid}` بلاک شد.**")
+        else: await edit_auto(event, "**❌ خطا در بلاک کردن.**")
 
     
     @client.on(events.NewMessage)
@@ -316,10 +316,10 @@ def register_handlers(client, owner_check_fn=None):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         uid, name = await resolve_target(client, event)
-        if not uid: return await edit_auto(event, "کاربر پیدا نشد.")
+        if not uid: return await edit_auto(event, "**کاربر پیدا نشد.**")
         ok = await unblock_user(event.client, owner_id, uid)
-        if ok: await edit_auto(event, f"{name} ({uid}) از بلاک خارج شد.")
-        else: await edit_auto(event, "❌ خطا در آن‌بلاک کردن.")
+        if ok: await edit_auto(event, f"**{name}|`{uid}` از بلاک خارج شد.**")
+        else: await edit_auto(event, "**❌ خطا در آن‌بلاک کردن.**")
 
     # LIST
     @client.on(events.NewMessage)
@@ -328,8 +328,8 @@ def register_handlers(client, owner_check_fn=None):
         owner_id = await get_owner_id(client)
         ensure_owner(owner_id)
         m = list_muted(owner_id)
-        if not m: return await edit_auto(event, "هیچ کاربری در سکوت نیست.")
-        txt = "👤 لیست سکوت :\n\n" + "\n".join(f"{n} : {u}" for u, n in m.items())
+        if not m: return await edit_auto(event, "**هیچ کاربری در سکوت نیست.**")
+        txt = "**👤 لیست سکوت :\n\n**" + "\n".join(f"**{n}**: `{u}`" for u, n in m.items())
         await event.edit(txt)
 
     @client.on(events.NewMessage)
@@ -339,7 +339,7 @@ def register_handlers(client, owner_check_fn=None):
         ensure_owner(owner_id)
         b = list_blocked(owner_id)
         if not b: return await edit_auto(event, "هیچ کاربری بلاک نیست.")
-        txt = "⛔ لیست بلاک:\n\n" + "\n".join(f"{n} : {u}" for u, n in b.items())
+        txt = "**⛔ لیست بلاک:\n\n**" + "\n".join(f"**{n}:** `{u}`" for u, n in b.items())
         await event.edit(txt)
 
     # CLEAR ALL
@@ -350,7 +350,7 @@ def register_handlers(client, owner_check_fn=None):
         ensure_owner(owner_id)
         for uid in list(list_muted(owner_id).keys()):
             unmute_user(owner_id, int(uid))
-        await edit_auto(event, "تمام کاربران از سکوت خارج شدند ✔️")
+        await edit_auto(event, "**تمام کاربران از سکوت خارج شدند ✔️**")
 
     @client.on(events.NewMessage)
     @multi_lang([".پاکسازی بلاک", ".celar block"])
@@ -361,5 +361,5 @@ def register_handlers(client, owner_check_fn=None):
         for uid in list(list_blocked(owner_id).keys()):
             ok = await unblock_user(event.client, owner_id, int(uid))
             if ok: success_count += 1
-        await edit_auto(event, f"{success_count} کاربر از بلاک خارج شدند ✔️")
+        await edit_auto(event, f"**{success_count} کاربر از بلاک خارج شدند ✔️**")
     
