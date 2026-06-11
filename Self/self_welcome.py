@@ -9,7 +9,7 @@ from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import ChatBannedRights, ChannelParticipantAdmin, ChannelParticipantCreator
 from self_storage import Storage
 from multi_lang import multi_lang, edit_auto, reply_auto
-from telethon.tl.types import ChannelParticipantsKicked, ChannelParticipantsRestricted
+from telethon.tl.types import ChannelParticipantsKicked
 db = Storage()
 
 # ================================================================
