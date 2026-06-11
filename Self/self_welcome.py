@@ -9,7 +9,7 @@ from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import ChatBannedRights, ChannelParticipantAdmin, ChannelParticipantCreator
 from self_storage import Storage
 from multi_lang import multi_lang, edit_auto, reply_auto
-
+from telethon.tl.types import ChannelParticipantsKicked, ChannelParticipantsRestricted
 db = Storage()
 
 # ================================================================
@@ -265,42 +265,34 @@ def register_group_handlers(client, owner_id):
 
     # ======================== لیست سکوت گپ ========================
     @client.on(events.NewMessage)
-    @multi_lang([".لیست سکوت گپ", ".mute list"])
-    async def list_muted_handler(event):
-        """لیست کاربران سکوت شده"""
+    @multi_lang([".لیست سکوت گپ"])
+    async def muted_list_handler(event):
+
         if not owner_only(event, owner_id):
             return
-        
+
         if not await is_group_admin(client, event.chat_id, event.sender_id):
             return await edit_auto(event, "❌ شما ادمین این گروه نیستید")
 
-        muted_users = []
+        text = "**🔇 لیست کاربران سکوت شده:**\n\n"
+        found = False
 
-        try:
-            async for user in client.iter_participants(event.chat_id, limit=500):
-                try:
-                    res = await client(GetParticipantRequest(event.chat_id, user.id))
-                    p = res.participant
-                    rights = getattr(p, "banned_rights", None)
+        async for user in client.iter_participants(
+        event.chat_id,
+        filter=ChannelParticipantsRestricted
+    ):
+            perms = await client.get_permissions(event.chat_id, user.id)
 
-                    # بررسی سکوت: نمی‌تواند پیام بفرستد اما می‌تواند ببیند
-                    if (rights and 
-                        getattr(rights, "send_messages", False) and 
-                        not getattr(rights, "view_messages", False)):
-                        muted_users.append(user)
+            if perms and perms.send_messages is False:
+                found = True
 
-                except Exception:
-                    continue
+                username = f"`@{user.username}`" if user.username else "`ندارد`"
+                name = safe_name(user)
 
-        except Exception as e:
-            return await edit_auto(event, f"❌ خطا در دریافت لیست: {str(e)[:50]}")
+                text += f"👤 {name} | {username}\n"
 
-        if not muted_users:
-            return await edit_auto(event, "✅ هیچ کاربر سکوت نشده‌ای وجود ندارد")
-
-        text = "🔇 **لیست کاربران سکوت شده:**\n\n"
-        for u in muted_users:
-            text += f"• {safe_name(u)} | `{u.id}`\n"
+        if not found:
+            text = "**🔇 هیچ کاربری سکوت نشده است**"
 
         await edit_auto(event, text)
 
@@ -361,40 +353,31 @@ def register_group_handlers(client, owner_id):
 
     # ======================== لیست بن گپ ========================
     @client.on(events.NewMessage)
-    @multi_lang([".لیست بن گپ", ".ban list"])
-    async def list_banned_handler(event):
-        """لیست کاربران بن شده"""
+    @multi_lang([".لیست بن"])
+    async def banned_list_handler(event):
+
         if not owner_only(event, owner_id):
             return
-        
+
         if not await is_group_admin(client, event.chat_id, event.sender_id):
             return await edit_auto(event, "❌ شما ادمین این گروه نیستید")
 
-        banned_users = []
+        text = "**📛 لیست کاربران بن شده:**\n\n"
+        found = False
+    
+        async for user in client.iter_participants(
+        event.chat_id,
+        filter=ChannelParticipantsKicked
+    ):
+            found = True
 
-        try:
-            async for user in client.iter_participants(event.chat_id, limit=500):
-                try:
-                    res = await client(GetParticipantRequest(event.chat_id, user.id))
-                    p = res.participant
-                    rights = getattr(p, "banned_rights", None)
+            username = f"`@{user.username}`" if user.username else "`ندارد`"
+            name = safe_name(user)
 
-                    # بررسی بن: نمی‌تواند ببیند
-                    if rights and getattr(rights, "view_messages", False):
-                        banned_users.append(user)
+        text += f"👤 {name} | {username}\n"
 
-                except Exception:
-                    continue
-
-        except Exception as e:
-            return await edit_auto(event, f"❌ خطا در دریافت لیست: {str(e)[:50]}")
-
-        if not banned_users:
-            return await edit_auto(event, "✅ هیچ کاربر بن نشده‌ای وجود ندارد")
-
-        text = "⛔ **لیست کاربران بن شده:**\n\n"
-        for u in banned_users:
-            text += f"• {safe_name(u)} | `{u.id}`\n"
+        if not found:
+            text = "**📛 هیچ کاربری بن نشده است**"
 
         await edit_auto(event, text)
 
