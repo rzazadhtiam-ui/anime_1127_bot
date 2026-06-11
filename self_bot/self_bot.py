@@ -15,7 +15,7 @@ from update1_2 import register_commands
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
 #BOT_URL = "https://self-bot-ssvq.onrender.com"
-MIN_COINS = 10
+MIN_COIN = 2
 REFERRAL_REWARD = 6
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
