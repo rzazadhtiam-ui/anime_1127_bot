@@ -282,11 +282,10 @@ def register_group_handlers(client, owner_id):
         filter=ChannelParticipantsRestricted
     ):
             perms = await client.get_permissions(event.chat_id, user.id)
-
             if perms and perms.send_messages is False:
                 found = True
 
-                username = f"`@{user.username}`" if user.username else "`ندارد`"
+                username = f"@{user.username}" if user.username else if user.username else "ندارد"
                 name = safe_name(user)
 
                 text += f"👤 {name} | {username}\n"
@@ -364,17 +363,19 @@ def register_group_handlers(client, owner_id):
 
         text = "**📛 لیست کاربران بن شده:**\n\n"
         found = False
-    
-        async for user in client.iter_participants(
-        event.chat_id,
-        filter=ChannelParticipantsKicked
-    ):
-            found = True
 
-            username = f"`@{user.username}`" if user.username else "`ندارد`"
-            name = safe_name(user)
+        async for user in client.iter_participants(event.chat_id):
 
-        text += f"👤 {name} | {username}\n"
+            perms = await client.get_permissions(event.chat_id, user.id)
+
+        # ban check واقعی
+            if perms and getattr(perms, "view_messages", True) is False:
+                found = True
+
+                username = f"@{user.username}" if user.username else f"`{user.id}`"
+                name = safe_name(user)
+
+                text += f"👤 {name} | {username}\n"
 
         if not found:
             text = "**📛 هیچ کاربری بن نشده است**"
