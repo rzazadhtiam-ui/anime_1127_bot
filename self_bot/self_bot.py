@@ -632,7 +632,7 @@ def handle_callbacks(call):
 
     elif data == "selfbot_start_self":
         coins = user.get("coins", 0)
-        required = MIN_COINS
+        required = MIN_COIN
         if coins < required:
             missing = required - coins
 
@@ -666,7 +666,7 @@ def handle_callbacks(call):
         msg = f"""اطلاعات شما:
 اسم: {first_name}
 یوزرنیم: @{username}
-ایدی عددی: {uid}
+ایدی عددی: `{uid}`
 تعداد زیر مجموعه: {referrals}
 تعداد سکه: {coins}
 تاریخ عضویت: {created_str}"""
@@ -721,7 +721,8 @@ def check_membership_callback(call):
     msg = bot.send_message(
         uid,
         "✅ کاربر گرامی عضویت شما تایید شد\n"
-        "به ربات ⦁ Self Nix خوش اومدی 🌟"
+        "به ربات ⦁ Self Nix خوش اومدی 🌟\n"
+		"برای استفاده دستور /start رو مجدد ارسال کنید"
     )
 
     # ارسال پنل اصلی
@@ -1103,7 +1104,7 @@ def handle_receipt(message):
 def open_support_menu(call):
     
     uid = call.from_user.id
-    if block_if_banned(uid, call=call):
+    if block_if_banned(uid, call=call): 
         return
         
     new_markup = types.InlineKeyboardMarkup()
