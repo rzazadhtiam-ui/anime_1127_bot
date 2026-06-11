@@ -325,9 +325,8 @@ def register_group_handlers(client, owner_id):
     @client.on(events.NewMessage)
     @multi_lang([".لیست سکوت گپ", ".mute list gap", ".لیست محدود گپ"])
     async def list_muted_gap_live(event):
-        if not await owner_only(event):
+        if event.sender_id != owner_id:
             return
-
         chat = await event.get_chat()
         if not getattr(chat, "megagroup", False):
             return await edit_auto(event, "**❌ این دستور فقط در سوپرگروه کار می‌کند.**")
@@ -365,7 +364,7 @@ def register_group_handlers(client, owner_id):
     @client.on(events.NewMessage)
     @multi_lang([".لیست بن گپ", ".لیست بن", ".ban list gap", ".ban list"])
     async def list_banned_gap_live(event):
-        if not await owner_only(event):
+        if event.sender_id != owner_id:
             return
 
         chat = await event.get_chat()
