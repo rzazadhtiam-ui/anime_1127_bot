@@ -396,7 +396,7 @@ def register_group_handlers(client, owner_id):
             text = f"**⛔ لیست بن گروه ({len(banned_users)} نفر):**\n\n" + "\n".join(banned_users)
             await edit_auto(event, text)
 
-    e    xcept Exception as e:
+        except Exception as e:
             await edit_auto(event, f"**❌ خطا در گرفتن لیست بن:\n{e}**")
     # ---------- دستورات خوشامدگویی ----------
     @client.on(events.NewMessage)
