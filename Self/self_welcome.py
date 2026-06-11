@@ -285,7 +285,7 @@ def register_group_handlers(client, owner_id):
             if perms and perms.send_messages is False:
                 found = True
 
-                username = f"@{user.username}" if user.username else if user.username else "ندارد"
+                username = f"@{user.username}" if user.username else f"`{user.id}`"
                 name = safe_name(user)
 
                 text += f"👤 {name} | {username}\n"
