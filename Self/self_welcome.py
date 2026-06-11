@@ -1,6 +1,5 @@
 # ================================================================
-# self_welcome_fixed.py — نسخه کامل فیکس‌شده با تمام درخواست‌ها
-# شامل: چک ادمین، پشتیبانی آیدی عددی، منطق چک وضعیت قبلی، لیست سکوت/بن گپ، متن پیش‌فرض خوش‌آمدگویی
+# self_welcome.py - نسخه نهایی کامل و درست
 # ================================================================
 
 import asyncio
@@ -9,7 +8,7 @@ from datetime import datetime, timedelta
 from telethon import events
 from telethon.tl.functions.channels import EditBannedRequest, GetFullChannelRequest, GetParticipantRequest
 from telethon.tl.functions.messages import UpdatePinnedMessageRequest
-from telethon.tl.types import ChatBannedRights, ChannelParticipantAdmin, ChannelParticipantCreator
+from telethon.tl.types import ChatBannedRights, ChannelParticipantAdmin, ChannelParticipantCreator, ChannelParticipantsBanned
 
 from self_storage import Storage
 from multi_lang import multi_lang, edit_auto, reply_auto
@@ -18,32 +17,51 @@ db = Storage()
 
 # ================= TIME SYSTEM =================
 TIME_UNITS = {
-    "دقیقه": 60,
-    "ساعت": 3600,
-    "روز": 86400,
-    "هفته": 604800,
-    "ماه": 2592000,
-    "سال": 31536000,
+    "دقیقه": 60, "ساعت": 3600, "روز": 86400,
+    "هفته": 604800, "ماه": 2592000, "سال": 31536000,
 }
 
-# ================= UTIL =================
 def safe_name(user):
     if not user:
         return "کاربر"
     return user.first_name or "کاربر"
 
-# ===========================================================
-# ENTITY SAFE + RESOLVE TARGET (پشتیبانی آیدی عددی و @یوزرنیم)
-# ===========================================================
-async def get_entities(client, chat_id, user_id=None):
-    chat = await client.get_entity(chat_id)
-    user = None
-    if user_id:
+# ================= RESOLVE TARGET =================
+async def resolve_target(event):
+    rep = await event.get_reply_message()
+    if rep and getattr(rep, "sender_id", None):
         try:
-            user = await client.get_entity(user_id)
-        except Exception:
-            user = None
-    return chat, user
+            return await event.client.get_entity(rep.sender_id)
+        except:
+            pass
+
+    text = (event.raw_text or "").strip()
+    parts = text.split(maxsplit=2)
+    if len(parts) < 2:
+        return None
+    target_str = parts[1].strip()
+    if target_str.isdigit():
+        try:
+            return await event.client.get_entity(int(target_str))
+        except:
+            return None
+    elif target_str.startswith("@"):
+        try:
+            return await event.client.get_entity(target_str)
+        except:
+            return None
+    return None
+
+async def is_group_admin(client, chat_id, user_id):
+    try:
+        participant = await client(GetParticipantRequest(chat_id, user_id))
+        p = getattr(participant, "participant", None)
+        return isinstance(p, (ChannelParticipantAdmin, ChannelParticipantCreator))
+    except:
+        return False
+
+def owner_only(event, owner_id):
+    return owner_id and event.sender_id == owner_id
 
 def parse_time_and_reason(args):
     if not args:
@@ -61,50 +79,6 @@ def parse_time_and_reason(args):
         delta = timedelta(minutes=val)
         reason = " ".join(parts[1:])
     return delta, val, unit, reason
-
-async def resolve_target(event):
-    """Resolve target from reply OR numeric ID OR @username"""
-    # Reply priority
-    rep = await event.get_reply_message()
-    if rep and getattr(rep, "sender_id", None):
-        try:
-            return await event.client.get_entity(rep.sender_id)
-        except:
-            pass
-
-    # From args (supports .command ID or .command @user)
-    text = (event.raw_text or "").strip()
-    parts = text.split(maxsplit=2)
-    if len(parts) < 2:
-        return None
-
-    target_str = parts[1].strip()
-    if target_str.isdigit():
-        try:
-            return await event.client.get_entity(int(target_str))
-        except:
-            return None
-    elif target_str.startswith("@"):
-        try:
-            return await event.client.get_entity(target_str)
-        except:
-            return None
-    return None
-
-async def is_group_admin(client, chat_id, user_id):
-    """Check if user is admin/creator in the group"""
-    try:
-        participant = await client(GetParticipantRequest(chat_id, user_id))
-        p = getattr(participant, "participant", None)
-        if p is None:
-            return False
-        return isinstance(p, (ChannelParticipantAdmin, ChannelParticipantCreator))
-    except:
-        return False
-
-# ================= OWNER CHECK =================
-def owner_only(event, owner_id):
-    return owner_id and event.sender_id == owner_id
 
 # ================= TELEGRAM ACTIONS =================
 async def mute_user(client, chat_id, user_id, delta):
@@ -154,7 +128,17 @@ async def unban_user(client, chat_id, user_id):
     except:
         return False
 
-# ================= WELCOME ENGINE =================
+async def get_entities(client, chat_id, user_id=None):
+    chat = await client.get_entity(chat_id)
+    user = None
+    if user_id:
+        try:
+            user = await client.get_entity(user_id)
+        except:
+            user = None
+    return chat, user
+
+# ================= WELCOME SYSTEM =================
 def get_group_welcome(chat_id):
     return {
         "status": bool(db.get_group_key(chat_id, "welcome_enabled")),
@@ -187,7 +171,6 @@ async def welcome_new_user(client, event):
     if not settings["status"]:
         return
 
-    # متن پیش‌فرض اگر کاربر متنی تنظیم نکرده باشد
     DEFAULT_WELCOME = "خوش آمدی {منشن_کاربر} 👋\nبه گروه {نام_گروه} خوش اومدی!"
     template = settings["text"] or DEFAULT_WELCOME
 
@@ -210,7 +193,6 @@ async def welcome_new_user(client, event):
             continue
         name = escape_markdown(safe_name(user))
         mention = f"[{name}](tg://user?id={user.id})"
-
         text = template \
             .replace("{منشن_کاربر}", mention) \
             .replace("{نام_کاربر}", name) \
@@ -231,14 +213,14 @@ def register_group_handlers(client, owner_id):
     async def welcome_handler(event):
         await welcome_new_user(client, event)
 
-    # ---------- سکوت گپ (با چک ادمین + آیدی + منطق قبلاً بودن) ----------
+    # ---------- سکوت گپ ----------
     @client.on(events.NewMessage)
-    @multi_lang([".سکوت گپ", ".mute group", ".mute gap"])
+    @multi_lang([".سکوت گپ", ".mute group"])
     async def mute_handler(event):
         if not owner_only(event, owner_id):
             return
         if not await is_group_admin(client, event.chat_id, event.sender_id):
-            return await edit_auto(event, "❌ شما ادمین این گروه نیستید. دستور اعمال نشد.")
+            return await edit_auto(event, "❌ شما ادمین این گروه نیستید.")
 
         user = await resolve_target(event)
         if not user:
@@ -251,12 +233,12 @@ def register_group_handlers(client, owner_id):
         delta, val, unit, reason = parse_time_and_reason(event.ml_args or "")
         ok = await mute_user(client, event.chat_id, user.id, delta)
         if not ok:
-            return await edit_auto(event, "❌ خطا در سکوت کردن")
+            return await edit_auto(event, "❌ خطا در سکوت کردن کاربر")
 
         db.add_muted_user(event.chat_id, user.id)
         mention = f"[{safe_name(user)}](tg://user?id={user.id})"
         if val:
-            msg = f"**کاربر {mention} به مدت {val} {unit} به دلیل {reason or 'نامشخص'} سکوت شد.**"
+            msg = f"**کاربر {mention} به مدت {val} {unit} سکوت شد.**"
         else:
             msg = f"**کاربر {mention} سکوت شد.**"
         await edit_auto(event, msg)
@@ -268,7 +250,7 @@ def register_group_handlers(client, owner_id):
         if not owner_only(event, owner_id):
             return
         if not await is_group_admin(client, event.chat_id, event.sender_id):
-            return await edit_auto(event, "❌ شما ادمین این گروه نیستید. دستور اعمال نشد.")
+            return await edit_auto(event, "❌ شما ادمین این گروه نیستید.")
 
         user = await resolve_target(event)
         if not user:
@@ -285,14 +267,14 @@ def register_group_handlers(client, owner_id):
         else:
             await edit_auto(event, "❌ خطا در حذف سکوت")
 
-    # ---------- بن (با تمام فیکس‌ها) ----------
+    # ---------- بن ----------
     @client.on(events.NewMessage)
     @multi_lang([".بن", ".bun"])
     async def ban_handler(event):
         if not owner_only(event, owner_id):
             return
         if not await is_group_admin(client, event.chat_id, event.sender_id):
-            return await edit_auto(event, "❌ شما ادمین این گروه نیستید. دستور اعمال نشد.")
+            return await edit_auto(event, "❌ شما ادمین این گروه نیستید.")
 
         user = await resolve_target(event)
         if not user:
@@ -305,14 +287,12 @@ def register_group_handlers(client, owner_id):
         delta, val, unit, reason = parse_time_and_reason(event.ml_args or "")
         ok = await ban_user(client, event.chat_id, user.id, delta)
         if not ok:
-            return await edit_auto(event, "❌ خطا در بن کردن")
+            return await edit_auto(event, "❌ خطا در بن کردن کاربر")
 
         db.add_banned_user(event.chat_id, user.id)
         mention = f"[{safe_name(user)}](tg://user?id={user.id})"
         if val:
             msg = f"**کاربر {mention} برای {val} {unit} بن شد.**"
-            if reason:
-                msg += f"\nدلیل: {reason}"
         else:
             msg = f"**کاربر {mention} بن شد.**"
         await edit_auto(event, msg)
@@ -324,7 +304,7 @@ def register_group_handlers(client, owner_id):
         if not owner_only(event, owner_id):
             return
         if not await is_group_admin(client, event.chat_id, event.sender_id):
-            return await edit_auto(event, "❌ شما ادمین این گروه نیستید. دستور اعمال نشد.")
+            return await edit_auto(event, "❌ شما ادمین این گروه نیستید.")
 
         user = await resolve_target(event)
         if not user:
@@ -343,7 +323,7 @@ def register_group_handlers(client, owner_id):
 
     # ---------- لیست سکوت گپ ----------
     @client.on(events.NewMessage)
-    @multi_lang([".لیست سکوت گپ", ".muted list gap"])
+    @multi_lang([".لیست سکوت گپ"])
     async def list_muted_gap(event):
         if not owner_only(event, owner_id):
             return
@@ -354,7 +334,7 @@ def register_group_handlers(client, owner_id):
         if not muted:
             return await edit_auto(event, "**هیچ کاربری در این گروه سکوت نشده است.**")
 
-        text = "**🔇 لیست کاربران سکوت‌شده در گروه:**\n\n"
+        text = f"**🔇 لیست افراد سکوت‌شده ({len(muted)} نفر):**\n\n"
         for uid in muted:
             try:
                 u = await client.get_entity(uid)
@@ -363,7 +343,7 @@ def register_group_handlers(client, owner_id):
                 text += f"• `{uid}`\n"
         await edit_auto(event, text)
 
-    # ---------- لیست بن ----------
+    # ---------- لیست بن (از خود تلگرام) ----------
     @client.on(events.NewMessage)
     @multi_lang([".لیست بن", ".ban list"])
     async def list_banned(event):
@@ -372,55 +352,24 @@ def register_group_handlers(client, owner_id):
         if not await is_group_admin(client, event.chat_id, event.sender_id):
             return await edit_auto(event, "❌ شما ادمین این گروه نیستید.")
 
-        banned = db.get_banned_users(event.chat_id)
-        if not banned:
-            return await edit_auto(event, "**هیچ کاربری در این گروه بن نشده است.**")
+        try:
+            banned_users = []
+            async for user in client.iter_participants(event.chat_id, filter=ChannelParticipantsBanned):
+                banned_users.append(user)
 
-        text = "**🚫 لیست کاربران بن‌شده در گروه:**\n\n"
-        for uid in banned:
-            try:
-                u = await client.get_entity(uid)
-                text += f"• {safe_name(u)} (`{uid}`)\n"
-            except:
-                text += f"• `{uid}`\n"
-        await edit_auto(event, text)
+            if not banned_users:
+                return await edit_auto(event, "**هیچ کاربری در این گروه بن نشده است.**")
 
-    # ---------- پین و حذف پین (کوتاه) ----------
-    @client.on(events.NewMessage)
-    @multi_lang([".پین", ".pin"])
-    async def pin_handler(event):
-        if not owner_only(event, owner_id):
-            return
-        rep = await event.get_reply_message()
-        if not rep:
-            return
-        await pin_msg(client, event.chat_id, rep.id)
-        await edit_auto(event, "**پیام پین شد.**")
+            text = f"**🚫 لیست افراد بن‌شده در گروه ({len(banned_users)} نفر):**\n\n"
+            for u in banned_users:
+                text += f"• {safe_name(u)} (`{u.id}`)\n"
 
-    @client.on(events.NewMessage)
-    @multi_lang([".حذف پین", ".unpin"])
-    async def unpin_handler(event):
-        if not owner_only(event, owner_id):
-            return
-        rep = await event.get_reply_message()
-        if not rep:
-            return
-        await unpin_msg(client, event.chat_id, rep.id)
-        await edit_auto(event, "**پیام آنپین شد.**")
+            await edit_auto(event, text)
 
-    # ---------- نوع چت ----------
-    @client.on(events.NewMessage(pattern=r"^\.type$"))
-    async def chat_type_cmd(event):
-        chat_type = await get_chat_type(event)
-        types_text = {
-            "supergroup": "🧩 این چت سوپرگروه است",
-            "group": "👥 این چت گروه معمولی است",
-            "channel": "📢 این چت کانال است",
-            "pv": "💬 این چت خصوصی است",
-        }
-        await edit_auto(event, types_text.get(chat_type, "❓ نوع چت مشخص نشد"))
+        except Exception as e:
+            await edit_auto(event, f"❌ خطا در دریافت لیست بن‌شده‌ها:\n{str(e)}")
 
-    # ---------- خوشامدگویی روشن/خاموش + تنظیم + وضعیت ----------
+    # ---------- دستورات خوشامدگویی ----------
     @client.on(events.NewMessage)
     @multi_lang([".خوشامدگویی روشن", ".welcome on"])
     async def welcome_on(event):
@@ -446,7 +395,7 @@ def register_group_handlers(client, owner_id):
             return
         text = event.ml_args or ""
         if not text:
-            return await edit_auto(event, "بعد از دستور، متن خوش‌آمد را بنویس")
+            return await edit_auto(event, "بعد از دستور متن خوش‌آمد را بنویس")
         set_group_welcome(event.chat_id, text, True)
         await edit_auto(event, "**متن خوش‌آمد ذخیره و فعال شد ✅**")
 
@@ -458,6 +407,6 @@ def register_group_handlers(client, owner_id):
         settings = get_group_welcome(event.chat_id)
         status = "فعال ✅" if settings["status"] else "غیرفعال ❌"
         text = settings["text"] or "متن پیش‌فرض استفاده می‌شود"
-        await edit_auto(event, f"**وضعیت:** {status}\n\n**متن فعلی:**\n{text}")
+        await edit_auto(event, f"**وضعیت:** {status}\n\n**متن:**\n{text}")
 
-print("✅ self_welcome_fixed.py کاملاً بازسازی شد با تمام درخواست‌ها")
+print("✅ self_welcome.py با موفقیت لود شد")
