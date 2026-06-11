@@ -327,77 +327,63 @@ def register_group_handlers(client, owner_id):
     async def list_muted_gap_live(event):
         if event.sender_id != owner_id:
             return
+
         chat = await event.get_chat()
         if not getattr(chat, "megagroup", False):
-            return await edit_auto(event, "**❌ این دستور فقط در سوپرگروه کار می‌کند.**")
+            return await edit_auto(event, "**❌ فقط سوپرگروه**")
 
-        try:
-            muted_users = []
-            async for participant in client.iter_participants(
-            event.chat_id,
-            filter=ChannelParticipantsBanned,
-            limit=200
-        ):
-                rights = getattr(participant, "banned_rights", None)
+        muted_users = []
+
+        async for user in client.iter_participants(event.chat_id, limit=200):
+            try:
+                res = await client(GetParticipantRequest(event.chat_id, user.id))
+                p = res.participant
+
+                rights = getattr(p, "banned_rights", None)
+
+            # فقط mute واقعی
                 if rights and getattr(rights, "send_messages", False) and not getattr(rights, "view_messages", False):
-                # کاربر محدود (سکوت) شده ولی بن کامل نشده
-                    user_id = getattr(participant, "user_id", None) or getattr(participant, "id", None)
-                    if user_id:
-                        try:
-                            user = await client.get_entity(user_id)
-                            name = safe_name(user)
-                            muted_users.append(f"• {name} (`{user_id}`)")
-                        except:
-                            muted_users.append(f"• `{user_id}`")
+                    muted_users.append(f"**• {safe_name(user)} | `{user.id}`**")
 
-            if not muted_users:
-                return await edit_auto(event, "**✅ هیچ کاربری در این گروه سکوت نشده است.**")
+            except:
+                continue
 
-            text = f"**👤 لیست سکوت گروه ({len(muted_users)} نفر):**\n\n" + "\n".join(muted_users)
-            await edit_auto(event, text)
+        if not muted_users:
+            return await edit_auto(event, "**✅ هیچ کاربر سکوت نیست**")
 
-        except Exception as e:
-            await edit_auto(event, f"**❌ خطا در گرفتن لیست:\n{e}**")
-
+        text = "**👤 لیست سکوت:\n\n**" + "\n".join(muted_users)
+        await edit_auto(event, text)
 
 # ==================== لیست بن گپ (ریمو شده‌ها از تلگرام) ====================
     @client.on(events.NewMessage)
-    @multi_lang([".لیست بن گپ", ".لیست بن", ".ban list gap", ".ban list"])
+    @multi_lang([".لیست بن گپ", "لیست بن", ".ban list gap", ".ban list"])
     async def list_banned_gap_live(event):
         if event.sender_id != owner_id:
             return
 
         chat = await event.get_chat()
         if not getattr(chat, "megagroup", False):
-            return await edit_auto(event, "**❌ این دستور فقط در سوپرگروه کار می‌کند.**")
+            return await edit_auto(event, "**❌ فقط سوپرگروه**")
 
-        try:
-            banned_users = []
-            async for participant in client.iter_participants(
-            event.chat_id,
-            filter=ChannelParticipantsBanned,
-            limit=200
-        ):
-                rights = getattr(participant, "banned_rights", None)
-                if rights and getattr(rights, "view_messages", False):
-                # کاربر کامل بن شده (نمی‌تواند پیام‌ها را ببیند)
-                    user_id = getattr(participant, "user_id", None) or getattr(participant, "id", None)
-                    if user_id:
-                        try:
-                            user = await client.get_entity(user_id)
-                            name = safe_name(user)
-                            banned_users.append(f"• {name} (`{user_id}`)")
-                        except:
-                            banned_users.append(f"• `{user_id}`")
+        banned_users = []
 
-            if not banned_users:
-                return await edit_auto(event, "**✅ هیچ کاربری در این گروه بن نشده است.**")
+        async for user in client.iter_participants(event.chat_id, limit=200):
+            try:
+                res = await client(GetParticipantRequest(event.chat_id, user.id))
+                p = res.participant
 
-            text = f"**⛔ لیست بن گروه ({len(banned_users)} نفر):**\n\n" + "\n".join(banned_users)
-            await edit_auto(event, text)
+            # تشخیص بن واقعی
+                if hasattr(p, "banned_rights") and getattr(p.banned_rights, "view_messages", False):
+                    banned_users.append(f"**• {safe_name(user)} | `{user.id}`**")
+    
+            except:
+                continue
 
-        except Exception as e:
-            await edit_auto(event, f"**❌ خطا در گرفتن لیست بن:\n{e}**")
+        if not banned_users:
+            return await edit_auto(event, "**✅ هیچ کاربر بن نیست**")
+
+        text = "**⛔ لیست بن:\n\n**" + "\n".join(banned_users)
+        await edit_auto(event, text)
     # ---------- دستورات خوشامدگویی ----------
     @client.on(events.NewMessage)
     @multi_lang([".خوشامدگویی روشن", ".welcome on"])
