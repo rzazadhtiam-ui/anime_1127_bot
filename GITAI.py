@@ -14,11 +14,20 @@ USER_MODEL = {}   # user_id -> model
 CHAT_MODE = {}    # user_id -> AI chat memory
 
 # ================= MODELS =================
-GROQ_MODELS = [
-    "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile"
-]
+def get_models():
+    url = "https://api.groq.com/openai/v1/models"
 
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}"
+    }
+
+    r = requests.get(url, headers=headers)
+    j = r.json()
+
+    if "data" not in j:
+        return ["❌ cannot load models", str(j)]
+
+    return [m["id"] for m in j["data"]]
 # ================= AI =================
 def ask_ai(prompt, context="", model="llama-3.1-8b-instant"):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -31,9 +40,10 @@ def ask_ai(prompt, context="", model="llama-3.1-8b-instant"):
     data = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "You are an AI software engineer inside a Telegram bot IDE."},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt + "\n\nCODE CONTEXT:\n" + context}
-        ]
+        ],
+        "temperature": 0.2
     }
 
     r = requests.post(url, json=data, headers=headers)
@@ -43,6 +53,10 @@ def ask_ai(prompt, context="", model="llama-3.1-8b-instant"):
         return f"AI ERROR: {j}"
 
     return j["choices"][0]["message"]["content"]
+
+
+
+
 
 # ================= FILE SEARCH (SMART) =================
 def smart_search(keyword):
@@ -104,7 +118,9 @@ def git_pull():
 def model_panel():
     kb = types.InlineKeyboardMarkup()
 
-    for m in GROQ_MODELS:
+    models = get_models()
+
+    for m in models:
         kb.add(types.InlineKeyboardButton(f"🤖 {m}", callback_data=f"model|{m}"))
 
     return kb
