@@ -10,18 +10,17 @@ REPO_PATH = os.getenv("REPO_PATH")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ================= SAFE PATH =================
-def safe_path(path=""):
-    base = os.path.abspath(REPO_PATH)
-    target = os.path.abspath(os.path.join(REPO_PATH, path.lstrip("/")))
+USER_MODEL = {}   # user_id -> model
+CHAT_MODE = {}    # user_id -> AI chat memory
 
-    if not target.startswith(base):
-        return base
-
-    return target
+# ================= MODELS =================
+GROQ_MODELS = [
+    "llama-3.1-8b-instant",
+    "llama-3.1-70b-versatile"
+]
 
 # ================= AI =================
-def ask_ai(prompt, context=""):
+def ask_ai(prompt, context="", model="llama-3.1-8b-instant"):
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     headers = {
@@ -30,86 +29,88 @@ def ask_ai(prompt, context=""):
     }
 
     data = {
-        "model": "llama-3.1-70b-versatile",
+        "model": model,
         "messages": [
-            {"role": "system", "content": "You are a senior Python developer."},
-            {"role": "user", "content": prompt + "\n\nCODE:\n" + context}
+            {"role": "system", "content": "You are an AI software engineer inside a Telegram bot IDE."},
+            {"role": "user", "content": prompt + "\n\nCODE CONTEXT:\n" + context}
         ]
     }
 
     r = requests.post(url, json=data, headers=headers)
+    j = r.json()
 
-    try:
-        j = r.json()
+    if "choices" not in j:
+        return f"AI ERROR: {j}"
 
-        if "choices" not in j:
-            return f"AI ERROR:\n{j}"
+    return j["choices"][0]["message"]["content"]
 
-        return j["choices"][0]["message"]["content"]
+# ================= FILE SEARCH (SMART) =================
+def smart_search(keyword):
+    results = []
 
-    except Exception as e:
-        return f"REQUEST FAILED: {str(e)}"
-# ================= FILE SYSTEM =================
-def list_dir(path=""):
-    full = safe_path(path)
+    for root, _, files in os.walk(REPO_PATH):
+        for f in files:
+            path = os.path.join(root, f)
 
-    if not os.path.exists(full):
-        return []
-
-    items = os.listdir(full)
-
-    out = []
-    for i in items:
-        p = os.path.join(full, i)
-        if os.path.isdir(p):
-            out.append("📁 " + i)
-        else:
-            out.append("📄 " + i)
-
-    return out
-
-def read_file(path):
-    full = safe_path(path)
-    with open(full, "r", encoding="utf-8") as f:
-        return f.read()
-
-def write_file(path, data):
-    full = safe_path(path)
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(data)
-
-def delete_file(path):
-    full = safe_path(path)
-    if os.path.exists(full) and os.path.isfile(full):
-        os.remove(full)
-        return True
-    return False
-
-def search(text):
-    res = []
-    for r, _, f in os.walk(REPO_PATH):
-        for i in f:
             try:
-                p = os.path.join(r, i)
-                if text.lower() in open(p, "r", encoding="utf-8").read().lower():
-                    res.append(p.replace(REPO_PATH + "/", ""))
+                text = open(path, "r", encoding="utf-8").read()
+
+                if keyword.lower() in text.lower():
+                    results.append(path.replace(REPO_PATH + "/", ""))
+
             except:
                 pass
-    return res[:30]
+
+    return results[:30]
+
+# ================= SCAN SYSTEM =================
+def scan_pattern(pattern):
+    hits = []
+
+    for root, _, files in os.walk(REPO_PATH):
+        for f in files:
+            path = os.path.join(root, f)
+
+            try:
+                text = open(path, "r", encoding="utf-8").read()
+
+                if pattern in text:
+                    hits.append(path.replace(REPO_PATH + "/", ""))
+
+            except:
+                pass
+
+    return hits[:20]
+
+# ================= FILE OPS =================
+def read_file(p):
+    return open(os.path.join(REPO_PATH, p), "r", encoding="utf-8").read()
+
+def write_file(p, data):
+    open(os.path.join(REPO_PATH, p), "w", encoding="utf-8").write(data)
 
 # ================= GIT =================
-def commit_push(msg):
+def git_push(msg):
     repo = git.Repo(REPO_PATH)
     repo.git.add(all=True)
     repo.index.commit(msg)
     repo.remote().push()
 
-def pull():
+def git_pull():
     repo = git.Repo(REPO_PATH)
     repo.remote().pull()
 
-# ================= UI =================
-def main_menu():
+# ================= MODEL PANEL =================
+def model_panel():
+    kb = types.InlineKeyboardMarkup()
+
+    for m in GROQ_MODELS:
+        kb.add(types.InlineKeyboardButton(f"🤖 {m}", callback_data=f"model|{m}"))
+
+    return kb
+
+# ================= MAIN MENU =================
+def menu():
     kb = types.InlineKeyboardMarkup()
 
     kb.add(
@@ -118,134 +119,113 @@ def main_menu():
     )
 
     kb.add(
-        types.InlineKeyboardButton("🤖 AI Ask", callback_data="ai"),
+        types.InlineKeyboardButton("🤖 Models", callback_data="models"),
         types.InlineKeyboardButton("⚙ Git", callback_data="git")
     )
 
     kb.add(
-        types.InlineKeyboardButton("🆘 Help", callback_data="help")
+        types.InlineKeyboardButton("🧠 Scan Code", callback_data="scan")
     )
 
     return kb
 
 # ================= HELP =================
-HELP_TEXT = """
-📌 AI GIT BOT COMMANDS:
+HELP = """
+🤖 ربات AI IDE
 
-/start → open panel
-/ask <text> → ask AI
-/search <text> → search in repo
-/read <file> → read file
-/delete <file> → delete file
-/fix <file> → AI fix file
-/commit <msg> → git commit + push
-/pull → update repo
+📌 قابلیت‌ها:
+- چت مستقیم (بدون دستور)
+- جستجوی فایل
+- اسکن کد پروژه
+- ویرایش با AI
+- مدیریت Git
+- انتخاب مدل هوش مصنوعی
 
-📂 Panel:
-- browse files
-- open folders
-- read files
+📂 دستورها:
+/help → راهنما
+/search <text> → جستجو
+/scan <text> → پیدا کردن در کل پروژه
+/read <file> → نمایش فایل
+/fix <file> → اصلاح با AI
+/commit → ارسال به GitHub
+
+💡 فقط پیام بده → AI جواب می‌دهد
 """
 
 # ================= START =================
 @bot.message_handler(commands=["start"])
-def start(msg):
-    bot.reply_to(msg, "🤖 AI Git Control Bot", reply_markup=main_menu())
+def start(m):
+    bot.reply_to(m, "🚀 AI IDE Bot Ready", reply_markup=menu())
 
 @bot.message_handler(commands=["help"])
-def help_cmd(msg):
-    bot.reply_to(msg, HELP_TEXT)
+def help_cmd(m):
+    bot.reply_to(m, HELP)
 
-# ================= FILE PANEL =================
+# ================= CALLBACK =================
 @bot.callback_query_handler(func=lambda c: True)
-def cb(call):
-    data = call.data
+def cb(c):
+    uid = c.from_user.id
 
-    if data == "help":
-        bot.send_message(call.message.chat.id, HELP_TEXT)
+    if c.data == "models":
+        bot.send_message(c.message.chat.id, "مدل‌ها:", reply_markup=model_panel())
 
-    elif data == "files":
-        items = list_dir("")
-        bot.send_message(call.message.chat.id, "\n".join(items) or "Empty")
+    elif c.data.startswith("model|"):
+        model = c.data.split("|")[1]
+        USER_MODEL[uid] = model
+        bot.send_message(c.message.chat.id, f"✅ مدل فعال شد: {model}")
 
-    elif data == "search":
-        bot.send_message(call.message.chat.id, "Use /search text")
+    elif c.data == "search":
+        bot.send_message(c.message.chat.id, "🔍 از /search استفاده کن")
 
-    elif data == "ai":
-        bot.send_message(call.message.chat.id, "Use /ask question")
+    elif c.data == "scan":
+        bot.send_message(c.message.chat.id, "🧠 مثال: /scan ساعت")
 
-    elif data == "git":
+    elif c.data == "files":
+        files = os.listdir(REPO_PATH)[:30]
+        bot.send_message(c.message.chat.id, "\n".join(files))
+
+    elif c.data == "git":
         kb = types.InlineKeyboardMarkup()
         kb.add(
             types.InlineKeyboardButton("⬇ Pull", callback_data="pull"),
             types.InlineKeyboardButton("⬆ Push", callback_data="push")
         )
-        bot.send_message(call.message.chat.id, "Git:", reply_markup=kb)
+        bot.send_message(c.message.chat.id, "Git:", reply_markup=kb)
 
-    elif data == "pull":
-        pull()
-        bot.send_message(call.message.chat.id, "⬇ Updated")
+    elif c.data == "pull":
+        git_pull()
+        bot.send_message(c.message.chat.id, "⬇ Updated")
 
-    elif data == "push":
-        commit_push("AI update")
-        bot.send_message(call.message.chat.id, "⬆ Pushed")
+    elif c.data == "push":
+        git_push("AI update")
+        bot.send_message(c.message.chat.id, "⬆ Pushed")
 
-# ================= COMMANDS =================
-@bot.message_handler(commands=["ask"])
-def ask(msg):
-    q = msg.text.replace("/ask", "").strip()
+# ================= NATURAL CHAT (NO COMMAND) =================
+@bot.message_handler(func=lambda m: True)
+def chat(m):
+    uid = m.from_user.id
+    model = USER_MODEL.get(uid, GROQ_MODELS[0])
+
+    text = m.text
+
+    # اگر دستور نبود → AI chat
+    if text.startswith("/"):
+        return
 
     ctx = ""
-    files = os.listdir(REPO_PATH)[:5]
 
-    for f in files:
-        try:
+    # context از چند فایل
+    try:
+        files = os.listdir(REPO_PATH)[:3]
+        for f in files:
             p = os.path.join(REPO_PATH, f)
             if os.path.isfile(p):
-                ctx += "\n\nFILE:" + f + "\n" + open(p).read()[:800]
-        except:
-            pass
+                ctx += "\n\nFILE:" + f + "\n" + open(p).read()[:600]
+    except:
+        pass
 
-    res = ask_ai(q, ctx)
-    bot.reply_to(msg, res[:4000])
-
-@bot.message_handler(commands=["search"])
-def search_cmd(msg):
-    q = msg.text.replace("/search", "").strip()
-    res = search(q)
-    bot.reply_to(msg, "\n".join(res) if res else "Not found")
-
-@bot.message_handler(commands=["read"])
-def read(msg):
-    path = msg.text.split(" ", 1)[1]
-    bot.reply_to(msg, read_file(path)[:3500])
-
-@bot.message_handler(commands=["delete"])
-def delete(msg):
-    path = msg.text.split(" ", 1)[1]
-    ok = delete_file(path)
-    bot.reply_to(msg, "Deleted" if ok else "Failed")
-
-@bot.message_handler(commands=["fix"])
-def fix(msg):
-    path = msg.text.split(" ", 1)[1]
-
-    code = read_file(path)
-    fixed = ask_ai("Fix bugs and return full code", code)
-
-    write_file(path, fixed)
-    bot.reply_to(msg, "Fixed")
-
-@bot.message_handler(commands=["commit"])
-def commit(msg):
-    text = msg.text.replace("/commit", "").strip()
-    commit_push(text or "update")
-    bot.reply_to(msg, "Pushed")
-
-@bot.message_handler(commands=["pull"])
-def pull_cmd(msg):
-    pull()
-    bot.reply_to(msg, "Pulled")
+    res = ask_ai(text, ctx, model=model)
+    bot.reply_to(m, res[:4000])
 
 # ================= RUN =================
 bot.polling()
