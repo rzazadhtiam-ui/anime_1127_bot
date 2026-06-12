@@ -30,7 +30,7 @@ def ask_ai(prompt, context=""):
     }
 
     data = {
-        "model": "llama3-70b-8192",
+        "model": "llama-3.1-70b",
         "messages": [
             {"role": "system", "content": "You are a senior Python developer."},
             {"role": "user", "content": prompt + "\n\nCODE:\n" + context}
