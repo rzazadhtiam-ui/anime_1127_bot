@@ -39,6 +39,23 @@ class PanelManager:
     # ========================================================
     #  تایمر بی‌فعالیت
     # ========================================================
+    def get_panel_text(self, name):
+        btn = buttons_col.find_one({"name": name})
+
+        if not btn:
+            return "📭 پنل پیدا نشد"
+
+        if btn.get("text"):
+            return btn["text"]
+
+        if btn.get("type") == "panel":
+            return f"📂 {name}"
+
+        if btn.get("type") == "text_panel":
+            return btn.get("text", "")
+
+        return "📭 بدون متن"
+
 
     def _reset_timer(self, uid: int, call):
         """هر بار که کاربر روی پنل کلیک می‌کند تایمر ریست می‌شود."""
@@ -226,6 +243,17 @@ class PanelManager:
 
             def get_name(m):
                 name = m.text.strip()
+                new_id = str(uuid.uuid4())
+
+                buttons_col.insert_one({
+                    "_id": new_id,
+                    "name": name,
+                    "type": None,   # هنوز مشخص نشده
+                    "parent": None,
+                    "text": "",
+                    "row": 0,
+                    "col": 0
+                })
 
                 step_msg = self.bot.send_message(
                     m.chat.id,
@@ -280,7 +308,7 @@ class PanelManager:
                         markup.add(
                             types.InlineKeyboardButton(
                                 p["name"],
-                                callback_data=f"set_parent||{name}||{p['name']}"
+                                callback_data=f"set_type_panel||{name}"
                             )
                         )
 
@@ -392,7 +420,10 @@ class PanelManager:
                     markup.add(types.InlineKeyboardButton("📭 خالی", callback_data="noop"))
                     markup.add(self._green_btn("بازگشت", f"back_{uid}_{name}"))
 
-                text_to_show = btn.get("text") or f"📂 {name}"
+                text_to_show = btn.get("text")
+
+                if not text_to_show:
+                    text_to_show = self.get_panel_text(name)
 
                 self.safe_edit(call, text_to_show, markup)
 
@@ -406,21 +437,22 @@ class PanelManager:
 
                 self._reset_timer(uid, call)
 
-                hist = self.history.get(uid, ["root"])
+                hist = self.history.get(uid, [])
 
-                if len(hist) <= 1:
-                    self.safe_edit(call, MAIN_TEXT, self.main_panel(uid, "root"))
-                    return
+                if len(hist) > 1:
+                    hist.pop()
 
-                hist.pop()
-                last = hist[-1]
+                current = hist[-1] if hist else "root"
                 self.history[uid] = hist
 
-                self.safe_edit(
-                    call,
-                    MAIN_TEXT,
-                    self.main_panel(uid, last, show_back=(last != "root"))
-                )
+                if current == "root":
+                    text = MAIN_TEXT
+                    markup = self.main_panel(uid, "root")
+                else:
+                    text = self.get_panel_text(current)
+                    markup = self.main_panel(uid, current, show_back=True)
+
+                self.safe_edit(call, text, markup)
 
             # ---------- remove ----------
             
@@ -601,6 +633,42 @@ class PanelManager:
     )
 
                 self.safe_answer(call, "منتقل شد")
+
+            elif data.startswith("set_type_panel||"):
+                name = data.split("||")[1]
+
+                panels = list(buttons_col.find({"type": "panel"}))
+
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(
+        "📁 root",
+        callback_data=f"confirm_panel||{name}||root"
+    ))
+
+                for p in panels:
+                    markup.add(types.InlineKeyboardButton(
+                        p["name"],
+            callback_data=f"confirm_panel||{name}||{p['name']}"
+        ))
+
+                self.safe_edit(call, "این پنل زیر کجا ساخته شود؟", markup)
+
+            elif data.startswith("confirm_panel||"):
+                _, name, parent = data.split("||")
+
+                btn = buttons_col.find_one({"name": name, "type": None})
+
+                if not btn:
+                    self.safe_answer(call, "❌ پنل پیدا نشد")
+                    return
+
+                buttons_col.update_one(
+        {"_id": btn["_id"]},
+        {"$set": {"type": "panel", "parent": parent}}
+    )
+
+                self.safe_answer(call, "✅ پنل ساخته شد")
+                self.safe_edit(call, MAIN_TEXT, self.main_panel(uid, "root"))
 
     # ========================================================
     #  ثبت مختصات
