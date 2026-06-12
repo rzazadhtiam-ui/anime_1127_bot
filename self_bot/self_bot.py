@@ -183,11 +183,25 @@ def get_membership_panel(missing_chats):
     ))
 
     return markup
-    
+
+
+
 def resolve_chat(chat_link):
     try:
         chat_link = chat_link.strip()
-
+def calculate_price(amount):
+    if amount <= 50:
+        return 5000
+    elif amount <= 100:
+        return int(amount * 90)
+    elif amount <= 250:
+        return int(amount * 88)
+    elif amount <= 500:
+        return int(amount * 84)
+    elif amount <= 1000:
+        return int(amount * 85)
+    else:
+        return int(amount * 80)
         if "t.me/" in chat_link:
             username = chat_link.split("t.me/")[1]
             username = username.split("?")[0]
@@ -759,14 +773,7 @@ def handle_messages(message):
             bot.send_message(uid, "❌ حداقل خرید 50 سکه است.")
             return
 
-        if amount in COIN_PRICES:
-            total = COIN_PRICES[amount]
-        else:
-    # اگر عدد سفارشی داد (مثلاً 150 یا 300)
-    # محاسبه تقریبی بر اساس 50 سکه
-            base = COIN_PRICES[50] / 50
-            total = int(amount * base)
-
+        total = calculate_price(amount)
         temp_data[uid] = {
         "buy_amount": amount,
         "buy_total": total
