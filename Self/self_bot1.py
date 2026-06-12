@@ -52,11 +52,11 @@ MONGO_URI = (
 )
 
 DB_NAME = "telegram_sessions"
-COLLECTION_NAME = "sessions"
+COLLECTION_NAME = "sessions1"
 
 ADMIN_ID = 6433381392
 
-SESSION_DIR = "sessions"
+SESSION_DIR = "sessions1"
 USER_DATA_DIR = "user_data"
 
 os.makedirs(SESSION_DIR, exist_ok=True)
