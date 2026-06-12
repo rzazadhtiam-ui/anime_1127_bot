@@ -12,8 +12,19 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 USER_MODEL = {}   # user_id -> model
 CHAT_MODE = {}    # user_id -> AI chat memory
-
+MODELS_CACHE = []
 # ================= MODELS =================
+SYSTEM_PROMPT = """
+You are a senior Python engineer and Telegram bot debugger.
+
+Rules:
+- پاسخ‌ها کوتاه، دقیق و فنی باشند
+- فارسی روان و طبیعی
+- اگر باگ هست دقیق تحلیل کن
+- حدس نزن، اگر اطلاعات کافی نیست سوال بپرس
+- فقط راه‌حل بده، نه حرف اضافه
+"""
+
 def get_models():
     url = "https://api.groq.com/openai/v1/models"
 
@@ -28,6 +39,15 @@ def get_models():
         return ["❌ cannot load models", str(j)]
 
     return [m["id"] for m in j["data"]]
+
+def refresh_models():
+    global MODELS_CACHE
+
+    try:
+        MODELS_CACHE = get_models()
+    except:
+        MODELS_CACHE = ["llama-3.1-8b-instant"]
+
 # ================= AI =================
 def ask_ai(prompt, context="", model="llama-3.1-8b-instant"):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -118,10 +138,13 @@ def git_pull():
 def model_panel():
     kb = types.InlineKeyboardMarkup()
 
-    models = get_models()
+    if not MODELS_CACHE:
+        refresh_models()
 
-    for m in models:
+    for m in MODELS_CACHE:
         kb.add(types.InlineKeyboardButton(f"🤖 {m}", callback_data=f"model|{m}"))
+
+    kb.add(types.InlineKeyboardButton("🔄 refresh", callback_data="refresh_models"))
 
     return kb
 
@@ -215,12 +238,15 @@ def cb(c):
     elif c.data == "push":
         git_push("AI update")
         bot.send_message(c.message.chat.id, "⬆ Pushed")
+    elif c.data == "refresh_models":
+        refresh_models()
+        bot.send_message(c.message.chat.id, "✅ models updated", reply_markup=model_panel())
 
 # ================= NATURAL CHAT (NO COMMAND) =================
 @bot.message_handler(func=lambda m: True)
 def chat(m):
     uid = m.from_user.id
-    model = USER_MODEL.get(uid, GROQ_MODELS[0])
+    model = USER_MODEL.get(uid, MODELS_CACHE[0] if MODELS_CACHE else "llama-3.1-8b-instant")
 
     text = m.text
 
