@@ -38,8 +38,17 @@ def ask_ai(prompt, context=""):
     }
 
     r = requests.post(url, json=data, headers=headers)
-    return r.json()["choices"][0]["message"]["content"]
 
+    try:
+        j = r.json()
+
+        if "choices" not in j:
+            return f"AI ERROR:\n{j}"
+
+        return j["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return f"REQUEST FAILED: {str(e)}"
 # ================= FILE SYSTEM =================
 def list_dir(path=""):
     full = safe_path(path)
