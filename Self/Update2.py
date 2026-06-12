@@ -43,7 +43,7 @@ MANDATORY_TAG = True
 
 EXEMPT_USERS = {6433381392, 8471402457}
 
-FORCED_SIGNATURE = "\n\n◢ SELF NIX "
+FORCED_SIGNATURE = "‌ ‌ ‌ ‌ ‌"
 
 user_styles = {}
 
