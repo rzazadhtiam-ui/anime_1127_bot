@@ -1,9 +1,15 @@
-import telebot
+import asyncio
+from aiogram import Bot, Dispatcher, Router
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram import types
+from aiogram.types import Update, InlineKeyboardMarkup, InlineKeyboardButton
+
+
 from bson import ObjectId
-from telebot import types
 from datetime import datetime, timedelta, UTC
 from flask import request
-from telebot.types import Update
 import threading
 import requests
 from pymongo import MongoClient
@@ -50,7 +56,13 @@ required_chats_col = db1.required_chats
 
 
 # ================= Bot =================
-bot = telebot.TeleBot(TOKEN)
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+router = Router()
+
+dp.include_router(router)
+
+
 panel_manager = PanelManager(bot)
 register_commands(bot)
 #==================data =================
@@ -454,220 +466,292 @@ def block_if_banned(user_id, call=None, message=None):
     return False
 
 # ================= TeleBot Handlers =================
-@bot.message_handler(commands=["start"])
-def start_panel(message):
+
+
+
+@router.message(F.text == "/start")
+async def start_panel(message: Message):
     if not command_allowed(message):
         return
-    
+
     uid = message.from_user.id
 
     if is_bot_off(uid):
         return
+
     register_user(message.from_user)
 
     missing = is_user_joined(uid)
 
     if missing:
-        bot.send_message(
-            uid,
+        await message.answer(
             "⚠️ برای استفاده از ربات باید در کانال‌ها و گروه‌های زیر عضو شوید:",
             reply_markup=get_membership_panel(missing)
         )
         return
 
-    bot.send_message(
-        uid,
+    await message.answer(
         panel_text,
         reply_markup=get_main_panel()
     )
 
-@bot.message_handler(commands=["ping"])
-def awake_bot(message):
+
+
+@router.message(F.text == "/ping")
+async def awake_bot(message: Message):
     if not command_allowed(message):
         return
+
     if message.from_user.id != SUPER_ADMIN:
         print("paaaaa")
         return
-    started = start_keep_alive()
-    if started:
-        bot.reply_to(message, "سیستم Keep-Alive فعال شد 🔥")
-    else:
-        bot.reply_to(message, "قبلاً فعال بوده 👁")
 
-@bot.message_handler(commands=["sleep"])
-def sleep_bot(message):
+    started = start_keep_alive()
+
+    if started:
+        await message.answer("سیستم Keep-Alive فعال شد 🔥")
+    else:
+        await message.answer("قبلاً فعال بوده 👁")
+
+
+@router.message(F.text == "/sleep")
+async def sleep_bot(message: Message):
     if not command_allowed(message):
         return
+
     if message.from_user.id != SUPER_ADMIN:
         return
-        return
-    stopped = stop_keep_alive()
-    if stopped:
-        bot.reply_to(message, "سیستم Keep-Alive خاموش شد 😴")
-    else:
-        bot.reply_to(message, "قبلاً خاموش بوده")
 
-@bot.message_handler(commands=["admin"])
-def admin_manage(message):
+    stopped = stop_keep_alive()
+
+    if stopped:
+        await message.answer("سیستم Keep-Alive خاموش شد 😴")
+    else:
+        await message.answer("قبلاً خاموش بوده")
+
+@router.message(F.text.startswith("/admin"))
+async def admin_manage(message: Message):
     if not command_allowed(message):
         return
+
     if message.from_user.id not in ADMIN:
         return
 
     args = message.text.split()
+
     if len(args) < 3:
-        bot.reply_to(message, "فرمت: /admin add|remove <user_id>")
+        await message.answer("فرمت: /admin add|remove <user_id>")
         return
 
-    action = args[1]
-    uid = int(args[2])
+    action = args[1].lower()
+    try:
+        uid = int(args[2])
+    except ValueError:
+        await message.answer("❌ user_id باید عدد باشد")
+        return
 
     if action == "add":
-        users_col.update_one({"user_id": uid}, {"$set": {"is_admin": True}})
-        bot.reply_to(message, "✅ ادمین شد")
+        users_col.update_one(
+            {"user_id": uid},
+            {"$set": {"is_admin": True}}
+        )
+        await message.answer("✅ ادمین شد")
 
     elif action == "remove":
-        users_col.update_one({"user_id": uid}, {"$set": {"is_admin": False}})
-        bot.reply_to(message, "❌ از ادمین حذف شد")
+        users_col.update_one(
+            {"user_id": uid},
+            {"$set": {"is_admin": False}}
+        )
+        await message.answer("❌ از ادمین حذف شد")
+
+    else:
+        await message.answer("❌ اکشن نامعتبر است (add یا remove)")
 
 
-@bot.message_handler(commands=["bot_off"])
-def bot_off(message):
+from aiogram import Router, F
+from aiogram.types import Message
+
+
+
+@router.message(F.text == "/bot_off")
+async def bot_off(message: Message):
     global BOT_DISABLED
+
     if message.from_user.id != SUPER_ADMIN:
         return
 
     BOT_DISABLED = True
-    bot.send_message(message.chat.id, "⛔ ربات خاموش شد")
+    await message.answer("⛔ ربات خاموش شد")
 
-@bot.message_handler(commands=["bot_on"])
-def bot_on(message):
+@router.message(F.text == "/bot_on")
+async def bot_on(message):
     global BOT_DISABLED
+
     if message.from_user.id != SUPER_ADMIN:
         return
 
     BOT_DISABLED = False
-    bot.send_message(message.chat.id, "✅ ربات روشن شد")
+    await message.answer("✅ ربات روشن شد")
 
-@bot.message_handler(commands=["admin_gift"])
-def give_coins_admin(message):
+@router.message(F.text.startswith("/admin_gift"))
+async def give_coins_admin(message):
     if not command_allowed(message):
         return
+
     if message.from_user.id not in ADMIN:
-        bot.send_message(message.from_user.id, "❌ شما دسترسی لازم را ندارید!")
+        await message.answer("❌ شما دسترسی لازم را ندارید!")
         return
-    uid = message.from_user.idp
+
+    uid = message.from_user.id
     if is_bot_off(uid):
         return
- 
+
     args = message.text.split()
+
     if len(args) != 3:
-        bot.send_message(message.from_user.id, "❌ فرمت دستور: /admin_gift <آیدی> <تعداد سکه>")
+        await message.answer("❌ فرمت دستور: /admin_gift <آیدی> <تعداد سکه>")
         return
+
     try:
         target_id = int(args[1])
         amount = int(args[2])
     except ValueError:
-        bot.send_message(message.from_user.id, "❌ آیدی و تعداد سکه باید عدد باشند!")
+        await message.answer("❌ آیدی و تعداد سکه باید عدد باشند!")
         return
 
-    users_col.update_one({"user_id": target_id}, {"$inc": {"coins": amount}}, upsert=True)
+    users_col.update_one(
+        {"user_id": target_id},
+        {"$inc": {"coins": amount}},
+        upsert=True
+    )
+
     recipient = users_col.find_one({"user_id": target_id})
     recipient_name = recipient.get("first_name", "کاربر ناشناس")
 
-    bot.send_message(message.from_user.id, f"✅ {amount} سکه به  کاربر{recipient_name} اضافه شد.")
+    await message.answer(
+        f"✅ {amount} سکه به کاربر {recipient_name} اضافه شد."
+    )
+
     try:
-        bot.send_message(target_id, f"🌟 {amount} سکه توسط ادمین به حساب شما اضافه شد!")
-        
+        await message.bot.send_message(
+            target_id,
+            f"🌟 {amount} سکه توسط ادمین به حساب شما اضافه شد!"
+        )
+
         send_coin_log(
-    f"🔄 انتقال سکه\n"
-    f"👤 از: {from_id}\n"
-    f"👤 به: {to_id}\n"
-    f"💰 مقدار: {amount}"
-)
+            f"🔄 انتقال سکه\n"
+            f"👤 از: {uid}\n"
+            f"👤 به: {target_id}\n"
+            f"💰 مقدار: {amount}"
+        )
+
     except:
         pass
-
-@bot.message_handler(commands=["add_baton"])
-def add_required_chat(message):
+        
+        
+@router.message(F.text.startswith("/add_baton"))
+async def add_required_chat(message):
     if not command_allowed(message):
         return
-    if message.from_user.id != SUPER_ADMIN:
-        return
-        bot.send_message(message.from_user.id, "❌ دسترسی ندارید!")
-        return
+
     uid = message.from_user.id
+
+    if uid != SUPER_ADMIN:
+        await message.answer("❌ دسترسی ندارید!")
+        return
 
     if is_bot_off(uid):
         return
 
-
     args = message.text.split(maxsplit=2)
+
     if len(args) != 3:
-        bot.send_message(message.from_user.id, "❌ فرمت درست: /add {link_channel_or_group} {button_name}")
+        await message.answer("❌ فرمت درست: /add_baton <link> <button_name>")
         return
 
     link = args[1]
     button_name = args[2]
 
-    required_chats_col.insert_one({"link": link, "button_name": button_name})
-    bot.send_message(message.from_user.id, f"✅ دکمه '{button_name}' اضافه شد!")
+    required_chats_col.insert_one({
+        "link": link,
+        "button_name": button_name
+    })
 
-@bot.message_handler(commands=["remove_baton"])
-def remove_baton(message):
-    if message.from_user.id != SUPER_ADMIN:
-        return
+    await message.answer(f"✅ دکمه '{button_name}' اضافه شد!")
+
+@router.message(F.text.startswith("/remove_baton"))
+async def remove_baton(message):
     uid = message.from_user.id
+
+    if uid != SUPER_ADMIN:
+        await message.answer("❌ دسترسی ندارید")
+        return
 
     if is_bot_off(uid):
         return
 
     args = message.text.split(maxsplit=1)
+
     if len(args) < 2:
-        bot.reply_to(message, "فرمت: /remove_baton <link>")
+        await message.answer("فرمت: /remove_baton <link>")
         return
 
     link = args[1]
+
     result = required_chats_col.delete_one({"link": link})
 
-    bot.reply_to(message, "✅ حذف شد" if result.deleted_count else "❌ پیدا نشد")
+    if result.deleted_count:
+        await message.answer("✅ حذف شد")
+    else:
+        await message.answer("❌ پیدا نشد")
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith("selfbot_"))
-def handle_callbacks(call):
+@router.callback_query(F.data.startswith("selfbot_"))
+async def handle_callbacks(call):
     uid = call.from_user.id
+
     if is_banned(uid) or is_bot_off(uid):
         return
+
     data = call.data
-    bot.answer_callback_query(call.id)
     user = users_col.find_one({"user_id": uid}) or {}
 
+    await call.answer()
+
     if data == "selfbot_main_panel":
-        safe_edit(call, panel_text, get_main_panel())
+        await call.message.edit_text(
+            panel_text,
+            reply_markup=get_main_panel()
+        )
 
     elif data == "selfbot_start_self":
         coins = user.get("coins", 0)
         required = MIN_COIN
+
         if coins < required:
             missing = required - coins
 
-        # پیام هشدار موقت
-            msg = bot.send_message(
-            uid,
-            f"⚠️ سکه‌های شما کافی نیست!\nمقدار مورد نیاز: {missing} سکه"
-        )
+            msg = await call.message.bot.send_message(
+                uid,
+                f"⚠️ سکه‌های شما کافی نیست!\nمقدار مورد نیاز: {missing} سکه"
+            )
 
-        # حذف خودکار پیام بعد 3 ثانیه
-            threading.Timer(3, lambda: bot.delete_message(uid, msg.message_id)).start()
+            import threading
+            threading.Timer(
+                3,
+                lambda: call.message.bot.delete_message(uid, msg.message_id)
+            ).start()
+
             return
-    # اگر سکه کافی بود ادامه بده
-        safe_edit(call, "📱 شماره خود را وارد کنید (+98...)")
+
+        await call.message.edit_text("📱 شماره خود را وارد کنید (+98...)")
         user_state[uid] = "await_phone_self"
 
     elif data == "selfbot_start_trial":
         if user.get("trial_used"):
-            bot.answer_callback_query(call.id, "⚡ شما قبلاً سلف تست گرفتید!")
+            await call.answer("⚡ شما قبلاً سلف تست گرفتید!", show_alert=True)
             return
-        safe_edit(call, "📱 شماره خود را وارد کنید (+98...)")
+
+        await call.message.edit_text("📱 شماره خود را وارد کنید (+98...)")
         user_state[uid] = "await_phone_trial"
 
     elif data == "selfbot_account_info":
@@ -675,105 +759,131 @@ def handle_callbacks(call):
         username = user.get("username", "-")
         coins = user.get("coins", 0)
         referrals = users_col.count_documents({"referrer": uid})
+
         created_at = user.get("created_at")
         created_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "-"
-        msg = f"""اطلاعات شما:
-اسم: {first_name}
-یوزرنیم: @{username}
-ایدی عددی: `{uid}`
-تعداد زیر مجموعه: {referrals}
-تعداد سکه: {coins}
-تاریخ عضویت: {created_str}"""
-        safe_edit(call, msg, get_user_sessions_panel(uid))
+
+        msg = (
+            f"اطلاعات شما:\n"
+            f"اسم: {first_name}\n"
+            f"یوزرنیم: @{username}\n"
+            f"ایدی عددی: `{uid}`\n"
+            f"تعداد زیر مجموعه: {referrals}\n"
+            f"تعداد سکه: {coins}\n"
+            f"تاریخ عضویت: {created_str}"
+        )
+
+        await call.message.edit_text(
+            msg,
+            reply_markup=get_user_sessions_panel(uid)
+        )
 
     elif data == "selfbot_referral":
         referral_link = f"https://t.me/self_nix_bot?start={uid}"
-        msg = f"🌟 لینک اختصاصی زیر مجموعه شما:\n{referral_link}\nهر زیر مجموعه: {REFERRAL_REWARD} سکه✨️\n معادل 3 ساعت استفاده از سلف"
-        safe_edit(call, msg, get_back_panel())
+
+        msg = (
+            f"🌟 لینک اختصاصی زیر مجموعه شما:\n{referral_link}\n"
+            f"هر زیر مجموعه: {REFERRAL_REWARD} سکه✨️\n"
+            f"معادل 3 ساعت استفاده از سلف"
+        )
+
+        await call.message.edit_text(msg, reply_markup=get_back_panel())
 
     elif data == "selfbot_buy_coins":
         msg = (
-    "💰 تعداد سکه مورد نظر خود را ارسال کنید.\n\n"
-    "💵 تعرفه خرید:\n"
-    "• 50 سکه = 5,000 تومان\n"
-    "• 100 سکه = 9,000 تومان\n"
-    "• 250 سکه = 22,000 تومان\n"
-    "• 500 سکه = 42,000 تومان\n"
-    "• 1000 سکه = 85,000 تومان\n\n"
-    "⏳ مصرف سکه:\n"
-    "هر 2 سکه معادل 1 ساعت استفاده از سلف میباشد."
-		)
-        safe_edit(call, msg, get_back_panel())
+            "💰 تعداد سکه مورد نظر خود را ارسال کنید.\n\n"
+            "💵 تعرفه خرید:\n"
+            "• 50 سکه = 5,000 تومان\n"
+            "• 100 سکه = 9,000 تومان\n"
+            "• 250 سکه = 22,000 تومان\n"
+            "• 500 سکه = 42,000 تومان\n"
+            "• 1000 سکه = 85,000 تومان\n\n"
+            "⏳ مصرف سکه:\n"
+            "هر 2 سکه معادل 1 ساعت استفاده از سلف میباشد."
+        )
+
+        await call.message.edit_text(msg, reply_markup=get_back_panel())
         user_state[uid] = "await_buy_amount"
 
-@bot.callback_query_handler(func=lambda c: c.data == "check_membership")
-def check_membership_callback(call):
-	
 
+
+
+@router.callback_query(F.data == "check_membership")
+async def check_membership_callback(call):
     uid = call.from_user.id
+
     if is_banned(uid) or is_bot_off(uid):
         return
 
     missing = is_user_joined(uid)
 
+    await call.answer()
+
     # اگر هنوز عضو نیست
     if missing:
-
-        safe_edit(
-            call,
+        await call.message.edit_text(
             "❌ کاربر گرامی شما هنوز در بعضی کانال‌ها یا گروه‌ها عضو نشده‌اید",
-            get_membership_panel(missing)
+            reply_markup=get_membership_panel(missing)
         )
         return
 
-    # ✅ اگر عضو بود
+    # اگر عضو بود
     try:
-        bot.delete_message(uid, call.message.message_id)
+        await call.message.delete()
     except:
         pass
 
-    msg = bot.send_message(
+    msg = await call.message.bot.send_message(
         uid,
         "✅ کاربر گرامی عضویت شما تایید شد\n"
         "به ربات ⦁ Self Nix خوش اومدی 🌟\n"
-		"برای استفاده دستور /start رو مجدد ارسال کنید"
+        "برای استفاده دستور /start رو مجدد ارسال کنید"
     )
 
     # ارسال پنل اصلی
-    bot.send_message(uid, panel_text, reply_markup=get_main_panel())
+    await call.message.bot.send_message(
+        uid,
+        panel_text,
+        reply_markup=get_main_panel()
+    )
 
     # حذف پیام تایید بعد ۱۰ ثانیه
+    import threading
+
     def delete_confirm():
         try:
-            bot.delete_message(uid, msg.message_id)
+            call.message.bot.delete_message(uid, msg.message_id)
         except:
             pass
 
-    threading.Timer(10, delete_confirm).start()     
-@bot.message_handler(func=lambda m: True)
-def handle_messages(message):
+    threading.Timer(10, delete_confirm).start()
+    
+    
+@router.message()
+async def handle_messages(message):
     uid = message.from_user.id
-    text = message.text.strip()
+    text = (message.text or "").strip()
     state = user_state.get(uid)
 
     # ---------------- خرید سکه ----------------
-    # ---------------- خرید سکه ----------------
+# ---------------- خرید سکه ----------------
     if state == "await_buy_amount":
         if not text.isdigit():
-            
+
             if block_if_banned(uid, message=message):
                 return
-            
-            bot.send_message(uid, "❌ لطفاً فقط عدد وارد کنید.")
+
+            await message.answer("❌ لطفاً فقط عدد وارد کنید.")
             return
 
         amount = int(text)
 
         if amount < 50:
-            bot.send_message(uid, "❌ حداقل خرید 50 سکه است.")
+            await message.answer("❌ حداقل خرید 50 سکه است.")
             return
 
         total = calculate_price(amount)
+
         temp_data[uid] = {
         "buy_amount": amount,
         "buy_total": total
@@ -787,163 +897,260 @@ def handle_messages(message):
         f"به نام: {CARD_NAME}\n\n"
         f"پس از واریز، عکس فیش را ارسال کنید."
     )
-    
-        send_coin_log(
-    f"🛒 درخواست خرید\n"
-    f"👤 کاربر: {uid}\n"
-    f"💰 تعداد: {amount}\n"
-    f"💵 مبلغ: {total} تومان"
-)
 
-        bot.send_message(uid, msg)
+        send_coin_log(
+        f"🛒 درخواست خرید\n"
+        f"👤 کاربر: {uid}\n"
+        f"💰 تعداد: {amount}\n"
+        f"💵 مبلغ: {total} تومان"
+    )
+
+        await message.answer(msg)
         user_state[uid] = "await_receipt"
         return
 
     # ---------------- مرحله شماره ----------------
     if state in ["await_phone_self", "await_phone_trial"]:
-        
+
         if block_if_banned(uid, message=message):
             return
-    
-        # پاک کردن پیام کاربر و پیام قبلی ربات
-        try: bot.delete_message(uid, message.message_id)
-        except: pass
+
+        try:
+            bot.delete_message(uid, message.message_id)
+        except:
+            pass
+
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
-            try: bot.delete_message(uid, prev_msg_id)
-            except: pass
+            try:
+                bot.delete_message(uid, prev_msg_id)
+            except:
+                pass
 
         temp_data[uid] = {"phone": text}
+
         try:
             res = requests.post(
-                f"{SITE_URL}/send_phone",
-                json={"phone": text, "trial": state=="await_phone_trial"},
-                timeout=15
-            ).json()
+            f"{SITE_URL}/send_phone",
+            json={
+                "phone": text,
+                "trial": (state == "await_phone_trial")
+            },
+            timeout=15
+        ).json()
         except Exception as e:
             msg = bot.send_message(uid, f"❌ خطا در ارسال شماره: {e}")
             temp_data[uid]["last_msg_id"] = msg.message_id
             return
 
         if res.get("status") == "ok":
-            msg = bot.send_message(uid, "✅ شماره تایید شد. لطفاً کد OTP را با . وارد کنید\nمثال:1.2.3.4.5")
+            msg = bot.send_message(
+            uid,
+            "✅ شماره تایید شد. کد OTP را ارسال کنید\nمثال: 1.2.3.4.5"
+        )
             temp_data[uid]["last_msg_id"] = msg.message_id
-            user_state[uid] = "await_otp_self" if state == "await_phone_self" else "await_otp_trial"
+            user_state[uid] = (
+            "await_otp_self" if state == "await_phone_self"
+            else "await_otp_trial"
+        )
         else:
-            msg = bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            msg = bot.send_message(
+            uid,
+            f"❌ خطا: {res.get('message', 'نامعلوم')}"
+        )
             temp_data[uid]["last_msg_id"] = msg.message_id
+
         return
 
     # ---------------- مرحله OTP ----------------
     if state in ["await_otp_self", "await_otp_trial"]:
-        
+
         if block_if_banned(uid, message=message):
             return
-        # پاک کردن پیام کاربر و پیام قبلی ربات
-        try: bot.delete_message(uid, message.message_id)
-        except: pass
+
+        try:
+            bot.delete_message(uid, message.message_id)
+        except:
+        pass
+
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
-            try: bot.delete_message(uid, prev_msg_id)
-            except: pass
+            try:
+                bot.delete_message(uid, prev_msg_id)
+            except:
+                pass
 
         phone = temp_data.get(uid, {}).get("phone")
         if not phone:
             user_state.pop(uid, None)
             return
 
-        trial = "trial" in state
+        trial = (state == "await_otp_trial")
+
         try:
             res = requests.post(
-                f"{SITE_URL}/send_code",
-                json={"phone": phone, "code": text, "trial": trial},
-                timeout=15
-            ).json()
+            f"{SITE_URL}/send_code",
+            json={
+                "phone": phone,
+                "code": text,
+                "trial": trial
+            },
+            timeout=15
+        ).json()
         except Exception as e:
             msg = bot.send_message(uid, f"❌ خطا در ارسال کد OTP: {e}")
             temp_data[uid]["last_msg_id"] = msg.message_id
             return
 
         if res.get("status") == "ok":
-            users_col.update_one({"user_id": uid}, {"$set": {
+
+            users_col.update_one(
+            {"user_id": uid},
+            {"$set": {
                 "phone": phone,
                 "trial_active": trial,
-                "trial_used": trial or users_col.find_one({"user_id": uid}).get("trial_used", False),
+                "trial_used": trial or users_col.find_one(
+                    {"user_id": uid}
+                ).get("trial_used", False),
                 "trial_end": datetime.now(UTC) + timedelta(days=TRIAL_DURATION) if trial else None
-            }})
+            }}
+        )
+
             if trial:
                 start_trial_expiration(uid)
-            msg = bot.send_message(uid, f"✅ {'سلف تست' if trial else 'سلف اصلی'} ساخته شد و ورود کامل شد!")
-            temp_data[uid]["last_msg_id"] = msg.message_id
-            user_state.pop(uid, None)
+
+            msg = bot.send_message(
+            uid,
+            f"✅ {'سلف تست' if trial else 'سلف اصلی'} با موفقیت فعال شد"
+        )
+
             temp_data.pop(uid, None)
+            user_state.pop(uid, None)
+
         elif res.get("status") == "2fa":
-            msg = bot.send_message(uid, "🔐 نیاز به رمز دو مرحله‌ای (2FA). لطفاً وارد کنید:")
+            msg = bot.send_message(
+            uid,
+            "🔐 ورود دو مرحله‌ای فعال است. رمز 2FA را ارسال کنید:"
+        )
+            user_state[uid] = (
+            "await_2fa_trial" if trial else "await_2fa_self"
+        )
             temp_data[uid]["last_msg_id"] = msg.message_id
-            user_state[uid] = "await_2fa_trial" if trial else "await_2fa_self"
+
         else:
-            msg = bot.send_message(uid, f"❌ خطا: {res.get('message','نامعلوم')}")
+            msg = bot.send_message(
+            uid,
+            f"❌ خطا: {res.get('message', 'نامعلوم')}"
+        )
             temp_data[uid]["last_msg_id"] = msg.message_id
+
+        return
 
     # ---------------- مرحله 2FA ----------------
     if state in ["await_2fa_self", "await_2fa_trial"]:
-        
+
         if block_if_banned(uid, message=message):
             return
-    
-        # پاک کردن پیام کاربر و پیام قبلی ربات
-        try: bot.delete_message(uid, message.message_id)
-        except: pass
+
+        try:
+            bot.delete_message(uid, message.message_id)
+        except:
+            pass
+
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
-            try: bot.delete_message(uid, prev_msg_id)
-            except: pass
+            try:
+                bot.delete_message(uid, prev_msg_id)
+            except:
+                pass
 
         phone = temp_data.get(uid, {}).get("phone")
         if not phone:
             user_state.pop(uid, None)
             return
 
-        trial = "trial" in state
+        trial = (state == "await_2fa_trial")
+
         try:
             res = requests.post(
-                f"{SITE_URL}/send_2fa",
-                json={"phone": phone, "password": text, "trial": trial},
-                timeout=15
-            ).json()
+            f"{SITE_URL}/send_2fa",
+            json={
+                "phone": phone,
+                "password": text,
+                "trial": trial
+            },
+            timeout=15
+        ).json()
+        
         except Exception as e:
-            msg = bot.send_message(uid, f"❌ خطا در ارسال 2FA: {e}")
+            msg = bot.send_message(
+            uid,
+            f"❌ خطا در ارسال 2FA: {e}"
+        )
             temp_data[uid]["last_msg_id"] = msg.message_id
             return
-
+    
         if res.get("status") == "ok":
-            users_col.update_one({"user_id": uid}, {"$set": {
+
+            users_col.update_one(
+            {"user_id": uid},
+            {"$set": {
                 "phone": phone,
                 "trial_active": trial,
-                "trial_used": trial or users_col.find_one({"user_id": uid}).get("trial_used", False),
+                "trial_used": trial or users_col.find_one(
+                    {"user_id": uid}
+                ).get("trial_used", False),
                 "trial_end": datetime.now(UTC) + timedelta(days=TRIAL_DURATION) if trial else None
-            }})
+            }}
+        )
+    
             if trial:
                 start_trial_expiration(uid)
-            msg = bot.send_message(uid, f"✅ {'سلف تست' if trial else 'سلف اصلی'} ساخته شد و ورود کامل شد!")
-            temp_data[uid]["last_msg_id"] = msg.message_id
-            user_state.pop(uid, None)
+
+            msg = bot.send_message(
+            uid,
+            f"✅ {'سلف تست' if trial else 'سلف اصلی'} با موفقیت فعال شد"
+        )
+
             temp_data.pop(uid, None)
+            user_state.pop(uid, None)
+
         elif res.get("status") == "2fa":
-            msg = bot.send_message(uid, "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:")
+
+            msg = bot.send_message(
+            uid,
+            "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:"
+        )
+
             temp_data[uid]["last_msg_id"] = msg.message_id
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith("toggle_session_"))
-def toggle_session(call):
-    uid = call.from_user.id
-    session_id = call.data.split("toggle_session_")[1]
-    
-    
-    if block_if_banned(uid, call=call):
+        else:
+
+            msg = bot.send_message(
+            uid,
+            f"❌ خطا: {res.get('message', 'نامعلوم')}"
+        )
+
+            temp_data[uid]["last_msg_id"] = msg.message_id
+
         return
 
-    session = sessions_col.find_one({"_id": ObjectId(session_id)})
+@router.callback_query(F.data.startswith("toggle_session_"))
+async def toggle_session(callback: CallbackQuery):
+
+    uid = callback.from_user.id
+    session_id = callback.data.split("toggle_session_")[1]
+
+    if block_if_banned(uid):
+        await callback.answer("⛔ شما بن هستید")
+        return
+
+    session = sessions_col.find_one({
+        "_id": ObjectId(session_id)
+    })
+
     if not session:
+        await callback.answer("❌ سشن پیدا نشد")
         return
 
     current_power = session.get("power", "off")
@@ -954,54 +1161,83 @@ def toggle_session(call):
         {"$set": {"power": new_power}}
     )
 
-    bot.answer_callback_query(call.id, f"Power → {new_power.upper()}")
+    await callback.answer(
+        f"Power → {new_power.upper()}"
+    )
 
-    # رفرش پنل
-    user = users_col.find_one({"user_id": uid})
-    first_name = user.get("first_name", "")
-    coins = user.get("coins", 0)
-
-    
-    safe_edit(call, get_user_sessions_panel(uid))
-
+    await callback.message.edit_text(
+        "📱 لیست سشن‌های شما:",
+        reply_markup=get_user_sessions_panel(uid)
+    )
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_buy_"))
-def confirm_buy(call):
-    target_id = int(call.data.split("_")[2])
 
-    # فقط کسانی که پیام براشون فرستاده شده اجازه تایید دارند
-    allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
-    
-    uid = call.from_user.id
-    if block_if_banned(uid, call=call):
+@router.callback_query(F.data.startswith("confirm_buy_"))
+async def confirm_buy(callback: CallbackQuery):
+
+    target_id = int(callback.data.split("_")[2])
+
+    allowed_admins = [
+        admin_id
+        for admin_id, _ in admin_messages.get(target_id, [])
+    ]
+
+    uid = callback.from_user.id
+
+    if block_if_banned(uid):
+        await callback.answer("⛔ شما بن هستید")
         return
 
-# اضافه کردن سوپر ادمین به لیست
     if SUPER_ADMIN not in allowed_admins:
         allowed_admins.append(SUPER_ADMIN)
 
-    if call.from_user.id not in allowed_admins:
-        bot.answer_callback_query(call.id, "❌ اجازه ندارید این خرید را تایید کنید")
+    if uid not in allowed_admins:
+        await callback.answer(
+            "❌ اجازه ندارید این خرید را تایید کنید",
+            show_alert=True
+        )
+        return
+
+    if target_id not in temp_data:
+        await callback.answer(
+            "❌ اطلاعات خرید پیدا نشد",
+            show_alert=True
+        )
         return
 
     amount = temp_data[target_id]["buy_amount"]
-    users_col.update_one({"user_id": target_id}, {"$inc": {"coins": amount}})
 
-    # حذف دکمه‌ها
+    users_col.update_one(
+        {"user_id": target_id},
+        {"$inc": {"coins": amount}}
+    )
+
     for admin_id, msg_id in admin_messages.get(target_id, []):
         try:
-            bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
+            await bot.edit_message_reply_markup(
+                chat_id=admin_id,
+                message_id=msg_id,
+                reply_markup=None
+            )
         except:
             pass
 
-    bot.send_message(target_id, f"✅ خرید شما تایید شد.\n💰 {amount} سکه اضافه شد.")
+    try:
+        await bot.send_message(
+            target_id,
+            f"✅ خرید شما تایید شد.\n💰 {amount} سکه اضافه شد."
+        )
+    except:
+        pass
 
-    # لاگ به سوپرادمین
+    target_user = users_col.find_one(
+        {"user_id": target_id}
+    ) or {}
+
     send_coin_log(
         f"✅ خرید تایید شد\n"
-        f"👤 ادمین: <a href='tg://user?id={call.from_user.id}'>{call.from_user.first_name}</a>\n"
-        f"👤 کاربر: <a href='tg://user?id={target_id}'>{users_col.find_one({'user_id': target_id}).get('first_name','کاربر')}</a>\n"
+        f"👤 ادمین: <a href='tg://user?id={uid}'>{callback.from_user.first_name}</a>\n"
+        f"👤 کاربر: <a href='tg://user?id={target_id}'>{target_user.get('first_name','کاربر')}</a>\n"
         f"💰 تعداد سکه اضافه شده: {amount}",
         parse_mode="HTML"
     )
@@ -1009,51 +1245,72 @@ def confirm_buy(call):
     temp_data.pop(target_id, None)
     admin_messages.pop(target_id, None)
 
+    await callback.answer("✅ خرید تایید شد")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_buy_"))
-def reject_buy(call):
-    target_id = int(call.data.split("_")[2])
+@router.callback_query(F.data.startswith("reject_buy_"))
+async def reject_buy(callback: CallbackQuery):
 
-    # همه admin هایی که برای این خرید پیام داشتند
-    allowed_admins = [admin_id for admin_id, _ in admin_messages.get(target_id, [])]
-    
-    uid = call.from_user.id
-    if block_if_banned(uid, call=call):
+    target_id = int(callback.data.split("_")[2])
+
+    allowed_admins = [
+        admin_id
+        for admin_id, _ in admin_messages.get(target_id, [])
+    ]
+
+    uid = callback.from_user.id
+
+    if block_if_banned(uid):
+        await callback.answer("⛔ شما بن هستید")
         return
 
-    # همیشه سوپر ادمین را هم اضافه کن
     if SUPER_ADMIN not in allowed_admins:
         allowed_admins.append(SUPER_ADMIN)
 
-    if call.from_user.id not in allowed_admins:
-        bot.answer_callback_query(call.id, "❌ اجازه ندارید این خرید را رد کنید")
-        return 
+    if uid not in allowed_admins:
+        await callback.answer(
+            "❌ اجازه ندارید این خرید را رد کنید",
+            show_alert=True
+        )
+        return
 
-    # حذف داده موقت و دکمه‌ها
     temp_data.pop(target_id, None)
+
     for admin_id, msg_id in admin_messages.get(target_id, []):
         try:
-            bot.edit_message_reply_markup(chat_id=admin_id, message_id=msg_id, reply_markup=None)
+            await bot.edit_message_reply_markup(
+                chat_id=admin_id,
+                message_id=msg_id,
+                reply_markup=None
+            )
         except:
             pass
+
     admin_messages.pop(target_id, None)
 
-    # لاگ به سوپرادمین
+    target_user = users_col.find_one(
+        {"user_id": target_id}
+    ) or {}
+
     send_coin_log(
         f"❌ خرید رد شد\n"
-        f"👤 ادمین: <a href='tg://user?id={call.from_user.id}'>{call.from_user.first_name}</a>\n"
-        f"👤 کاربر: <a href='tg://user?id={target_id}'>{users_col.find_one({'user_id': target_id}).get('first_name','کاربر')}</a>",
+        f"👤 ادمین: <a href='tg://user?id={uid}'>{callback.from_user.first_name}</a>\n"
+        f"👤 کاربر: <a href='tg://user?id={target_id}'>{target_user.get('first_name', 'کاربر')}</a>",
         parse_mode="HTML"
     )
 
-    # اطلاع کاربر
     try:
-        bot.send_message(target_id, "❌ درخواست خرید شما رد شد.")
+        await bot.send_message(
+            target_id,
+            "❌ درخواست خرید شما رد شد."
+        )
     except:
         pass
 
-@bot.message_handler(content_types=["photo"])
-def handle_receipt(message):
+    await callback.answer("❌ خرید رد شد")
+    
+    
+@router.message(F.photo)
+async def handle_receipt(message: Message):
     uid = message.from_user.id
 
     if user_state.get(uid) != "await_receipt":
@@ -1065,6 +1322,7 @@ def handle_receipt(message):
 
     coins = data["buy_amount"]
     total = data["buy_total"]
+
     file_id = message.photo[-1].file_id
 
     caption = (
@@ -1075,27 +1333,44 @@ def handle_receipt(message):
         f"💵 مبلغ: {total:,} تومان"
     )
 
-    # تعیین دریافت‌کننده‌ها
     if uid in ADMIN:
-        # اگر خود کاربر ادمین است → پیام فقط برای سوپرادمین
         recipients = [SUPER_ADMIN]
     else:
-        # کاربران عادی → پیام برای همه ADMINS
-        recipients = is_admin
+        recipients = ADMIN
 
-    markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton("✅ تایید خرید", callback_data=f"confirm_buy_{uid}"),
-        types.InlineKeyboardButton("❌ رد خرید", callback_data=f"reject_buy_{uid}")
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ تایید خرید",
+                    callback_data=f"confirm_buy_{uid}"
+                ),
+                InlineKeyboardButton(
+                    text="❌ رد خرید",
+                    callback_data=f"reject_buy_{uid}"
+                )
+            ]
+        ]
     )
 
     admin_messages[uid] = []
 
     for admin in recipients:
-        sent = bot.send_photo(admin, file_id, caption=caption, reply_markup=markup)
-        admin_messages[uid].append((admin, sent.message_id))
+        try:
+            sent = await bot.send_photo(
+                chat_id=admin,
+                photo=file_id,
+                caption=caption,
+                reply_markup=markup
+            )
 
-    # لاگ به سوپرادمین
+            admin_messages[uid].append(
+                (admin, sent.message_id)
+            )
+
+        except Exception as e:
+            print(e)
+
     send_coin_log(
         f"🛒 درخواست خرید جدید\n"
         f"👤 کاربر: <a href='tg://user?id={uid}'>{message.from_user.first_name}</a>\n"
@@ -1104,96 +1379,54 @@ def handle_receipt(message):
         parse_mode="HTML"
     )
 
-    bot.send_message(uid, "⏳ کاربر گرامی، تا تایید ادمین منتظر بمانید.")
+    await message.answer(
+        "⏳ کاربر گرامی، تا تایید ادمین منتظر بمانید."
+    )
+
     user_state.pop(uid, None)
 
-@bot.callback_query_handler(func=lambda call: call.data == "open_support_menu")
-def open_support_menu(call):
-    
+@router.callback_query(F.data == "open_support_menu")
+async def open_support_menu(call: CallbackQuery):
+
     uid = call.from_user.id
-    if block_if_banned(uid, call=call): 
+
+    if block_if_banned(uid):
+        await call.answer()
         return
-        
-    new_markup = types.InlineKeyboardMarkup()
-    new_markup.add(
-        types.InlineKeyboardButton("🛠️ پشتیبانی", url="https://t.me/self_nix_support"),
-        types.InlineKeyboardButton("💬 گپ", url="https://t.me/Nix_self_Group")
-    )
-    new_markup.add(
-        types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel")
+
+    new_markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🛠️ پشتیبانی",
+                    url="https://t.me/self_nix_support"
+                ),
+                InlineKeyboardButton(
+                    text="💬 گپ",
+                    url="https://t.me/Nix_self_Group"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 بازگشت",
+                    callback_data="selfbot_main_panel"
+                )
+            ]
+        ]
     )
 
-    bot.edit_message_reply_markup(
-        call.message.chat.id,
-        call.message.message_id,
+    await call.message.edit_reply_markup(
         reply_markup=new_markup
     )
 
+    await call.answer()
 
 
 
 
-import threading
-import time
-import requests
-
-URL = "https://self-bot-zva7.onrender.com"
-
-tasks = {}  # chat_id -> {"stop": Event, "thread": Thread}
 
 
-def ping_worker(chat_id, stop_event):
-    while not stop_event.is_set():
-        try:
-            r = requests.get(URL, timeout=10)
-            print(f"[PING] {r.status_code}")
-        except Exception as e:
-            print(f"[ERROR] {e}")
 
-        # هر 5 دقیقه
-        for _ in range(300):
-            if stop_event.is_set():
-                return
-            time.sleep(1)
-
-
-@bot.message_handler(commands=["ping_on"])
-def start_ping(message):
-    chat_id = message.chat.id
-
-    if chat_id in tasks:
-        bot.reply_to(message, "⚠️ قبلاً فعال شده")
-        return
-
-    stop_event = threading.Event()
-    thread = threading.Thread(
-        target=ping_worker,
-        args=(chat_id, stop_event),
-        daemon=True
-    )
-
-    tasks[chat_id] = {
-        "stop": stop_event,
-        "thread": thread
-    }
-
-    thread.start()
-    bot.reply_to(message, "✅ شروع شد (هر ۵ دقیقه درخواست ارسال میشه)")
-
-
-@bot.message_handler(commands=["ping_off"])
-def stop_ping(message):
-    chat_id = message.chat.id
-
-    task = tasks.get(chat_id)
-    if not task:
-        bot.reply_to(message, "❌ چیزی فعال نیست")
-        return
-
-    task["stop"].set()
-    del tasks[chat_id]
-
-    bot.reply_to(message, "⛔️ متوقف شد")
 
 
 
