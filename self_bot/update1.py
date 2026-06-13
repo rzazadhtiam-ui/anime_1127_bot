@@ -122,7 +122,7 @@ def build_panel_markup(user_id: int, parent: str, show_back: bool = False) -> In
         c = int(btn.get("col", 0))
         grid.setdefault(r, {})[c] = InlineKeyboardButton(
             text=btn["name"],
-            callback_data=f"open_{user_id}_{btn['name']}_{parent}"
+            callback_data=f"open_{user_id}_{btn['_id']}"
         )
 
     for r in sorted(grid.keys()):
@@ -259,16 +259,20 @@ def register_panel(router: Router, bot: Bot):
 # ==================== Callback Handlers ====================
     @router.callback_query(F.data.startswith("open_"))
     async def open_panel(call: CallbackQuery):
-        _, owner_id, name, parent = call.data.split("_", 3)
+        _, owner_id, btn_id = call.data.split("_", 2)
+
         uid = call.from_user.id
         if int(owner_id) != uid:
             await call.answer("دسترسی ندارید.", show_alert=True)
             return
 
-        btn = buttons_col.find_one({"name": name, "parent": parent})
+        btn = buttons_col.find_one({"_id": btn_id})
         if not btn:
             await call.answer("پیدا نشد.", show_alert=True)
             return
+
+        name = btn["name"]
+        parent = btn["parent"]
 
         _reset_timer(uid, call)
         history.setdefault(uid, []).append(name)
@@ -325,8 +329,25 @@ def register_panel(router: Router, bot: Bot):
 
         text = MAIN_TEXT if current == "root" else get_panel_text(current)
         markup = build_panel_markup(uid, current, show_back=(current != "root"))
-        await call.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+        inline_id = getattr(call, "inline_message_id", None)
 
+        if call.message:
+            await call.message.edit_text(
+                text,
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+
+        elif inline_id:
+            await bot.edit_message_text(
+                text=text,
+                inline_message_id=inline_id,
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+
+        else:
+            await call.answer("❌ پیام قابل ویرایش نیست", show_alert=True)
 
     @router.callback_query(F.data.startswith("close_"))
     async def close_handler(call: CallbackQuery):
