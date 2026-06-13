@@ -6,6 +6,7 @@ Self Nix Panel - نسخه ماژولار (فقط با ایمپورت در هست
 - بدون کال کردن setup_panel(bot) هیچ فعالیتی ندارد
 """
 
+
 import asyncio
 import threading
 import uuid
