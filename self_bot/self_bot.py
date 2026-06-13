@@ -70,7 +70,8 @@ register_commands(router, bot)   # ← درست این شکلیه
 
 # اگر setup_panel async هست:
 #  setup_panel(bot)
-await setup_panel(bot)   # یا اگر داخل async
+async def main():
+    await setup_panel(bot)   # یا اگر داخل async
 #==================data =================
 user_state = {}
 temp_data = {}
