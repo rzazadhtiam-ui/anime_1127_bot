@@ -92,10 +92,7 @@ async def send_force_join(bot, message, missing):
     )
 
     # اگر خواستی پین شود (ربات باید ادمین باشد)
-    try:
-        await bot.pin_chat_message(message.chat.id, warn_msg.message_id)
-    except:
-        pass
+    
 
     # 2️⃣ ساخت دکمه‌ها برای پیوی
     buttons = []
