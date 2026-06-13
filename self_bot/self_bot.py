@@ -275,7 +275,7 @@ import threading
 import time
 
 
-def manage_user_coins(uid):
+async def manage_user_coins(uid):
     """
     کاهش سکه هر ساعت و مدیریت خودکار سشن‌ها.
     """
