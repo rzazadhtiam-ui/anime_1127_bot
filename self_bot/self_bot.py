@@ -70,16 +70,14 @@ register_commands(router, bot)   # ← درست این شکلیه
 
 # ==================== START BOT ====================
 async def main():
-    print("🚀 در حال راه‌اندازی ربات...")
-    
-    # پنل Self Nix رو راه‌اندازی کن
+    print("🚀 Bot starting...")
+
+    await bot.delete_webhook(drop_pending_updates=True)
+
     await setup_panel(bot)
-    
-    # اگر register_commands نیاز به کار خاصی داره، اینجا هم می‌تونی بذاری
-    # register_commands(router, bot)  # اگر قبلاً در سطح ماژول کال کردی، دوباره لازم نیست
-    
-    # شروع polling
-    
+    register_commands(router, bot)
+
+    await dp.start_polling(bot)
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -364,6 +362,7 @@ async def manage_user_coins(uid):
         print("[COIN ENGINE ERROR]", e)
 
 
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_user_sessions_panel(uid):
@@ -378,23 +377,12 @@ def get_user_sessions_panel(uid):
         status_text = "🟢 ON" if power == "on" else "🔴 OFF"
 
         keyboard.append([
-            InlineKeyboardButton(
-                text=f"📱 {name}",
-                callback_data=f"session_info_{s['_id']}"
-            ),
-            InlineKeyboardButton(
-                text=status_text,
-                callback_data=f"toggle_session_{s['_id']}"
-            )
+            InlineKeyboardButton(text=f"📱 {name}", callback_data=f"session_info_{s['_id']}", style="success"),
+            InlineKeyboardButton(text=status_text, callback_data=f"toggle_session_{s['_id']}",style="danger")
         ])
 
-    # دکمه بازگشت
     keyboard.append([
-        InlineKeyboardButton(
-            text="🔙 بازگشت",
-            callback_data="selfbot_main_panel",
-            style="danger"
-        )
+        InlineKeyboardButton(text="🔙 بازگشت", callback_data="selfbot_main_panel", style="danger")
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
