@@ -364,9 +364,12 @@ async def manage_user_coins(uid):
         print("[COIN ENGINE ERROR]", e)
 
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 def get_user_sessions_panel(uid):
-    markup = types.InlineKeyboardMarkup()
     sessions = list(sessions_col.find({"user_id": uid}))
+
+    keyboard = []
 
     for s in sessions:
         name = s.get("session_name", "Unnamed")
@@ -374,19 +377,27 @@ def get_user_sessions_panel(uid):
 
         status_text = "🟢 ON" if power == "on" else "🔴 OFF"
 
-        markup.row(
-            types.InlineKeyboardButton(
-                f"📱 {name}",
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📱 {name}",
                 callback_data=f"session_info_{s['_id']}"
             ),
-            types.InlineKeyboardButton(
-                status_text,
+            InlineKeyboardButton(
+                text=status_text,
                 callback_data=f"toggle_session_{s['_id']}"
             )
-        )
+        ])
 
-    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel"))
-    return markup
+    # دکمه بازگشت
+    keyboard.append([
+        InlineKeyboardButton(
+            text="🔙 بازگشت",
+            callback_data="selfbot_main_panel",
+            style="danger"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 
