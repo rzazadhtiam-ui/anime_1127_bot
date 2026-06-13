@@ -88,7 +88,7 @@ SUPER_ADMIN = 6433381392
 BOT_DISABLED = False
 # ================= Helper =================
 
-def send_coin_log(text, parse_mode=None):
+async def send_coin_log(text, parse_mode=None):
     try:
         await bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}", parse_mode=parse_mode)
     except Exception as e:
@@ -165,7 +165,8 @@ def get_main_panel():
     markup.add(
     types.InlineKeyboardButton(
         "🛠️ ارتباط با ما💬",
-        callback_data="open_support_menu"
+        callback_data="open_support_menu",
+        style="primary"
     )
     )
     
@@ -173,7 +174,7 @@ def get_main_panel():
 
 def get_back_panel():
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel"))
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel", style="danger"))
     return markup
 
 def make_join_link(link):
@@ -727,11 +728,20 @@ async def handle_callbacks(call):
     await call.answer()
 
     if data == "selfbot_main_panel":
+
+        uid = call.from_user.id
+
+    # مهم: پاک کردن وضعیت کاربر
+        user_state.pop(uid, None)
+        temp_data.pop(uid, None)
+
         await call.message.edit_text(
             panel_text,
             reply_markup=get_main_panel()
         )
 
+        await call.answer()
+    
     elif data == "selfbot_start_self":
         coins = user.get("coins", 0)
         required = MIN_COIN
@@ -1144,40 +1154,62 @@ async def handle_messages(message):
 
         return
 
+from bson import ObjectId
+from bson.errors import InvalidId
+
+
 @router.callback_query(F.data.startswith("toggle_session_"))
 async def toggle_session(callback: CallbackQuery):
 
     uid = callback.from_user.id
-    session_id = callback.data.split("toggle_session_")[1]
 
+    # ban check
     if block_if_banned(uid):
-        await callback.answer("⛔ شما بن هستید")
+        await callback.answer("⛔ شما بن هستید", show_alert=True)
         return
 
-    session = sessions_col.find_one({
-        "_id": ObjectId(session_id)
-    })
+    # extract session id safely
+    raw_id = callback.data.replace("toggle_session_", "")
+
+    try:
+        session_id = ObjectId(raw_id)
+    except InvalidId:
+        await callback.answer("❌ شناسه سشن نامعتبر است", show_alert=True)
+        return
+
+    # fetch session
+    session = sessions_col.find_one({"_id": session_id})
 
     if not session:
-        await callback.answer("❌ سشن پیدا نشد")
+        await callback.answer("❌ سشن پیدا نشد", show_alert=True)
         return
 
-    current_power = session.get("power", "off")
-    new_power = "off" if current_power == "on" else "on"
+    # toggle power safely
+    new_power = "off"
+    if session.get("power") != "on":
+        new_power = "on"
 
+    # update DB
     sessions_col.update_one(
-        {"_id": ObjectId(session_id)},
+        {"_id": session_id},
         {"$set": {"power": new_power}}
     )
 
-    await callback.answer(
-        f"Power → {new_power.upper()}"
-    )
+    # callback feedback
+    await callback.answer(f"🔁 وضعیت: {new_power.upper()}")
 
-    await callback.message.edit_text(
-        "📱 لیست سشن‌های شما:",
-        reply_markup=get_user_sessions_panel(uid)
-    )
+    # rebuild panel safely
+    try:
+        await callback.message.edit_text(
+            "📱 لیست سشن‌های شما:",
+            reply_markup=get_user_sessions_panel(uid)
+        )
+    except Exception as e:
+        # اگر پیام تغییر نکرد یا خطا داشت
+        await callback.message.answer(
+            "📱 لیست سشن‌های شما:",
+            reply_markup=get_user_sessions_panel(uid)
+        )
 
 
 
