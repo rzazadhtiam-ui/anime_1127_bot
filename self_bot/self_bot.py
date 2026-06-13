@@ -79,8 +79,7 @@ async def main():
     # register_commands(router, bot)  # اگر قبلاً در سطح ماژول کال کردی، دوباره لازم نیست
     
     # شروع polling
-    await dp.start_polling(bot, skip_updates=True)
-
+    
 #==================data =================
 user_state = {}
 temp_data = {}
