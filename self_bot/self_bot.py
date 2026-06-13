@@ -1437,52 +1437,34 @@ async def open_support_menu(call: CallbackQuery):
   #===========================  
 app = Flask(__name__)
 
+
 @app.route("/")
 def home():
     return "🤖 Bot is alive ✅"
 
-
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
-        json_string = request.get_data().decode("utf-8")
-        update = Update.model_validate_json(json_string)
-        await dp.feed_update(bot, update)
+        data = request.get_data().decode("utf-8")
+        update = json.loads(data)
+
+        asyncio.run(dp.feed_update(bot, update))
+
         return "OK", 200
+
     return "bad request", 403
 
 
-# ================= BACKGROUND TASK =================
-def hourly_loop():
-    while True:
-        try:
-            for user in users_col.find({}):
-                manage_user_coins(user["user_id"])
-        except Exception as e:
-            print("Hourly deduct error:", e)
-        time.sleep(3600)
-
-
-threading.Thread(target=hourly_loop, daemon=True).start()
-
-
-# ================= WEBHOOK SETUP =================
-async def set_webhook():
-    await bot.delete_webhook()
-    time.sleep(1)
-
+def set_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
-    await bot.set_webhook(url=webhook_url)
+    asyncio.run(bot.delete_webhook())
+    asyncio.run(bot.set_webhook(webhook_url))
 
     print("Webhook set:", webhook_url)
 
 
-# ================= RUN SERVER =================
 if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(set_webhook())
-    print("Self Bot is running...")
+    set_webhook()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
