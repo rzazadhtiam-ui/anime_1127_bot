@@ -1176,7 +1176,7 @@ async def toggle_session(callback: CallbackQuery):
     uid = callback.from_user.id
 
     # ban check
-    if block_if_banned(uid):
+    if await block_if_banned(uid):
         await callback.answer("⛔ شما بن هستید", show_alert=True)
         return
 
@@ -1237,7 +1237,7 @@ async def confirm_buy(callback: CallbackQuery):
 
     uid = callback.from_user.id
 
-    if block_if_banned(uid):
+    if await block_if_banned(uid):
         await callback.answer("⛔ شما بن هستید")
         return
 
@@ -1312,7 +1312,7 @@ async def reject_buy(callback: CallbackQuery):
 
     uid = callback.from_user.id
 
-    if block_if_banned(uid):
+    if await block_if_banned(uid):
         await callback.answer("⛔ شما بن هستید")
         return
 
@@ -1443,7 +1443,7 @@ async def open_support_menu(call: CallbackQuery):
 
     uid = call.from_user.id
 
-    if block_if_banned(uid):
+    if await block_if_banned(uid):
         await call.answer()
         return
 
