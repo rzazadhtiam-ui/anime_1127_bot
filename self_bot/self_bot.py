@@ -16,7 +16,7 @@ from flask import request
 import threading
 import requests
 from pymongo import MongoClient
-from update1 import setup_panel
+from update1 import register_panel
 from update1 import router as panel_router
 from update1_2 import register_commands
 # ================= CONFIG =================
