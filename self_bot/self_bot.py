@@ -1489,38 +1489,53 @@ import json
 
 app = Flask(__name__)
 
+
+
+# ================= HEALTH CHECK =================
 @app.route("/")
 def home():
     return "🤖 Bot is alive ✅"
 
 
+# ================= WEBHOOK HANDLER =================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
+
         data = request.get_data().decode("utf-8")
-        
         update = Update.model_validate(json.loads(data))
 
-        asyncio.run(dp.feed_update(bot, update))
+        loop = asyncio.get_event_loop()
+        loop.create_task(dp.feed_update(bot, update))
 
         return "OK", 200
 
     return "bad request", 403
 
 
-# ================= WEBHOOK SETUP =================
+# ================= SET WEBHOOK =================
 async def setup_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(webhook_url)
 
-    loop.run_until_complete(bot.delete_webhook())
-    loop.run_until_complete(bot.set_webhook(webhook_url))
+
+# ================= STARTUP =================
+async def on_startup():
+    await setup_webhook()
 
 
 # ================= RUN =================
 if __name__ == "__main__":
-    asyncio.run(setup_webhook())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(on_startup())
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000))
+    )
