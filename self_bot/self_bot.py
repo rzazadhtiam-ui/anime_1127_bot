@@ -1441,6 +1441,7 @@ app = Flask(__name__)
 def home():
     return "🤖 Bot is alive ✅"
 
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
@@ -1461,25 +1462,27 @@ def hourly_loop():
             print("Hourly deduct error:", e)
         time.sleep(3600)
 
+
 threading.Thread(target=hourly_loop, daemon=True).start()
 
 
 # ================= WEBHOOK SETUP =================
-def set_webhook():
-    bot.remove_webhook()
+async def set_webhook():
+    await bot.delete_webhook()
     time.sleep(1)
 
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
-
     webhook_url = f"{base_url}/{TOKEN}"
 
-    bot.set_webhook(url=webhook_url)
+    await bot.set_webhook(url=webhook_url)
 
     print("Webhook set:", webhook_url)
 
 
 # ================= RUN SERVER =================
 if __name__ == "__main__":
-    set_webhook()
+    import asyncio
+
+    asyncio.run(set_webhook())
     print("Self Bot is running...")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
