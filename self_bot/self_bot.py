@@ -1532,6 +1532,37 @@ def webhook():
 
 
 # ================= SET WEBHOOK =================
+app = Flask(__name__)
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+
+@app.route("/")
+def home():
+    return "Bot is alive"
+
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    if request.headers.get("content-type") != "application/json":
+        return "bad request", 403
+
+    try:
+        update = Update.model_validate(request.get_json())
+
+        asyncio.run_coroutine_threadsafe(
+            dp.feed_update(bot, update),
+            loop
+        )
+
+        return "OK", 200
+
+    except Exception as e:
+        print("Webhook error:", e)
+        return "error", 500
+
+
 async def setup_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
@@ -1540,22 +1571,15 @@ async def setup_webhook():
     await bot.set_webhook(webhook_url)
 
 
-# ================= STARTUP =================
-async def on_startup():
+async def main():
     await setup_webhook()
+    print("Bot started (webhook mode)")
 
 
-# ================= RUN =================
 if __name__ == "__main__":
-    # start asyncio setup in same loop
-    try:
-        asyncio.run(main())
-        loop.run_until_complete(on_startup())
+    loop.create_task(main())
 
-    # Flask runs separately (thread-safe now)
-        app.run(
+    app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000))
-    )
-    except KeyboardInterrupt:
-        print("⛔ ربات متوقف شد")
+        )
