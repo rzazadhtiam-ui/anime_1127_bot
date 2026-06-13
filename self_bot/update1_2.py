@@ -256,15 +256,12 @@ async def my_coins(bot, message):
 
     # پنل گرافیکی موجودی با دکمه‌های رنگی
     text = (
-        text = (
     f"💎 <b>پنل کیف پول کاربر {first_name}</b> 💎\n"
     "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
 
     "💰 موجودی شما:\n"
 
-    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
-)
-        
+    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"      
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
