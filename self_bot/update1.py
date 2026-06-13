@@ -288,7 +288,25 @@ def register_panel(router: Router, bot: Bot):
         ])
 
         text_to_show = btn.get("text") or get_panel_text(name)
-        await call.message.edit_text(text_to_show, reply_markup=markup, parse_mode="HTML")
+        inline_id = getattr(call, "inline_message_id", None)
+
+        if call.message:
+            await call.message.edit_text(
+                text_to_show,
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+
+        elif inline_id:
+            await bot.edit_message_text(
+                text=text_to_show,
+                inline_message_id=inline_id,
+                reply_markup=markup,
+                parse_mode="HTML"
+    )
+
+        else:
+            await call.answer("❌ پیام قابل ویرایش نیست", show_alert=True)
 
 
     @router.callback_query(F.data.startswith("back_"))
