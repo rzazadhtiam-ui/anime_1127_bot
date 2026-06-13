@@ -120,7 +120,7 @@ def build_panel_markup(user_id: int, parent: str, show_back: bool = False) -> In
         c = int(btn.get("col", 0))
         grid.setdefault(r, {})[c] = InlineKeyboardButton(
             text=btn["name"],
-            callback_data=f"open_{user_id}_{btn['_id']}"
+            callback_data=f"open|{user_id}|{btn['_id']}"
         )
 
     for r in sorted(grid.keys()):
@@ -257,7 +257,12 @@ def register_panel(router: Router, bot: Bot):
 # ==================== Callback Handlers ====================
     @router.callback_query(F.data.startswith("open_"))
     async def open_panel(call: CallbackQuery):
-        parts = call.data.split("_", 2)
+        parts = call.data.split("|")
+
+        if len(parts) != 3:
+            await call.answer("callback خراب است", show_alert=True)
+            return
+
         _, owner_id, btn_id = parts
 
         owner_id = int(owner_id)
