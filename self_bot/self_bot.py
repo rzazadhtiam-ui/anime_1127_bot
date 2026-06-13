@@ -69,8 +69,8 @@ dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
 
 # اگر setup_panel async هست:
-# await setup_panel(bot)
-setup_panel(bot)   # یا اگر داخل async
+#  setup_panel(bot)
+await setup_panel(bot)   # یا اگر داخل async
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -1454,9 +1454,7 @@ def webhook():
         data = request.get_data().decode("utf-8")
         update = json.loads(data)
 
-        # ❌ asyncio.run نکن
-        # ✅ از event loop فعلی استفاده کن
-        asyncio.create_task(dp.feed_update(bot, update))
+        asyncio.run(dp.feed_update(bot, update))
 
         return "OK", 200
 
@@ -1464,14 +1462,15 @@ def webhook():
 
 
 # ================= WEBHOOK SETUP =================
-async def setup_webhook():
+def set_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
-    await bot.delete_webhook(drop_pending_updates=True)
-    await bot.set_webhook(url=webhook_url)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    print("Webhook set:", webhook_url)
+    loop.run_until_complete(bot.delete_webhook())
+    loop.run_until_complete(bot.set_webhook(webhook_url))
 
 
 # ================= RUN =================
