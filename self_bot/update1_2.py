@@ -266,7 +266,7 @@ async def my_coins(bot, message):
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"💰 موجودی شما: {coins} سکه", callback_data="show_coins_count", style="primary")],
-        [InlineKeyboardButton(text="💵 ارزش تقریبی: {data['value']:,} تومان", callback_data="show_coin_price",style="success")]
+        [InlineKeyboardButton(text=f"💵 ارزش تقریبی: {data['value']:,} تومان", callback_data="show_coin_price",style="success")]
     ])
 
     await message.reply(text, reply_markup=markup, parse_mode="HTML")
