@@ -226,8 +226,8 @@ async def my_coins(bot, message):
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=" تعداد سکه‌های من", callback_data="show_coins_count", style="primary")],
-        [InlineKeyboardButton(text=" ارزش سکه (قیمت)", callback_data="show_coin_price",style="success")]
+        [InlineKeyboardButton(text=f" سکه: {coins}", callback_data="show_coins_count", style="primary")],
+        [InlineKeyboardButton(text=" معادله: ", callback_data="show_coin_price",style="success")]
     ])
 
     await message.reply(text, reply_markup=markup, parse_mode="HTML")
@@ -263,7 +263,7 @@ async def my_id(bot, message):
     full_name = f"{first_name} {last_name}".strip()
 
     caption = (
-        "👤 <b>پنل کاربری گرافیکی</b> 👤\n"
+        "👤 <b>پروفایل کاربر</b> 👤\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f" نام: <b>{full_name}</b>\n"
         f"🔹 یوزرنیم: @{username}\n"
@@ -275,7 +275,7 @@ async def my_id(bot, message):
         f"💎 سکه‌های شما: <b>{coins}</b> (رتبه #{coins_rank})\n"
         f"🏆 بردهای شما: <b>{wins}</b> (رتبه #{wins_rank})\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✨ اطلاعات از تلگرام + ربات"
+        
     )
 
     # ارسال عکس پروفایل + کپشن اگر عکس وجود داشته باشد
@@ -424,7 +424,7 @@ def register_commands(router: Router, bot: Bot):
             if data["count"] >= SPAM_LIMIT:
                 data["ban_until"] = now + TEMP_BAN_SECONDS
                 await message.reply("🚫 به دلیل اسپم، 1 دقیقه محدود شدید.")
-                spam_tracker[uid] = data
+                spam_tracker[uid]= data
                 return
 
             spam_tracker[uid] = data
