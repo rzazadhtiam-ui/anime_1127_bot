@@ -298,7 +298,7 @@ async def my_id(bot, message):
     full_name = f"{first_name} {last_name}".strip()
 
     caption = (
-        "👤 <b>پنل کاربری گرافیکی</b> 👤\n"
+        "👤 <b>حساب کاربری</b> 👤\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f" نام: <b>{full_name}</b>\n"
         f"🔹 یوزرنیم: @{username}\n"
@@ -310,7 +310,6 @@ async def my_id(bot, message):
         f"💎 سکه‌های شما: <b>{coins}</b> (رتبه #{coins_rank})\n"
         f"🏆 بردهای شما: <b>{wins}</b> (رتبه #{wins_rank})\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✨ اطلاعات از تلگرام + ربات"
     )
 
     # ارسال عکس پروفایل + کپشن اگر عکس وجود داشته باشد
