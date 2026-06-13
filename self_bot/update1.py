@@ -80,21 +80,33 @@ def _cancel_timer(uid: int):
             pass
 
 
-def _close_panel(uid: int, *, inline_id: Optional[str] = None,
-                 chat_id: Optional[int] = None, msg_id: Optional[int] = None,
-                 reason: str = "manual"):
+async def _close_panel(uid: int, *, inline_id=None, chat_id=None, msg_id=None, reason="manual"):
     _cancel_timer(uid)
     history.pop(uid, None)
 
     text = "⏱ <b>پنل به دلیل عدم فعالیت بسته شد</b>" if reason == "timeout" else "✅ <b>پنل با موفقیت بسته شد</b>"
 
+    if not bot:
+        return
+
     try:
-        if inline_id and bot:
-            asyncio.create_task(bot.edit_message_text(text, inline_message_id=inline_id, parse_mode="HTML"))
-        elif chat_id and msg_id and bot:
-            asyncio.create_task(bot.edit_message_text(text, chat_id=chat_id, message_id=msg_id, parse_mode="HTML"))
+        if inline_id:
+            await bot.edit_message_text(
+                text,
+                inline_message_id=inline_id,
+                parse_mode="HTML"
+            )
+
+        elif chat_id and msg_id:
+            await bot.edit_message_text(
+                text,
+                chat_id=chat_id,
+                message_id=msg_id,
+                parse_mode="HTML"
+            )
+
     except Exception as e:
-        print(f"[close_panel error] {e}")
+        print("close error:", e)
 
 
 def _reset_timer(uid: int, call: CallbackQuery):
@@ -259,7 +271,9 @@ def register_panel(router: Router, bot: Bot):
 # ==================== Callback Handlers ====================
     @router.callback_query(F.data.startswith("open_"))
     async def open_panel(call: CallbackQuery):
-        _, owner_id, btn_id = call.data.split("_", 2)
+        parts = call.data.split("_")
+        owner_id = parts[1]
+        btn_id = "_".join(parts[2:])
 
         uid = call.from_user.id
         if int(owner_id) != uid:
