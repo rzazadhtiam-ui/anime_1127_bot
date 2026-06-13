@@ -1489,6 +1489,9 @@ import json
 
 app = Flask(__name__)
 
+# ================= GLOBAL LOOP =================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 
 # ================= HEALTH CHECK =================
@@ -1500,17 +1503,24 @@ def home():
 # ================= WEBHOOK HANDLER =================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    if request.headers.get("content-type") == "application/json":
+    if request.headers.get("content-type") != "application/json":
+        return "bad request", 403
 
-        data = request.get_data().decode("utf-8")
+    try:
+        data = request.get_data(as_text=True)
         update = Update.model_validate(json.loads(data))
 
-        loop = asyncio.get_event_loop()
-        loop.create_task(dp.feed_update(bot, update))
+        # مهم: امن‌ترین روش برای Flask + asyncio
+        asyncio.run_coroutine_threadsafe(
+            dp.feed_update(bot, update),
+            loop
+        )
 
         return "OK", 200
 
-    return "bad request", 403
+    except Exception as e:
+        print("Webhook error:", e)
+        return "error", 500
 
 
 # ================= SET WEBHOOK =================
@@ -1529,12 +1539,10 @@ async def on_startup():
 
 # ================= RUN =================
 if __name__ == "__main__":
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+    # start asyncio setup in same loop
     loop.run_until_complete(on_startup())
 
+    # Flask runs separately (thread-safe now)
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000))
