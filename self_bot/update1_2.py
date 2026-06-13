@@ -208,30 +208,71 @@ def check_winner(board, symbol):
     return False
 
 # ==========/my_coins == موجودی =========
+def get_coin_rate(coins: int) -> int:
+    if coins <= 50:
+        return 100
+    elif coins <= 100:
+        return 90
+    elif coins <= 250:
+        return 88
+    elif coins <= 500:
+        return 84
+    elif coins <= 1000:
+        return 85
+    else:
+        return 80
+
+
+def get_user_wallet_info(users_col, uid, message):
+    user = users_col.find_one({"user_id": uid}) or {}
+
+    first_name = (
+        user.get("first_name")
+        or message.from_user.first_name
+        or "کاربر"
+    )
+
+    coins = int(user.get("coins") or 0)
+
+    rate = get_coin_rate(coins)
+    value = coins * rate
+
+    return {
+        "first_name": first_name,
+        "coins": coins,
+        "rate": rate,
+        "value": value
+    }
+# ==========/my_coins == موجودی =========
 async def my_coins(bot, message):
     uid = message.from_user.id
     ensure_user(message.from_user)
     if is_banned(uid):
         return
     user = users_col.find_one({"user_id": uid}) or {}
+    first_name = user.get("first_name", "") or message.from_user.first_name or "کاربر"
     coins = user.get("coins", 0)
+    data = get_user_wallet_info(users_col, uid, message)
 
     # پنل گرافیکی موجودی با دکمه‌های رنگی
     text = (
-        "💎 <b>پنل موجودی سکه</b> 💎\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 تعداد سکه‌های شما: <b>{coins}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        text = (
+    f"💎 <b>پنل کیف پول کاربر {first_name}</b> 💎\n"
+    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
+
+    "💰 موجودی شما:\n"
+
+    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
+)
         
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=" تعداد سکه‌های من", callback_data="show_coins_count", style="primary")],
-        [InlineKeyboardButton(text=" ارزش سکه (قیمت)", callback_data="show_coin_price",style="success")]
+        [InlineKeyboardButton(text=f"💰 موجودی شما: {coins} سکه", callback_data="show_coins_count", style="primary")],
+        [InlineKeyboardButton(text="💵 ارزش تقریبی: {data['value']:,} تومان", callback_data="show_coin_price",style="success")]
     ])
 
     await message.reply(text, reply_markup=markup, parse_mode="HTML")
-
 # =============/id == ایدی ==============
 async def my_id(bot, message):
     uid = message.from_user.id
@@ -960,7 +1001,10 @@ def register_commands(router: Router, bot: Bot):
             "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
         
-        photo = FSInputFile("self_game.jpg")
+        BASE_DIR = os.path.dirname(__file__)
+        photo_path = os.path.join(BASE_DIR, "self_game.jpg")
+
+        photo = FSInputFile(photo_path)
 
 
         # ارسال پیام و ذخیره خروجی
