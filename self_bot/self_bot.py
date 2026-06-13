@@ -194,21 +194,29 @@ def make_join_link(link):
 
     return f"https://t.me/{link}"
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 def get_membership_panel(missing_chats):
-    markup = types.InlineKeyboardMarkup()
+    buttons = []
 
     for chat in missing_chats:
-        markup.add(types.InlineKeyboardButton(
-            chat["button_name"],
-            url=chat["link"]
-        ))
+        buttons.append([
+            InlineKeyboardButton(
+                text=chat["button_name"],
+                url=chat["link"]
+            )
+        ])
 
-    markup.add(types.InlineKeyboardButton(
-        "✅ تایید عضویت",
-        callback_data="check_membership"
-    ))
+    # دکمه تایید عضویت
+    buttons.append([
+        InlineKeyboardButton(
+            text="✅ تایید عضویت",
+            callback_data="check_membership",
+            style="success"
+        )
+    ])
 
-    return markup
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 
