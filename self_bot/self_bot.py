@@ -179,7 +179,7 @@ def get_main_panel():
             InlineKeyboardButton(text="🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
         ],
         [InlineKeyboardButton(text="🛍 خرید سکه 💰", callback_data="selfbot_buy_coins")],
-        [InlineKeyboardButton(text="🛠️ ارتباط با ما💬", callback_data="open_support_menu"), style="primary"]
+        [InlineKeyboardButton(text="🛠️ ارتباط با ما💬", callback_data="open_support_menu", style="primary")]
     ])
     
     return markup
