@@ -1175,10 +1175,10 @@ def register_commands(router: Router, bot: Bot):
             final_text = (
                 "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈\n"
                 "𝐕𝐈𝐏 | بازی مساوی شد!\n"
-                f"💙 <b>مبلغ شرط:</b> {room['total_bet']} سکه (برگشت داده شد)\n\n"
-                f"سازنده: {creator_mention}\n"
-                f"شرکت‌کننده: {player2_mention}\n\n"
-                "🤝 بازی مساوی — سکه‌ها برگشت داده شد\n"
+                f"𝐕𝐈𝐏 |<b>مبلغ شرط:</b> {room['total_bet']} سکه برگشت داده شد\n\n"
+                f"𝐕𝐈𝐏 |سازنده: {creator_mention}\n"
+                f"𝐕𝐈𝐏 |شرکت‌کننده: {player2_mention}\n\n"
+                "𝐕𝐈𝐏 |🤝 بازی مساوی — سکه‌ها برگشت داده شد\n"
                 "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
             )
 
