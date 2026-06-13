@@ -381,8 +381,8 @@ def get_user_sessions_panel(uid):
         status_text = "🟢 ON" if power == "on" else "🔴 OFF"
 
         keyboard.append([
-            InlineKeyboardButton(text=f"📱 {name}", callback_data=f"session_info_{s['_id']}", style="success"),
-            InlineKeyboardButton(text=status_text, callback_data=f"toggle_session_{s['_id']}",style="danger")
+            InlineKeyboardButton(text=f"📱 {name}", callback_data=f"session_info_{s['_id']}", style="primary"),
+            InlineKeyboardButton(text=status_text, callback_data=f"toggle_session_{s['_id']}",style="success")
         ])
 
     keyboard.append([
