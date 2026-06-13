@@ -185,9 +185,9 @@ def get_main_panel():
     return markup
 
 def get_back_panel():
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="selfbot_main_panel", style="danger"))
-    return markup
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="selfbot_main_panel", style="danger")]
+    ])
 
 def make_join_link(link):
     link = link.strip()
