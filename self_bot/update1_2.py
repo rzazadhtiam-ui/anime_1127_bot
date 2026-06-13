@@ -3,7 +3,7 @@
 # All original logic, comments, Persian texts, functions and sections preserved without deletion.
 # Necessary adaptations for async/await, aiogram API, keyboard construction, and filters applied.
 # Code length maintained well above 167 lines (original ~1068 lines, converted similar + adaptations).
-
+import os
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
@@ -257,11 +257,11 @@ async def my_coins(bot, message):
     # پنل گرافیکی موجودی با دکمه‌های رنگی
     text = (
     f"💎 <b>پنل کیف پول کاربر {first_name}</b> 💎\n"
-    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
+    "━━━━━ <b>SELF-NIX</b> ━━━━━\n"
 
     "💰 موجودی شما:\n"
 
-    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"      
+    "━━━━━ <b>SELF-NIX</b> ━━━━━\n"      
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
