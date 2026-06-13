@@ -3,7 +3,7 @@
 Self Nix Panel - نسخه ماژولار (فقط با ایمپورت در هسته ربات کار می‌کند)
 - تمام دکمه‌های بازگشت = سبز (success)
 - دکمه بستن پنل = قرمز (danger)
-- بدون کال کردن setup_panel(bot) هیچ فعالیتی ندارد
+- فیکس کامل ناوبری، بستن پنل، تایمر و پاسخ دکمه‌ها
 """
 
 import asyncio
@@ -80,20 +80,41 @@ def _cancel_timer(uid: int):
             pass
 
 
-async def _close_panel(uid, *, call=None, reason="manual"):
+async def _close_panel(uid: int, *, call: Optional[CallbackQuery] = None, 
+                       inline_id: Optional[str] = None, 
+                       chat_id: Optional[int] = None, 
+                       msg_id: Optional[int] = None, 
+                       reason: str = "manual"):
     _cancel_timer(uid)
     history.pop(uid, None)
 
     text = "⏱ <b>پنل به دلیل عدم فعالیت بسته شد</b>" if reason == "timeout" else "✅ <b>پنل با موفقیت بسته شد</b>"
 
-    if call and call.message:
-        await call.message.edit_text(text)
+    try:
+        if call and call.message:
+            await call.message.edit_text(text, parse_mode="HTML")
+        elif call and getattr(call, "inline_message_id", None):
+            await bot.edit_message_text(
+                text=text,
+                inline_message_id=call.inline_message_id,
+                parse_mode="HTML"
+            )
+        elif inline_id:
+            await bot.edit_message_text(
+                text=text,
+                inline_message_id=inline_id,
+                parse_mode="HTML"
+            )
+        elif chat_id and msg_id:
+            await bot.edit_message_text(
+                text=text,
+                chat_id=chat_id,
+                message_id=msg_id,
+                parse_mode="HTML"
+            )
+    except Exception as e:
+        print(f"[PANEL CLOSE ERROR] {e}")
 
-    elif call and getattr(call, "inline_message_id", None):
-        await bot.edit_message_text(
-            text,
-            inline_message_id=call.inline_message_id
-        )
 
 def _reset_timer(uid: int, call: CallbackQuery):
     _cancel_timer(uid)
@@ -102,7 +123,7 @@ def _reset_timer(uid: int, call: CallbackQuery):
     msg_id = call.message.message_id if call.message else None
 
     def _expire():
-        _close_panel(uid, inline_id=inline_id, chat_id=chat_id, msg_id=msg_id, reason="timeout")
+        asyncio.create_task(_close_panel(uid, inline_id=inline_id, chat_id=chat_id, msg_id=msg_id, reason="timeout"))
 
     t = threading.Timer(PANEL_TIMEOUT, _expire)
     t.daemon = True
@@ -127,23 +148,19 @@ def build_panel_markup(user_id: int, parent: str, show_back: bool = False) -> In
         row = [grid[r][c] for c in sorted(grid[r].keys())]
         markup.inline_keyboard.append(row)
 
-    # ==================== تمام دکمه‌های بازگشت = سبز ====================
     if show_back and parent != "root":
         markup.inline_keyboard.append([
             InlineKeyboardButton(
                 text="🔙 بازگشت",
-                callback_data=f"back_{user_id}_{parent}",
-                style="success"
+                callback_data=f"back_{user_id}_{parent}"
             )
         ])
 
-    # ==================== دکمه بستن پنل = قرمز ====================
     if parent == "root":
         markup.inline_keyboard.append([
             InlineKeyboardButton(
                 text="❌ بستن پنل",
-                callback_data=f"close_{user_id}",
-                style="danger"
+                callback_data=f"close_{user_id}"
             )
         ])
 
@@ -161,15 +178,18 @@ def admin_panel_markup() -> InlineKeyboardMarkup:
         ])
     return markup
 
-def register_panel(router: Router, bot: Bot):
-# ==================== هندلرها ====================
+
+def register_panel(router: Router, the_bot: Bot):
+    global bot
+    bot = the_bot
+
+    # ==================== هندلرها ====================
     @router.message(F.text == "/add")
     async def add_button_start(message: Message, state: FSMContext):
         if message.from_user.id != OWNER_ID:
             return
         await message.answer("اسم دکمه جدید را بفرست:")
         await state.set_state(AddButtonStates.waiting_name)
-
 
     @router.message(AddButtonStates.waiting_name)
     async def add_button_name(message: Message, state: FSMContext):
@@ -180,13 +200,12 @@ def register_panel(router: Router, bot: Bot):
 
         new_id = str(uuid.uuid4())
         buttons_col.insert_one({
-        "_id": new_id, "name": name, "type": "pending",
-        "parent": "pending", "text": "", "row": 0, "col": 0
-    })
+            "_id": new_id, "name": name, "type": "pending",
+            "parent": "pending", "text": "", "row": 0, "col": 0
+        })
         await state.update_data(name=name)
         await message.answer("نوع دکمه:\n1 = panel\n2 = text_panel")
         await state.set_state(AddButtonStates.waiting_type)
-
 
     @router.message(AddButtonStates.waiting_type)
     async def add_button_type(message: Message, state: FSMContext):
@@ -201,23 +220,22 @@ def register_panel(router: Router, bot: Bot):
                 await state.clear()
                 return
             kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"📁 {p['name']}", callback_data=f"set_textparent||{name}||{p['name']}")]
-            for p in panels
-        ])
+                [InlineKeyboardButton(text=f"📁 {p['name']}", callback_data=f"set_textparent||{name}||{p['name']}")]
+                for p in panels
+            ])
             await message.answer(f"دکمه «{name}» زیر کدام پنل؟", reply_markup=kb)
             await state.clear()
             return
 
         panels = list(buttons_col.find({"type": "panel"}))
         kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📁 root", callback_data=f"set_parent||{name}||root")]
-    ] + [
-        [InlineKeyboardButton(text=p["name"], callback_data=f"set_parent||{name}||{p['name']}")]
-        for p in panels
-    ])
+            [InlineKeyboardButton(text="📁 root", callback_data=f"set_parent||{name}||root")]
+        ] + [
+            [InlineKeyboardButton(text=p["name"], callback_data=f"set_parent||{name}||{p['name']}")]
+            for p in panels
+        ])
         await message.answer("این پنل زیر کدام پنل ساخته شود؟", reply_markup=kb)
         await state.clear()
-
 
     @router.message(F.text == "/panel_admin")
     async def admin_cmd(message: Message):
@@ -228,17 +246,15 @@ def register_panel(router: Router, bot: Bot):
             return
         await message.answer("⚙️ دکمه مورد نظر را انتخاب کنید:", reply_markup=admin_panel_markup())
 
-
     @router.message(F.text == "/remove")
     async def remove_cmd(message: Message):
         if message.from_user.id != OWNER_ID:
             return
         markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🗑 {btn['name']}", callback_data=f"delete||{btn['_id']}")]
-        for btn in buttons_col.find()
-    ])
+            [InlineKeyboardButton(text=f"🗑 {btn['name']}", callback_data=f"delete||{btn['_id']}")]
+            for btn in buttons_col.find()
+        ])
         await message.answer("🗑 کدام دکمه حذف شود؟", reply_markup=markup)
-
 
     @router.inline_query(F.query == "self-nix-panel-tjm")
     async def inline_panel(query: InlineQuery):
@@ -248,13 +264,12 @@ def register_panel(router: Router, bot: Bot):
         result = InlineQueryResultArticle(
             id=f"panel_{uid}",
             title="📋 پنل Self Nix",
-        input_message_content=InputTextMessageContent(message_text=MAIN_TEXT, parse_mode="HTML"),
-        reply_markup=markup
-    )
+            input_message_content=InputTextMessageContent(message_text=MAIN_TEXT, parse_mode="HTML"),
+            reply_markup=markup
+        )
         await query.answer([result], cache_time=5)
 
-
-# ==================== Callback Handlers ====================
+    # ==================== Callback Handlers ====================
     @router.callback_query(F.data.startswith("open_"))
     async def open_panel(call: CallbackQuery):
         parts = call.data.split("|")
@@ -264,11 +279,10 @@ def register_panel(router: Router, bot: Bot):
             return
 
         _, owner_id, btn_id = parts
-
         owner_id = int(owner_id)
 
         uid = call.from_user.id
-        if int(owner_id) != call.from_user.id:
+        if owner_id != uid:
             await call.answer("دسترسی ندارید.", show_alert=True)
             return
 
@@ -276,6 +290,8 @@ def register_panel(router: Router, bot: Bot):
         if not btn:
             await call.answer("پیدا نشد.", show_alert=True)
             return
+
+        await call.answer()  # حذف لودینگ
 
         name = btn["name"]
         parent = btn["parent"]
@@ -285,48 +301,40 @@ def register_panel(router: Router, bot: Bot):
 
         if btn.get("type") != "panel":
             markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_{uid}_{parent}", style="success")]
-        ])
+                [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_{uid}_{parent}")]
+            ])
             await call.message.edit_text(btn.get("text", ""), reply_markup=markup, parse_mode="HTML")
             return
 
-        markup = build_panel_markup(uid, parent=parent, show_back=True)
+        # FIX: استفاده از name به جای parent
+        markup = build_panel_markup(uid, parent=name, show_back=True)
         if not list(buttons_col.find({"parent": name})):
             markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📭 خالی", callback_data="noop")],
-            [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_{uid}_{name}", style="success")]
-        ])
+                [InlineKeyboardButton(text="📭 خالی", callback_data="noop")],
+                [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_{uid}_{name}")]
+            ])
 
         text_to_show = btn.get("text") or get_panel_text(name)
         inline_id = getattr(call, "inline_message_id", None)
 
         if call.message:
-            await call.message.edit_text(
-                text_to_show,
-                reply_markup=markup,
-                parse_mode="HTML"
-            )
-
+            await call.message.edit_text(text_to_show, reply_markup=markup, parse_mode="HTML")
         elif inline_id:
-            await bot.edit_message_text(
-                text=text_to_show,
-                inline_message_id=inline_id,
-                reply_markup=markup,
-                parse_mode="HTML"
-    )
-
+            await bot.edit_message_text(text=text_to_show, inline_message_id=inline_id, reply_markup=markup, parse_mode="HTML")
         else:
             await call.answer("❌ پیام قابل ویرایش نیست", show_alert=True)
-
 
     @router.callback_query(F.data.startswith("back_"))
     async def back_handler(call: CallbackQuery):
         _, uid_str, parent = call.data.split("_", 2)
         uid = int(uid_str)
         if uid != call.from_user.id:
+            await call.answer("دسترسی ندارید.", show_alert=True)
             return
-    
+
+        await call.answer()
         _reset_timer(uid, call)
+
         hist = history.get(uid, ["root"])
         if len(hist) > 1:
             hist.pop()
@@ -338,20 +346,9 @@ def register_panel(router: Router, bot: Bot):
         inline_id = getattr(call, "inline_message_id", None)
 
         if call.message:
-            await call.message.edit_text(
-                text,
-                reply_markup=markup,
-                parse_mode="HTML"
-            )
-
+            await call.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
         elif inline_id:
-            await bot.edit_message_text(
-                text=text,
-                inline_message_id=inline_id,
-                reply_markup=markup,
-                parse_mode="HTML"
-            )
-
+            await bot.edit_message_text(text=text, inline_message_id=inline_id, reply_markup=markup, parse_mode="HTML")
         else:
             await call.answer("❌ پیام قابل ویرایش نیست", show_alert=True)
 
@@ -359,13 +356,11 @@ def register_panel(router: Router, bot: Bot):
     async def close_handler(call: CallbackQuery):
         uid = int(call.data.split("_")[1])
         if uid != call.from_user.id:
+            await call.answer("دسترسی ندارید.", show_alert=True)
             return
-        inline_id = getattr(call, "inline_message_id", None)
-        chat_id = call.message.chat.id if call.message else None
-        msg_id = call.message.message_id if call.message else None
-        
-        await call.answer("بسته شد.")
 
+        await call.answer("بسته شد ✅")
+        await _close_panel(uid, call=call, reason="manual")
 
     @router.callback_query(F.data.startswith("delete||"))
     async def delete_button(call: CallbackQuery):
@@ -375,7 +370,6 @@ def register_panel(router: Router, bot: Bot):
         buttons_col.delete_one({"_id": btn_id})
         await call.answer("حذف شد ✅")
         await call.message.edit_text("دکمه حذف شد.", reply_markup=admin_panel_markup())
-
 
     @router.callback_query(F.data.startswith("edit_menu||"))
     async def edit_menu(call: CallbackQuery):
@@ -388,14 +382,13 @@ def register_panel(router: Router, bot: Bot):
             return
 
         markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ تغییر نام", callback_data=f"rename||{btn_id}")],
-        [InlineKeyboardButton(text="📝 تغییر متن", callback_data=f"edit_text||{btn_id}")],
-        [InlineKeyboardButton(text="📍 تغییر مختصات", callback_data=f"move_pos||{btn_id}")],
-        [InlineKeyboardButton(text="🗑 حذف", callback_data=f"delete||{btn_id}")],
-        [InlineKeyboardButton(text="❌ انصراف", callback_data="cancel")]
-    ])
+            [InlineKeyboardButton(text="✏️ تغییر نام", callback_data=f"rename||{btn_id}")],
+            [InlineKeyboardButton(text="📝 تغییر متن", callback_data=f"edit_text||{btn_id}")],
+            [InlineKeyboardButton(text="📍 تغییر مختصات", callback_data=f"move_pos||{btn_id}")],
+            [InlineKeyboardButton(text="🗑 حذف", callback_data=f"delete||{btn_id}")],
+            [InlineKeyboardButton(text="❌ انصراف", callback_data="cancel")]
+        ])
         await call.message.edit_text(f"ویرایش: {btn['name']}", reply_markup=markup)
-
 
     @router.callback_query(F.data.startswith("rename||"))
     async def rename_start(call: CallbackQuery, state: FSMContext):
@@ -404,7 +397,6 @@ def register_panel(router: Router, bot: Bot):
         await state.update_data(btn_id=call.data.split("||")[1])
         await call.message.answer("نام جدید را بفرست:")
         await state.set_state(EditStates.waiting_rename)
-
 
     @router.message(EditStates.waiting_rename)
     async def rename_save(message: Message, state: FSMContext):
@@ -415,7 +407,6 @@ def register_panel(router: Router, bot: Bot):
         await message.answer("✅ نام تغییر کرد.")
         await state.clear()
 
-
     @router.callback_query(F.data.startswith("edit_text||"))
     async def edit_text_start(call: CallbackQuery, state: FSMContext):
         if call.from_user.id != OWNER_ID:
@@ -423,7 +414,6 @@ def register_panel(router: Router, bot: Bot):
         await state.update_data(btn_id=call.data.split("||")[1])
         await call.message.answer("متن جدید را بفرست:")
         await state.set_state(EditStates.waiting_edit_text)
-
 
     @router.message(EditStates.waiting_edit_text)
     async def edit_text_save(message: Message, state: FSMContext):
@@ -434,7 +424,6 @@ def register_panel(router: Router, bot: Bot):
         await message.answer("✅ متن آپدیت شد.")
         await state.clear()
 
-
     @router.callback_query(F.data.startswith("move_pos||"))
     async def move_pos_start(call: CallbackQuery, state: FSMContext):
         if call.from_user.id != OWNER_ID:
@@ -442,7 +431,6 @@ def register_panel(router: Router, bot: Bot):
         await state.update_data(btn_id=call.data.split("||")[1])
         await call.message.answer("مختصات جدید (row col) مثلاً: 2 3")
         await state.set_state(EditStates.waiting_position)
-
 
     @router.message(EditStates.waiting_position)
     async def move_pos_save(message: Message, state: FSMContext):
@@ -457,24 +445,17 @@ def register_panel(router: Router, bot: Bot):
             await message.answer("فرمت اشتباه است.")
         await state.clear()
 
-
     @router.callback_query(F.data.startswith("set_parent||"))
     async def set_parent_handler(call: CallbackQuery):
         if call.from_user.id != OWNER_ID:
             return
-
         _, name, parent = call.data.split("||")
-
         btn = buttons_col.find_one({"name": name})
         if not btn:
             await call.answer("پیدا نشد")
             return
-
-        buttons_col.update_one(
-        {"_id": btn["_id"]},
-        {"$set": {"parent": parent, "type": "panel"}}
-    )
-
+        buttons_col.update_one({"_id": btn["_id"]}, {"$set": {"parent": parent, "type": "panel"}})
+        await call.answer("✅ پنل ساخته شد")
 
     @router.callback_query(F.data.startswith("set_textparent||"))
     async def set_textparent(call: CallbackQuery, state: FSMContext):
@@ -485,41 +466,20 @@ def register_panel(router: Router, bot: Bot):
         await call.message.answer("متن دکمه را بفرست:")
         await state.set_state(AddButtonStates.waiting_text)
 
-
     @router.message(AddButtonStates.waiting_text)
-    async def save_text_panel(message: Message, state: FSMContext):
+    async def add_button_text(message: Message, state: FSMContext):
+        if message.from_user.id != OWNER_ID:
+            return
         data = await state.get_data()
-        buttons_col.insert_one({
-        "_id": str(uuid.uuid4()),
-        "name": data["name"],
-        "parent": data["parent"],
-        "type": "text_panel",
-        "text": message.text.strip(),
-        "row": 0, "col": 0
-    })
-        await message.answer(f"✅ دکمه «{data['name']}» ساخته شد.")
+        name = data.get("name")
+        parent = data.get("parent")
+        text = message.text.strip()
+
+        btn = buttons_col.find_one({"name": name, "type": "pending"})
+        if btn:
+            buttons_col.update_one(
+                {"_id": btn["_id"]},
+                {"$set": {"parent": parent, "type": "text_panel", "text": text}}
+            )
+        await message.answer(f"✅ دکمه متنی «{name}» ساخته شد زیر «{parent}»")
         await state.clear()
-
-
-    @router.callback_query(F.data == "cancel")
-    async def cancel_handler(call: CallbackQuery):
-        await call.message.edit_text("عملیات لغو شد.")
-        await call.answer()
-
-
-    @router.callback_query(F.data == "noop")
-    async def noop(call: CallbackQuery):
-        await call.answer()
-
-
-# ==================== تابع راه‌اندازی (هسته ربات) ====================
-    async def setup_panel(bot_instance: Bot):
-
-        global bot
-        bot = bot_instance
-        print("✅ ماژول Self Nix Panel راه‌اندازی شد (وابسته به هسته ربات)")
-
-
-# ==================== اجرای مستقیم غیرفعال ====================
-    print("ℹ️ این ماژول فقط از طریق ایمپورت در هسته ربات فعال می‌شود.")
-    print("   حتماً از تابع setup_panel(bot) در ربات اصلی استفاده کنید.")
