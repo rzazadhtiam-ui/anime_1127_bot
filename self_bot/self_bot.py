@@ -16,7 +16,7 @@ from flask import request
 import threading
 import requests
 from pymongo import MongoClient
-from update1 import setup_panel
+from update1 import router as panel_router
 from update1_2 import register_commands
 # ================= CONFIG =================
 
@@ -63,7 +63,7 @@ dp = Dispatcher()
 router = Router()
 
 dp.include_router(router)
-
+dp.include_router(panel_router)
 
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
@@ -74,7 +74,6 @@ async def main():
 
     await bot.delete_webhook(drop_pending_updates=True)
 
-    await setup_panel(bot)
     register_commands(router, bot)
 
     await dp.start_polling(bot)
