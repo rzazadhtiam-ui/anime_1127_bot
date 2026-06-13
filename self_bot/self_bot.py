@@ -1489,7 +1489,6 @@ import json
 
 app = Flask(__name__)
 
-
 @app.route("/")
 def home():
     return "🤖 Bot is alive ✅"
@@ -1510,7 +1509,7 @@ def webhook():
 
 
 # ================= WEBHOOK SETUP =================
-def setup_webhook():
+async def setup_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
