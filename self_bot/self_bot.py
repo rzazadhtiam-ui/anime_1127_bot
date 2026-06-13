@@ -90,7 +90,7 @@ BOT_DISABLED = False
 
 def send_coin_log(text, parse_mode=None):
     try:
-        bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}", parse_mode=parse_mode)
+        await bot.send_message(SUPER_ADMIN, f"📊 گزارش سکه:\n\n{text}", parse_mode=parse_mode)
     except Exception as e:
         print("Log Error:", e)
 
@@ -116,15 +116,15 @@ def command_allowed(message):
 
 def safe_edit(call, text, markup=None):
     try:
-        bot.edit_message_text(text, call.from_user.id, call.message.message_id, reply_markup=markup)
+        await bot.edit_message_text(text, call.from_user.id, call.message.message_id, reply_markup=markup)
     except:
-        bot.send_message(call.from_user.id, text, reply_markup=markup)
+        await bot.send_message(call.from_user.id, text, reply_markup=markup)
 
 def start_trial_expiration(uid):
     def remove_trial():
         users_col.update_one({"user_id": uid}, {"$set": {"trial_active": False}})
         try:
-            bot.send_message(uid, "⚡ سلف تست یک روزه شما منقضی شد!")
+            await bot.send_message(uid, "⚡ سلف تست یک روزه شما منقضی شد!")
         except:
             pass
     threading.Timer(TRIAL_DURATION * 86400, remove_trial).start()
@@ -233,7 +233,7 @@ def calculate_price(amount):
         return int(amount * 80)
 
 
-def is_user_joined(user_id):
+async def is_user_joined(user_id):
     chats = list(required_chats_col.find({}))
 
     missing = []
@@ -241,7 +241,11 @@ def is_user_joined(user_id):
     for chat in chats:
         try:
             chat_id = resolve_chat(chat["link"])
-            member = bot.get_chat_member(chat_id, user_id)
+
+            member = await bot.get_chat_member(
+                chat_id=chat_id,
+                user_id=user_id
+            )
 
             if member.status not in ["member", "administrator", "creator"]:
                 missing.append(chat)
@@ -305,7 +309,7 @@ def manage_user_coins(uid):
                         {"$set": {"low_coin_warned": True}}
                     )
                     try:
-                        bot.send_message(
+                        await bot.send_message(
                             uid,
                             "⚠️ سکه‌های شما برای ادامه فعالیت سلف کافی نیست.\nتمام سشن‌ها خاموش شدند."
                         )
@@ -336,7 +340,7 @@ def manage_user_coins(uid):
                         {"$set": {"power": "on"}, "$unset": {"disabled_reason": 1, "disabled_at": 1}}
                     )
                 try:
-                    bot.send_message(
+                    await bot.send_message(
                         uid,
                         "✅ سکه‌های شما شارژ شد!\اکانت هایی که به دلیل کمبود سکه خاموش شده بودند دوباره فعال شدند."
                     )
@@ -462,9 +466,9 @@ def block_if_banned(user_id, call=None, message=None):
         try:
             if call:
                 bot.answer_callback_query(call.id, "⛔ شما بن هستید")
-                bot.send_message(user_id, "⛔ دسترسی شما محدود شده است")
+                await bot.send_message(user_id, "⛔ دسترسی شما محدود شده است")
             if message:
-                bot.send_message(user_id, "⛔ شما بن هستید")
+                await bot.send_message(user_id, "⛔ شما بن هستید")
         except:
             pass
         return True
@@ -486,7 +490,7 @@ async def start_panel(message: Message):
 
     register_user(message.from_user)
 
-    missing = is_user_joined(uid)
+    missing = await is_user_joined(uid)
 
     if missing:
         await message.answer(
@@ -820,7 +824,7 @@ async def check_membership_callback(call):
     if is_banned(uid) or is_bot_off(uid):
         return
 
-    missing = is_user_joined(uid)
+    missing = await is_user_joined(uid)
 
     await call.answer()
 
@@ -921,14 +925,14 @@ async def handle_messages(message):
             return
 
         try:
-            bot.delete_message(uid, message.message_id)
+            await bot.delete_message(uid, message.message_id)
         except:
             pass
 
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
             try:
-                bot.delete_message(uid, prev_msg_id)
+                await bot.delete_message(uid, prev_msg_id)
             except:
                 pass
 
@@ -944,12 +948,12 @@ async def handle_messages(message):
             timeout=15
         ).json()
         except Exception as e:
-            msg = bot.send_message(uid, f"❌ خطا در ارسال شماره: {e}")
+            msg = await bot.send_message(uid, f"❌ خطا در ارسال شماره: {e}")
             temp_data[uid]["last_msg_id"] = msg.message_id
             return
 
         if res.get("status") == "ok":
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             "✅ شماره تایید شد. کد OTP را ارسال کنید\nمثال: 1.2.3.4.5"
         )
@@ -959,7 +963,7 @@ async def handle_messages(message):
             else "await_otp_trial"
         )
         else:
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             f"❌ خطا: {res.get('message', 'نامعلوم')}"
         )
@@ -974,14 +978,14 @@ async def handle_messages(message):
             return
 
         try:
-            bot.delete_message(uid, message.message_id)
+            await bot.delete_message(uid, message.message_id)
         except:
             pass
 
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
             try:
-                bot.delete_message(uid, prev_msg_id)
+                await bot.delete_message(uid, prev_msg_id)
             except:
                 pass
 
@@ -1003,7 +1007,7 @@ async def handle_messages(message):
             timeout=15
         ).json()
         except Exception as e:
-            msg = bot.send_message(uid, f"❌ خطا در ارسال کد OTP: {e}")
+            msg = await bot.send_message(uid, f"❌ خطا در ارسال کد OTP: {e}")
             temp_data[uid]["last_msg_id"] = msg.message_id
             return
 
@@ -1024,7 +1028,7 @@ async def handle_messages(message):
             if trial:
                 start_trial_expiration(uid)
 
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             f"✅ {'سلف تست' if trial else 'سلف اصلی'} با موفقیت فعال شد"
         )
@@ -1033,7 +1037,7 @@ async def handle_messages(message):
             user_state.pop(uid, None)
 
         elif res.get("status") == "2fa":
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             "🔐 ورود دو مرحله‌ای فعال است. رمز 2FA را ارسال کنید:"
         )
@@ -1043,7 +1047,7 @@ async def handle_messages(message):
             temp_data[uid]["last_msg_id"] = msg.message_id
 
         else:
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             f"❌ خطا: {res.get('message', 'نامعلوم')}"
         )
@@ -1058,14 +1062,14 @@ async def handle_messages(message):
             return
 
         try:
-            bot.delete_message(uid, message.message_id)
+            await bot.delete_message(uid, message.message_id)
         except:
             pass
 
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
             try:
-                bot.delete_message(uid, prev_msg_id)
+                await bot.delete_message(uid, prev_msg_id)
             except:
                 pass
 
@@ -1088,7 +1092,7 @@ async def handle_messages(message):
         ).json()
         
         except Exception as e:
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             f"❌ خطا در ارسال 2FA: {e}"
         )
@@ -1112,7 +1116,7 @@ async def handle_messages(message):
             if trial:
                 start_trial_expiration(uid)
 
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             f"✅ {'سلف تست' if trial else 'سلف اصلی'} با موفقیت فعال شد"
         )
@@ -1122,7 +1126,7 @@ async def handle_messages(message):
 
         elif res.get("status") == "2fa":
 
-            msg = bot.send_message(
+            msg = await bot.send_message(
             uid,
             "🔐 رمز دو مرحله‌ای اشتباه است، دوباره وارد کنید:"
         )
@@ -1453,7 +1457,8 @@ def home():
 def webhook():
     if request.headers.get("content-type") == "application/json":
         data = request.get_data().decode("utf-8")
-        update = json.loads(data)
+        
+        update = Update.model_validate(json.loads(data))
 
         asyncio.run(dp.feed_update(bot, update))
 
@@ -1463,7 +1468,7 @@ def webhook():
 
 
 # ================= WEBHOOK SETUP =================
-def set_webhook():
+def setup_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
