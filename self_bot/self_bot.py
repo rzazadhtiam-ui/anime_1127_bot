@@ -1435,6 +1435,11 @@ async def open_support_menu(call: CallbackQuery):
 
 
   #===========================  
+from flask import Flask, request
+import os
+import asyncio
+import json
+
 app = Flask(__name__)
 
 
@@ -1442,29 +1447,34 @@ app = Flask(__name__)
 def home():
     return "🤖 Bot is alive ✅"
 
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get("content-type") == "application/json":
         data = request.get_data().decode("utf-8")
         update = json.loads(data)
 
-        asyncio.run(dp.feed_update(bot, update))
+        # ❌ asyncio.run نکن
+        # ✅ از event loop فعلی استفاده کن
+        asyncio.create_task(dp.feed_update(bot, update))
 
         return "OK", 200
 
     return "bad request", 403
 
 
-def set_webhook():
+# ================= WEBHOOK SETUP =================
+async def setup_webhook():
     base_url = os.environ.get("RENDER_EXTERNAL_URL")
     webhook_url = f"{base_url}/{TOKEN}"
 
-    asyncio.run(bot.delete_webhook())
-    asyncio.run(bot.set_webhook(webhook_url))
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(url=webhook_url)
 
     print("Webhook set:", webhook_url)
 
 
+# ================= RUN =================
 if __name__ == "__main__":
-    set_webhook()
+    asyncio.run(setup_webhook())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
