@@ -114,7 +114,7 @@ def command_allowed(message):
 
     return True
 
-def safe_edit(call, text, markup=None):
+async def safe_edit(call, text, markup=None):
     try:
         await bot.edit_message_text(text, call.from_user.id, call.message.message_id, reply_markup=markup)
     except:
@@ -462,7 +462,7 @@ def is_bot_off(uid):
     return False
 
 # ================= Flask =================
-def block_if_banned(user_id, call=None, message=None):
+async def block_if_banned(user_id, call=None, message=None):
     if is_banned(user_id):
         try:
             if call:
