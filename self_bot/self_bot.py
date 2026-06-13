@@ -171,22 +171,16 @@ def register_user(user, referrer=None):
     )
 
 def get_main_panel():
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("💎 فعال سازی سلف ✨️", callback_data="selfbot_start_self"))
-    markup.add(types.InlineKeyboardButton("⚡️ سلف تست(یک روزه)⚡️", callback_data="selfbot_start_trial"))
-    markup.row(
-        types.InlineKeyboardButton("💼 حساب کاربری👤", callback_data="selfbot_account_info"),
-        types.InlineKeyboardButton("🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
-    )
-    markup.add(types.InlineKeyboardButton("🛍 خرید سکه 💰", callback_data="selfbot_buy_coins"))
-
-    markup.add(
-    types.InlineKeyboardButton(
-        "🛠️ ارتباط با ما💬",
-        callback_data="open_support_menu",
-        style="primary"
-    )
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💎 فعال سازی سلف ✨️", callback_data="selfbot_start_self")],
+        [InlineKeyboardButton(text="⚡️ سلف تست(یک روزه)⚡️", callback_data="selfbot_start_trial")],
+        [
+            InlineKeyboardButton(text="💼 حساب کاربری👤", callback_data="selfbot_account_info"),
+            InlineKeyboardButton(text="🌟 زیر مجموعه گیری 🔗", callback_data="selfbot_referral")
+        ],
+        [InlineKeyboardButton(text="🛍 خرید سکه 💰", callback_data="selfbot_buy_coins")],
+        [InlineKeyboardButton(text="🛠️ ارتباط با ما💬", callback_data="open_support_menu"), style="primary"]
+    ])
     
     return markup
 
