@@ -222,13 +222,12 @@ async def my_coins(bot, message):
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"💰 تعداد سکه‌های شما: <b>{coins}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔵 دکمه آبی: نمایش تعداد سکه\n"
-        "🟢 دکمه سبز: ارزش/قیمت سکه در ربات"
+        
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔵 تعداد سکه‌های من", callback_data="show_coins_count")],
-        [InlineKeyboardButton(text="🟢 ارزش سکه (قیمت)", callback_data="show_coin_price")]
+        [InlineKeyboardButton(text=" تعداد سکه‌های من", callback_data="show_coins_count", style="primary")],
+        [InlineKeyboardButton(text=" ارزش سکه (قیمت)", callback_data="show_coin_price",style="success")]
     ])
 
     await message.reply(text, reply_markup=markup, parse_mode="HTML")
@@ -266,7 +265,7 @@ async def my_id(bot, message):
     caption = (
         "👤 <b>پنل کاربری گرافیکی</b> 👤\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📛 نام: <b>{full_name}</b>\n"
+        f" نام: <b>{full_name}</b>\n"
         f"🔹 یوزرنیم: @{username}\n"
         f"🆔 آیدی عددی: <code>{uid}</code>\n"
         f"📸 تعداد عکس پروفایل: {photo_count}\n"
@@ -465,13 +464,13 @@ def register_commands(router: Router, bot: Bot):
         final_text = (
             "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈\n"
             "𝐕𝐈𝐏 | گیم تمام شد!\n"
-            f"💙 <b>مبلغ شرط:</b> {total} سکه\n\n"
+            f" <b>مبلغ شرط:</b> {total} سکه\n\n"
             f"سازنده: {creator_mention}\n"
             f"شرکت‌کننده: {player2_mention}\n\n"
             f"🏆 برنده: {winner_mention} 🎉\n"
-            f"🟢 موجودی جدید برنده: <b>{winner_coins}</b> سکه\n\n"
+            f" موجودی جدید برنده: <b>{winner_coins}</b> سکه\n\n"
             f"😔 بازنده: {loser_mention}\n"
-            f"🔴 موجودی جدید بازنده: <b>{loser_coins}</b> سکه\n\n"
+            f" موجودی جدید بازنده: <b>{loser_coins}</b> سکه\n\n"
             f"💎 جایزه برنده: {total} سکه (کل شرط)\n"
             "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
@@ -949,8 +948,8 @@ def register_commands(router: Router, bot: Bot):
 
         # ساخت دکمه‌ها (رنگی: آبی برای پیوستن، قرمز برای لغو)
         markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔵 پیوستن به بازی (آبی)", callback_data=f"join_xo_{room_id}")],
-            [InlineKeyboardButton(text="🔴 لغو بازی (قرمز)", callback_data=f"cancel_xo_{room_id}")]
+            [InlineKeyboardButton(text=" پیوستن به بازی", callback_data=f"join_xo_{room_id}", style="success")],
+            [InlineKeyboardButton(text=" لغو  بازی", callback_data=f"cancel_xo_{room_id}", style="danger")]
         ])
 
         caption = (
