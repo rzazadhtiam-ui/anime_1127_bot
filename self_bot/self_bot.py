@@ -68,7 +68,7 @@ dp.include_router(panel_router)
 
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
-
+register_panel(router, bot)
 # ==================== START BOT ====================
 async def main():
     print("🚀 Bot starting...")
