@@ -207,6 +207,42 @@ def check_winner(board, symbol):
             return True
     return False
 
+
+def get_coin_rate(coins: int) -> int:
+    if coins <= 50:
+        return 100
+    elif coins <= 100:
+        return 90
+    elif coins <= 250:
+        return 88
+    elif coins <= 500:
+        return 84
+    elif coins <= 1000:
+        return 85
+    else:
+        return 80
+
+
+def get_user_wallet_info(users_col, uid, message):
+    user = users_col.find_one({"user_id": uid}) or {}
+
+    first_name = (
+        user.get("first_name")
+        or message.from_user.first_name
+        or "کاربر"
+    )
+
+    coins = int(user.get("coins") or 0)
+
+    rate = get_coin_rate(coins)
+    value = coins * rate
+
+    return {
+        "first_name": first_name,
+        "coins": coins,
+        "rate": rate,
+        "value": value
+    }
 # ==========/my_coins == موجودی =========
 async def my_coins(bot, message):
     uid = message.from_user.id
@@ -214,20 +250,26 @@ async def my_coins(bot, message):
     if is_banned(uid):
         return
     user = users_col.find_one({"user_id": uid}) or {}
+    first_name = user.get("first_name", "") or message.from_user.first_name or "کاربر"
     coins = user.get("coins", 0)
+    data = get_user_wallet_info(users_col, uid, message)
 
     # پنل گرافیکی موجودی با دکمه‌های رنگی
     text = (
-        "💎 <b>پنل موجودی سکه</b> 💎\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 تعداد سکه‌های شما: <b>{coins}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        text = (
+    f"💎 <b>پنل کیف پول کاربر {first_name}</b> 💎\n"
+    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
+
+    "💰 موجودی شما:\n"
+
+    "━━━━━━━━━ <b>SELF-NIX</b> ━━━━━━━━━\n"
+)
         
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=" تعداد سکه‌های من", callback_data="show_coins_count", style="primary")],
-        [InlineKeyboardButton(text=" ارزش سکه (قیمت)", callback_data="show_coin_price",style="success")]
+        [InlineKeyboardButton(text=f"💰 موجودی شما: {coins} سکه", callback_data="show_coins_count", style="primary")],
+        [InlineKeyboardButton(text="💵 ارزش تقریبی: {data['value']:,} تومان", callback_data="show_coin_price",style="success")]
     ])
 
     await message.reply(text, reply_markup=markup, parse_mode="HTML")
@@ -263,9 +305,9 @@ async def my_id(bot, message):
     full_name = f"{first_name} {last_name}".strip()
 
     caption = (
-        "👤 <b>پنل کاربری گرافیکی</b> 👤\n"
+        "👤 <b>پروفایل کاربر</b> 👤\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f" نام: <b>{full_name}</b>\n"
+        f" نام کاربز: <b>{full_name}</b>\n"
         f"🔹 یوزرنیم: @{username}\n"
         f"🆔 آیدی عددی: <code>{uid}</code>\n"
         f"📸 تعداد عکس پروفایل: {photo_count}\n"
@@ -275,7 +317,7 @@ async def my_id(bot, message):
         f"💎 سکه‌های شما: <b>{coins}</b> (رتبه #{coins_rank})\n"
         f"🏆 بردهای شما: <b>{wins}</b> (رتبه #{wins_rank})\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✨ اطلاعات از تلگرام + ربات"
+        
     )
 
     # ارسال عکس پروفایل + کپشن اگر عکس وجود داشته باشد
@@ -424,7 +466,7 @@ def register_commands(router: Router, bot: Bot):
             if data["count"] >= SPAM_LIMIT:
                 data["ban_until"] = now + TEMP_BAN_SECONDS
                 await message.reply("🚫 به دلیل اسپم، 1 دقیقه محدود شدید.")
-                spam_tracker[uid] = data
+                spam_tracker[uid]= data
                 return
 
             spam_tracker[uid] = data
@@ -959,14 +1001,11 @@ def register_commands(router: Router, bot: Bot):
             "🏆 برنده کل مبلغ را می‌برد\n"
             "◈ ━━━✦ 𝑿𝑶 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
-        
-        photo = FSInputFile("self_game.jpg")
-
 
         # ارسال پیام و ذخیره خروجی
         msg = await bot.send_photo(
             message.chat.id,
-            photo=photo,
+            photo="AgACAgEAAxkBAAICsWobYfUR7HLQlNTiTEZgajXcWSU2AAInDGsb6w_hRDTL1z2cCp5MAQADAgADeQADOwQ",
             caption=caption,
             reply_markup=markup
         )
