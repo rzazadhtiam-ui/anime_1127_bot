@@ -975,7 +975,7 @@ async def handle_messages(message):
         try:
             bot.delete_message(uid, message.message_id)
         except:
-        pass
+            pass
 
         prev_msg_id = temp_data.get(uid, {}).get("last_msg_id")
         if prev_msg_id:
