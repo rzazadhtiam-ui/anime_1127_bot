@@ -1447,7 +1447,7 @@ def webhook():
     if request.headers.get("content-type") == "application/json":
         json_string = request.get_data().decode("utf-8")
         update = Update.model_validate_json(json_string)
-        bot.process_new_updates([update])
+        await dp.feed_update(bot, update)
         return "OK", 200
     return "bad request", 403
 
