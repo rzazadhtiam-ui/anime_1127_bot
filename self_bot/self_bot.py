@@ -5,6 +5,9 @@ from aiogram.filters import Command
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram import types
 from aiogram.types import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+# بقیه importها...
 
 
 from bson import ObjectId
@@ -13,9 +16,8 @@ from flask import request
 import threading
 import requests
 from pymongo import MongoClient
-from update1 import PanelManager
+from update1 import setup_panel
 from update1_2 import register_commands
-
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
@@ -63,8 +65,12 @@ router = Router()
 dp.include_router(router)
 
 
-panel_manager = PanelManager(bot)
-register_commands(bot)
+# بعد از dp.include_router(router)
+register_commands(router, bot)   # ← درست این شکلیه
+
+# اگر setup_panel async هست:
+# await setup_panel(bot)
+setup_panel(bot)   # یا اگر داخل async
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -201,6 +207,16 @@ def get_membership_panel(missing_chats):
 def resolve_chat(chat_link):
     try:
         chat_link = chat_link.strip()
+        if "t.me/" in chat_link:
+            username = chat_link.split("t.me/")[1].split("?")[0]
+            return "@" + username
+        if chat_link.startswith("@"):
+            return chat_link
+        return "@" + chat_link
+    except:
+        return None
+
+
 def calculate_price(amount):
     if amount <= 50:
         return 5000
@@ -214,18 +230,6 @@ def calculate_price(amount):
         return int(amount * 85)
     else:
         return int(amount * 80)
-        if "t.me/" in chat_link:
-            username = chat_link.split("t.me/")[1]
-            username = username.split("?")[0]
-            return "@" + username
-
-        if chat_link.startswith("@"):
-            return chat_link
-
-        return "@" + chat_link
-
-    except:
-        return None
 
 
 def is_user_joined(user_id):
