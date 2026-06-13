@@ -73,11 +73,7 @@ register_panel(router, bot)
 async def main():
     print("🚀 Bot starting...")
 
-    await bot.delete_webhook(drop_pending_updates=True)
-
-    register_commands(router, bot)
-
-    await dp.start_polling(bot)
+    
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -1532,8 +1528,9 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
     # setup های خودت
-    await setup_panel(bot)
-    register_commands(router, bot)
+    register_commands(router, bot) 
+    register_panel(router, bot) 
+    
 
     # شروع polling
     await dp.start_polling(bot, skip_updates=True)
