@@ -80,34 +80,20 @@ def _cancel_timer(uid: int):
             pass
 
 
-async def _close_panel(uid: int, *, inline_id=None, chat_id=None, msg_id=None, reason="manual"):
+async def _close_panel(uid, *, call=None, reason="manual"):
     _cancel_timer(uid)
     history.pop(uid, None)
 
     text = "⏱ <b>پنل به دلیل عدم فعالیت بسته شد</b>" if reason == "timeout" else "✅ <b>پنل با موفقیت بسته شد</b>"
 
-    if not bot:
-        return
+    if call and call.message:
+        await call.message.edit_text(text)
 
-    try:
-        if inline_id:
-            await bot.edit_message_text(
-                text,
-                inline_message_id=inline_id,
-                parse_mode="HTML"
-            )
-
-        elif chat_id and msg_id:
-            await bot.edit_message_text(
-                text,
-                chat_id=chat_id,
-                message_id=msg_id,
-                parse_mode="HTML"
-            )
-
-    except Exception as e:
-        print("close error:", e)
-
+    elif call and getattr(call, "inline_message_id", None):
+        await bot.edit_message_text(
+            text,
+            inline_message_id=call.inline_message_id
+        )
 
 def _reset_timer(uid: int, call: CallbackQuery):
     _cancel_timer(uid)
@@ -134,7 +120,7 @@ def build_panel_markup(user_id: int, parent: str, show_back: bool = False) -> In
         c = int(btn.get("col", 0))
         grid.setdefault(r, {})[c] = InlineKeyboardButton(
             text=btn["name"],
-            callback_data=f"open_{user_id}_{btn['_id']}"
+            callback_data=f"open_{user_id}:{btn['_id']}"
         )
 
     for r in sorted(grid.keys()):
@@ -280,10 +266,7 @@ def register_panel(router: Router, bot: Bot):
             await call.answer("دسترسی ندارید.", show_alert=True)
             return
 
-        btn = buttons_col.find_one({
-    "_id": btn_id,
-    "parent": {"$ne": "pending"}
-})
+        btn = buttons_col.find_one({"_id": btn_id})
         if not btn:
             await call.answer("پیدا نشد.", show_alert=True)
             return
@@ -374,13 +357,7 @@ def register_panel(router: Router, bot: Bot):
         inline_id = getattr(call, "inline_message_id", None)
         chat_id = call.message.chat.id if call.message else None
         msg_id = call.message.message_id if call.message else None
-        await _close_panel(
-    uid,
-    inline_id=inline_id,
-    chat_id=chat_id,
-    msg_id=msg_id,
-    reason="manual"
-)
+        
         await call.answer("بسته شد.")
 
 
@@ -479,14 +456,18 @@ def register_panel(router: Router, bot: Bot):
     async def set_parent_handler(call: CallbackQuery):
         if call.from_user.id != OWNER_ID:
             return
-        parts = call.data.split("||")
-        name, parent = parts[1], parts[2]
-        if parent == name:
-            parent = "root"
-        buttons_col.update_one({"name": name}, {"$set": {"parent": parent, "type": "panel"}})
-        await call.answer("✅ ساخته شد")
-        if bot:
-            await call.message.edit_text(MAIN_TEXT, reply_markup=build_panel_markup(call.from_user.id, "root"))
+
+        _, name, parent = call.data.split("||")
+
+        btn = buttons_col.find_one({"name": name})
+        if not btn:
+            await call.answer("پیدا نشد")
+            return
+
+        buttons_col.update_one(
+        {"_id": btn["_id"]},
+        {"$set": {"parent": parent, "type": "panel"}}
+    )
 
 
     @router.callback_query(F.data.startswith("set_textparent||"))
