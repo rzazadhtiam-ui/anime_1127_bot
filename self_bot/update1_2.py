@@ -35,7 +35,7 @@ db1 = mongo.self_panel_db
 required_chats_col = db1.required_chats
 #============گیم==============
 xo_rooms = {}
-
+SUPER_ADMIN = 8471402457
 #============سکه==============
 TRANSFER_FEE_PERCENT = 10
 BOT_ACCOUNT_ID = 6433381392  
