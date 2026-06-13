@@ -20,7 +20,7 @@ from update1 import setup_panel
 from update1_2 import register_commands
 # ================= CONFIG =================
 
-TOKEN = "8550709057:AAFzGO1-sCzxIHqJ0raZkB1yg9AqeO1PrJU"
+TOKEN = "8550709057:AAEOPl9Z1IoHio-cZ2royEjHpbbtbzJXxNQ"
 SITE_URL = 'https://anime-1127-bot-x0nn.onrender.com'
 #BOT_URL = "https://self-bot-ssvq.onrender.com"
 MIN_COIN = 2
