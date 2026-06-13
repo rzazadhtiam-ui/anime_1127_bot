@@ -3,7 +3,7 @@
 # All original logic, comments, Persian texts, functions and sections preserved without deletion.
 # Necessary adaptations for async/await, aiogram API, keyboard construction, and filters applied.
 # Code length maintained well above 167 lines (original ~1068 lines, converted similar + adaptations).
-from aiogram.types import FSInputFile
+
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
