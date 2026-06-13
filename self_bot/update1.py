@@ -276,11 +276,14 @@ def register_panel(router: Router, bot: Bot):
         btn_id = "_".join(parts[2:])
 
         uid = call.from_user.id
-        if int(owner_id) != uid:
+        if int(owner_id) != call.from_user.id:
             await call.answer("دسترسی ندارید.", show_alert=True)
             return
 
-        btn = buttons_col.find_one({"_id": btn_id})
+        btn = buttons_col.find_one({
+    "_id": btn_id,
+    "parent": {"$ne": "pending"}
+})
         if not btn:
             await call.answer("پیدا نشد.", show_alert=True)
             return
@@ -298,7 +301,7 @@ def register_panel(router: Router, bot: Bot):
             await call.message.edit_text(btn.get("text", ""), reply_markup=markup, parse_mode="HTML")
             return
 
-        markup = build_panel_markup(uid, parent=name, show_back=True)
+        markup = build_panel_markup(uid, parent=parent, show_back=True)
         if not list(buttons_col.find({"parent": name})):
             markup = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📭 خالی", callback_data="noop")],
@@ -371,7 +374,13 @@ def register_panel(router: Router, bot: Bot):
         inline_id = getattr(call, "inline_message_id", None)
         chat_id = call.message.chat.id if call.message else None
         msg_id = call.message.message_id if call.message else None
-        _close_panel(uid, inline_id=inline_id, chat_id=chat_id, msg_id=msg_id, reason="manual")
+        await _close_panel(
+    uid,
+    inline_id=inline_id,
+    chat_id=chat_id,
+    msg_id=msg_id,
+    reason="manual"
+)
         await call.answer("بسته شد.")
 
 
