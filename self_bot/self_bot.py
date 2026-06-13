@@ -121,13 +121,23 @@ async def safe_edit(call, text, markup=None):
         await bot.send_message(call.from_user.id, text, reply_markup=markup)
 
 def start_trial_expiration(uid):
-    def remove_trial():
-        users_col.update_one({"user_id": uid}, {"$set": {"trial_active": False}})
+    async def remove_trial():
+        users_col.update_one(
+            {"user_id": uid},
+            {"$set": {"trial_active": False}}
+        )
+
         try:
             await bot.send_message(uid, "⚡ سلف تست یک روزه شما منقضی شد!")
-        except:
-            pass
-    threading.Timer(TRIAL_DURATION * 86400, remove_trial).start()
+        except Exception as e:
+            print(e)
+
+    asyncio.create_task(delayed_remove())
+
+    async def delayed_remove():
+        await asyncio.sleep(TRIAL_DURATION * 86400)
+        await remove_trial()
+
 
 def register_user(user, referrer=None):
     users_col.update_one(
