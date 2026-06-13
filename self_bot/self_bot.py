@@ -68,10 +68,19 @@ dp.include_router(router)
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
 
-# اگر setup_panel async هست:
-#  setup_panel(bot)
+# ==================== START BOT ====================
 async def main():
-    await setup_panel(bot)   # یا اگر داخل async
+    print("🚀 در حال راه‌اندازی ربات...")
+    
+    # پنل Self Nix رو راه‌اندازی کن
+    await setup_panel(bot)
+    
+    # اگر register_commands نیاز به کار خاصی داره، اینجا هم می‌تونی بذاری
+    # register_commands(router, bot)  # اگر قبلاً در سطح ماژول کال کردی، دوباره لازم نیست
+    
+    # شروع polling
+    await dp.start_polling(bot, skip_updates=True)
+
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -1540,10 +1549,14 @@ async def on_startup():
 # ================= RUN =================
 if __name__ == "__main__":
     # start asyncio setup in same loop
-    loop.run_until_complete(on_startup())
+    try:
+        asyncio.run(main())
+        loop.run_until_complete(on_startup())
 
     # Flask runs separately (thread-safe now)
-    app.run(
+        app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000))
     )
+    except KeyboardInterrupt:
+        print("⛔ ربات متوقف شد")
