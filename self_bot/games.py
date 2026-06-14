@@ -4,6 +4,8 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 from pymongo import MongoClient
+from aiogram import Bot, Dispatcher, Router
+
 
 router = Router()
 stonechi_rooms = {}
@@ -269,32 +271,34 @@ async def end_game(room_id):
 
     stonechi_rooms.pop(room_id, None)
 
+
+def register_game(router: Router, bot):
 # ================= HANDLERS =================
-@router.message(F.text.startswith("سنگچی"))
-async def create_game(message: Message):
-    ensure_user(message.from_user)
+    @router.message(F.text.startswith("سنگچی"))
+    async def create_game(message: Message):
+        ensure_user(message.from_user)
+    
+        try:
+            bet = int(message.text.split()[1])
+        except:
+            await message.answer("فرمت درست: سنگچی 10000")
+            return
 
-    try:
-        bet = int(message.text.split()[1])
-    except:
-        await message.answer("فرمت درست: سنگچی 10000")
-        return
+        if bet < 2 or bet % 2 != 0:
+            await message.answer("عدد باید زوج و حداقل ۲ باشد ❌")
+            return
 
-    if bet < 2 or bet % 2 != 0:
-        await message.answer("عدد باید زوج و حداقل ۲ باشد ❌")
-        return
+        uid = message.from_user.id
+        user = get_user(uid)
 
-    uid = message.from_user.id
-    user = get_user(uid)
+        if user.get("coins", 0) < bet // 2:
+            await message.answer("سکه کافی نیست ❌")
+            return
 
-    if user.get("coins", 0) < bet // 2:
-        await message.answer("سکه کافی نیست ❌")
-        return
-
-    remove_coins(uid, bet // 2)
+        remove_coins(uid, bet // 2)
 
     # Waiting panel
-    text = (
+        text = (
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈\n"
         f"🎮 بازی: سنگچی\n"
         f"💰 شرط کل بازی: {bet} سکه\n"
@@ -305,9 +309,9 @@ async def create_game(message: Message):
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
     )
 
-    msg = await message.answer(text, reply_markup=waiting_kb(message.message_id))
+        msg = await message.answer(text, reply_markup=waiting_kb(message.message_id))
 
-    stonechi_rooms[message.message_id] = {
+        stonechi_rooms[message.message_id] = {
         "p1": uid,
         "p2": None,
         "chat_id": msg.chat.id,
@@ -320,39 +324,39 @@ async def create_game(message: Message):
         "creator": uid
     }
 
-@router.callback_query(F.data.startswith("join:"))
-async def join(call: CallbackQuery):
-    room_id = int(call.data.split(":")[1])
-    uid = call.from_user.id
+    @router.callback_query(F.data.startswith("join:"))
+    async def join(call: CallbackQuery):
+        room_id = int(call.data.split(":")[1])
+        uid = call.from_user.id
 
-    room = stonechi_rooms.get(room_id)
-    if not room:
-        await call.answer("بازی وجود ندارد")
-        return
+        room = stonechi_rooms.get(room_id)
+        if not room:
+            await call.answer("بازی وجود ندارد")
+            return
 
-    if room["p2"]:
-        await call.answer("پر شده ❌")
-        return
+        if room["p2"]:
+            await call.answer("پر شده ❌")
+            return
 
-    if uid == room["p1"]:
-        await call.answer("شما سازنده هستید ❌")
-        return
+        if uid == room["p1"]:
+            await call.answer("شما سازنده هستید ❌")
+            return
 
-    user = get_user(uid)
-    if user.get("coins", 0) < room["bet"] // 2:
-        await call.answer("سکه کافی نیست ❌")
-        return
+        user = get_user(uid)
+        if user.get("coins", 0) < room["bet"] // 2:
+            await call.answer("سکه کافی نیست ❌")
+            return
 
-    remove_coins(uid, room["bet"] // 2)
+        remove_coins(uid, room["bet"] // 2)
 
-    room["p2"] = uid
-    room["score"][uid] = 0
-    room["moves"][uid] = None
+        room["p2"] = uid
+        room["score"][uid] = 0
+        room["moves"][uid] = None
 
-    p1_name = get_user(room["p1"]).get("first_name", "Player1")
-    p2_name = call.from_user.first_name or "Player2"
+        p1_name = get_user(room["p1"]).get("first_name", "Player1")
+        p2_name = call.from_user.first_name or "Player2"
 
-    text = (
+        text = (
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈\n"
         f"👤 بازیکن اول: {p1_name}\n"
         f"👤 بازیکن دوم: {p2_name}\n\n"
@@ -360,83 +364,83 @@ async def join(call: CallbackQuery):
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
     )
 
-    await call.message.edit_text(text, reply_markup=rounds_kb(room_id))
+        await call.message.edit_text(text, reply_markup=rounds_kb(room_id))
 
-@router.callback_query(F.data.startswith("cancel:"))
-async def cancel_game(call: CallbackQuery):
-    room_id = int(call.data.split(":")[1])
-    room = stonechi_rooms.get(room_id)
+    @router.callback_query(F.data.startswith("cancel:"))
+    async def cancel_game(call: CallbackQuery):
+        room_id = int(call.data.split(":")[1])
+        room = stonechi_rooms.get(room_id)
 
-    if not room or call.from_user.id != room["p1"]:
-        await call.answer("فقط سازنده می‌تواند لغو کند ❌")
-        return
-
-    if room["p2"]:
-        await call.answer("بازی شروع شده و قابل لغو نیست ❌")
+        if not room or call.from_user.id != room["p1"]:
+            await call.answer("فقط سازنده می‌تواند لغو کند ❌")
+            return
+    
+        if room["p2"]:
+            await call.answer("بازی شروع شده و قابل لغو نیست ❌")
         return
 
     # Refund to creator
-    add_coins(room["p1"], room["bet"] // 2)
+        add_coins(room["p1"], room["bet"] // 2)
 
-    await bot().edit_message_text(
+        await bot().edit_message_text(
         "❌ بازی توسط سازنده لغو شد و سکه بازگشت داده شد.",
         room["chat_id"],
         room["msg_id"]
     )
 
-    stonechi_rooms.pop(room_id, None)
+        stonechi_rooms.pop(room_id, None)
 
-@router.callback_query(F.data.startswith("round:"))
-async def set_round(call: CallbackQuery):
-    _, room_id, r = call.data.split(":")
-    room_id = int(room_id)
-    room = stonechi_rooms.get(room_id)
+    @router.callback_query(F.data.startswith("round:"))
+    async def set_round(call: CallbackQuery):
+        _, room_id, r = call.data.split(":")
+        room_id = int(room_id)
+        room = stonechi_rooms.get(room_id)
 
-    if not room or call.from_user.id != room["p1"]:
-        await call.answer("فقط سازنده می‌تواند تعداد دور را انتخاب کند ❌")
-        return
+        if not room or call.from_user.id != room["p1"]:
+            await call.answer("فقط سازنده می‌تواند تعداد دور را انتخاب کند ❌")
+            return
 
-    room["max_round"] = int(r)
-    await start_round(room_id)
+        room["max_round"] = int(r)
+        await start_round(room_id)
 
-@router.callback_query(F.data.startswith("move:"))
-async def move(call: CallbackQuery):
-    _, room_id, player, choice = call.data.split(":")
-    room_id = int(room_id)
-    player = int(player)
+    @router.callback_query(F.data.startswith("move:"))
+    async def move(call: CallbackQuery):
+        _, room_id, player, choice = call.data.split(":")
+        room_id = int(room_id)
+        player = int(player)
 
-    room = stonechi_rooms.get(room_id)
-    if not room:
-        return
+        room = stonechi_rooms.get(room_id)
+        if not room:
+            return
 
-    if call.from_user.id != player:
-        await call.answer("برای شما نیست ❌")
-        return
+        if call.from_user.id != player:
+            await call.answer("برای شما نیست ❌")
+            return
 
-    if room["moves"].get(player):
-        await call.answer("قبلا انتخاب کردی ❌")
-        return
+        if room["moves"].get(player):
+            await call.answer("قبلا انتخاب کردی ❌")
+            return
 
-    room["moves"][player] = choice
-    await call.answer("ثبت شد ✅")
+        room["moves"][player] = choice
+        await call.answer("ثبت شد ✅")
 
-    p1, p2 = room["p1"], room["p2"]
+        p1, p2 = room["p1"], room["p2"]
 
-    if all(room["moves"].values()):
-        await process_round(room_id)
-    else:
+        if all(room["moves"].values()):
+            await process_round(room_id)
+        else:
         # Anti-cheat: show who chose, keep only other player's buttons
-        who = "بازیکن اول" if player == p1 else "بازیکن دوم"
-        other_player = p2 if player == p1 else p1
+            who = "بازیکن اول" if player == p1 else "بازیکن دوم"
+            other_player = p2 if player == p1 else p1
 
-        text = (
+            text = (
             "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈\n"
             f"✅ {who} انتخاب خود را انجام داد\n"
             "⏳ منتظر انتخاب بازیکن دوم...\n"
             "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
 
-        await bot().edit_message_text(
+            await bot().edit_message_text(
             text,
             room["chat_id"],
             room["msg_id"],
@@ -444,6 +448,6 @@ async def move(call: CallbackQuery):
         )
 
 # ================= REGISTER =================
-def register_game(router: Router, bot):
+
     # Already registered via include_router in main
-    pass
+    
