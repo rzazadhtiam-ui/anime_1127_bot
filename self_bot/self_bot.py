@@ -71,8 +71,8 @@ dp.include_router(panel_router)
 register_commands(router, bot)   # ← درست این شکلیه
 register_panel(router, bot)
 register_game(dp, bot)
-from core import bot_instance
-bot_instance.bot = bot
+import core
+core.bot_instance = bot
 # ==================== START BOT ====================
 async def main():
     print("🚀 Bot starting...")
