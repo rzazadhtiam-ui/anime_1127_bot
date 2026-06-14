@@ -144,38 +144,40 @@ async def end_game(room_id):
 
     stonechi_rooms.pop(room_id, None)
 
+
+def register_game(router: Router, bot: Bot):
 # ================= HANDLERS =================
-@router.message(F.text.startswith("سنگچی"))
-async def create_game(message: Message):
-    ensure_user(message.from_user)
+    @router.message(F.text.startswith("سنگچی"))
+    async def create_game(message: Message):
+        ensure_user(message.from_user)
 
-    try:
-        bet = int(message.text.split()[1])
-    except:
-        await message.answer("سنگچی 500")
-        return
+        try:
+            bet = int(message.text.split()[1])
+        except:
+            await message.answer("سنگچی 500")
+            return
 
-    if bet % 2 != 0:
-        await message.answer("عدد باید زوج باشد")
-        return
+        if bet % 2 != 0:
+            await message.answer("عدد باید زوج باشد")
+            return
 
-    uid = message.from_user.id
-    user = get_user(uid)
+        uid = message.from_user.id
+        user = get_user(uid)
 
-    if user.get("coins", 0) < bet // 2:
-        await message.answer("سکه کافی نیست")
-        return
+        if user.get("coins", 0) < bet // 2:
+            await message.answer("سکه کافی نیست")
+            return
 
-    remove_coins(uid, bet // 2)
+        remove_coins(uid, bet // 2)
 
-    msg = await message.answer(
-        "🎮 StoneChi Game",
+        msg = await message.answer(
+        "🎮 RPS Game",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Join", callback_data=f"join:{message.message_id}")]
         ])
     )
 
-    stonechi_rooms[message.message_id] = {
+        stonechi_rooms[message.message_id] = {
         "p1": uid,
         "p2": None,
         "chat_id": msg.chat.id,
@@ -187,24 +189,24 @@ async def create_game(message: Message):
         "max_round": None
     }
 
-@router.callback_query(F.data.startswith("join:"))
-async def join(call: CallbackQuery):
-    room_id = int(call.data.split(":")[1])
-    uid = call.from_user.id
+    @router.callback_query(F.data.startswith("join:"))
+    async def join(call: CallbackQuery):
+        room_id = int(call.data.split(":")[1])
+        uid = call.from_user.id
 
-    room = stonechi_rooms.get(room_id)
-    if not room:
-        return
+        room = stonechi_rooms.get(room_id)
+        if not room:
+            return
 
-    if room["p2"]:
-        await call.answer("پر شده")
-        return
+        if room["p2"]:
+            await call.answer("پر شده")
+            return
 
-    room["p2"] = uid
-    room["score"][uid] = 0
-    room["moves"][uid] = None
+        room["p2"] = uid
+        room["score"][uid] = 0
+        room["moves"][uid] = None
 
-    await call.message.edit_text(
+        await call.message.edit_text(
         "انتخاب تعداد دور",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -215,32 +217,32 @@ async def join(call: CallbackQuery):
         ])
     )
 
-@router.callback_query(F.data.startswith("round:"))
-async def set_round(call: CallbackQuery):
-    _, room_id, r = call.data.split(":")
-    room_id = int(room_id)
+    @router.callback_query(F.data.startswith("round:"))
+    async def set_round(call: CallbackQuery):
+        _, room_id, r = call.data.split(":")
+        room_id = int(room_id)
 
-    room = stonechi_rooms[room_id]
-    room["max_round"] = int(r)
+        room = stonechi_rooms[room_id]
+        room["max_round"] = int(r)
 
-    await start_round(room_id)
+        await start_round(room_id)
 
-@router.callback_query(F.data.startswith("move:"))
-async def move(call: CallbackQuery):
-    _, room_id, player, choice = call.data.split(":")
-    room_id = int(room_id)
-    player = int(player)
+    @router.callback_query(F.data.startswith("move:"))
+    async def move(call: CallbackQuery):
+        _, room_id, player, choice = call.data.split(":")
+        room_id = int(room_id)
+        player = int(player)
 
-    room = stonechi_rooms.get(room_id)
-    if not room:
-        return
+        room = stonechi_rooms.get(room_id)
+        if not room:
+            return
 
-    if call.from_user.id != player:
-        await call.answer("برای شما نیست")
-        return
+        if call.from_user.id != player:
+            await call.answer("برای شما نیست")
+            return
 
-    room["moves"][player] = choice
-    await call.answer("ثبت شد")
+        room["moves"][player] = choice
+        await call.answer("ثبت شد")
 
-    if all(room["moves"].values()):
-        await process_round(room_id)
+        if all(room["moves"].values()):
+            await process_round(room_id)
