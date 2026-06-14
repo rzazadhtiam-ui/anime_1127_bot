@@ -20,6 +20,8 @@ from update1 import register_panel
 from update1 import router as panel_router
 from update1_2 import register_commands
 from games import register_game
+import core
+
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAEOPl9Z1IoHio-cZ2royEjHpbbtbzJXxNQ"
@@ -66,13 +68,12 @@ router = Router()
 
 dp.include_router(router)
 dp.include_router(panel_router)
-
+bot_instance = bot
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
 register_panel(router, bot)
 register_game(dp, bot)
-import core
-core.bot_instance = bot
+
 # ==================== START BOT ====================
 async def main():
     print("🚀 Bot starting...")
