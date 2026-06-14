@@ -19,6 +19,7 @@ from pymongo import MongoClient
 from update1 import register_panel
 from update1 import router as panel_router
 from update1_2 import register_commands
+from game import register_game
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAEOPl9Z1IoHio-cZ2royEjHpbbtbzJXxNQ"
@@ -69,6 +70,7 @@ dp.include_router(panel_router)
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
 register_panel(router, bot)
+register_game(dp, bot)
 # ==================== START BOT ====================
 async def main():
     print("🚀 Bot starting...")
