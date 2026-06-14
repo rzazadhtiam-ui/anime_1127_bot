@@ -68,30 +68,30 @@ def choice_emoji(choice):
 # ================= KEYBOARDS =================
 def waiting_kb(room_id):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("🎮 ورود به بازی", callback_data=f"join:{room_id}")],
-        [InlineKeyboardButton("❌ لغو بازی", callback_data=f"cancel:{room_id}")]
+        [InlineKeyboardButton(text="🎮 ورود به بازی", callback_data=f"join:{room_id}", style="success")],
+        [InlineKeyboardButton(text="❌ لغو بازی", callback_data=f"cancel:{room_id}", style="danger")]
     ])
 
 def rounds_kb(room_id):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton("1️⃣", callback_data=f"round:{room_id}:1"),
-            InlineKeyboardButton("3️⃣", callback_data=f"round:{room_id}:3"),
-            InlineKeyboardButton("5️⃣", callback_data=f"round:{room_id}:5"),
+            InlineKeyboardButton(text="1️⃣", callback_data=f"round:{room_id}:1"),
+            InlineKeyboardButton(text="3️⃣", callback_data=f"round:{room_id}:3"),
+            InlineKeyboardButton(text="5️⃣", callback_data=f"round:{room_id}:5"),
         ]
     ])
 
 def move_kb(room_id, p1, p2):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton("🪨", callback_data=f"move:{room_id}:{p1}:rock"),
-            InlineKeyboardButton("📄", callback_data=f"move:{room_id}:{p1}:paper"),
-            InlineKeyboardButton("✂️", callback_data=f"move:{room_id}:{p1}:scissors"),
+            InlineKeyboardButton(text="🪨", callback_data=f"move:{room_id}:{p1}:rock"),
+            InlineKeyboardButton(text="📄", callback_data=f"move:{room_id}:{p1}:paper"),
+            InlineKeyboardButton(text="✂️", callback_data=f"move:{room_id}:{p1}:scissors"),
         ],
         [
-            InlineKeyboardButton("🪨", callback_data=f"move:{room_id}:{p2}:rock"),
-            InlineKeyboardButton("📄", callback_data=f"move:{room_id}:{p2}:paper"),
-            InlineKeyboardButton("✂️", callback_data=f"move:{room_id}:{p2}:scissors"),
+            InlineKeyboardButton(text="🪨", callback_data=f"move:{room_id}:{p2}:rock"),
+            InlineKeyboardButton(text="📄", callback_data=f"move:{room_id}:{p2}:paper"),
+            InlineKeyboardButton(text="✂️", callback_data=f"move:{room_id}:{p2}:scissors"),
         ]
     ])
 
@@ -99,9 +99,9 @@ def partial_kb(room_id, player):
     """Only one player's buttons (for anti-cheat)"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton("🪨", callback_data=f"move:{room_id}:{player}:rock"),
-            InlineKeyboardButton("📄", callback_data=f"move:{room_id}:{player}:paper"),
-            InlineKeyboardButton("✂️", callback_data=f"move:{room_id}:{player}:scissors"),
+            InlineKeyboardButton(text="🪨", callback_data=f"move:{room_id}:{player}:rock"),
+            InlineKeyboardButton(text="📄", callback_data=f"move:{room_id}:{player}:paper"),
+            InlineKeyboardButton(text="✂️", callback_data=f"move:{room_id}:{player}:scissors"),
         ]
     ])
 
@@ -281,7 +281,7 @@ def register_game(router: Router, bot):
         try:
             bet = int(message.text.split()[1])
         except:
-            await message.answer("فرمت درست: سنگچی 10000")
+            await message.answer("فرمت درست: سنگچی 100")
             return
 
         if bet < 2 or bet % 2 != 0:
