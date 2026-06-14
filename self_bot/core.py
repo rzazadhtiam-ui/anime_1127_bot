@@ -1,3 +1,4 @@
 # core/bot_instance.py
 from aiogram import Bot
-bot: Bot | None = None
+
+bot_instance: Bot | None = None
