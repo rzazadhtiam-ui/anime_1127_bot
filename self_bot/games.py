@@ -24,15 +24,7 @@ db = mongo["telegram_sessions"]
 users_col = db["users"]
 
 # ================= BOT HOLDER =================
-BOT: Bot = None
 
-def register_game(dp, bot: Bot):
-    global BOT
-    BOT = bot
-    dp.include_router(router)
-
-def bot() -> Bot:
-    return BOT
 
 # ================= DB HELPERS =================
 def ensure_user(user):
@@ -129,7 +121,7 @@ async def start_round(room_id):
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
     )
 
-    await bot().edit_message_text(
+    await bot.edit_message_text(
         text,
         room["chat_id"],
         room["msg_id"],
@@ -173,7 +165,7 @@ async def process_round(room_id):
         "3️⃣"
     )
 
-    await bot().edit_message_text(
+    await bot.edit_message_text(
         reveal_text,
         room["chat_id"],
         room["msg_id"],
@@ -181,11 +173,11 @@ async def process_round(room_id):
     )
 
     await asyncio.sleep(1)
-    await bot().edit_message_text(reveal_text.replace("3️⃣", "2️⃣"), room["chat_id"], room["msg_id"])
+    await bot.edit_message_text(reveal_text.replace("3️⃣", "2️⃣"), room["chat_id"], room["msg_id"])
     await asyncio.sleep(1)
-    await bot().edit_message_text(reveal_text.replace("3️⃣", "1️⃣"), room["chat_id"], room["msg_id"])
+    await bot.edit_message_text(reveal_text.replace("3️⃣", "1️⃣"), room["chat_id"], room["msg_id"])
     await asyncio.sleep(1)
-    await bot().edit_message_text(reveal_text.replace("3️⃣", "0️⃣"), room["chat_id"], room["msg_id"])
+    await bot.edit_message_text(reveal_text.replace("3️⃣", "0️⃣"), room["chat_id"], room["msg_id"])
     await asyncio.sleep(0.5)
 
     # Result text
@@ -213,7 +205,7 @@ async def process_round(room_id):
             "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
 
-    await bot().edit_message_text(
+    await bot.edit_message_text(
         result_text,
         room["chat_id"],
         room["msg_id"],
@@ -265,7 +257,7 @@ async def end_game(room_id):
         "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
     )
 
-    await bot().edit_message_text(
+    await bot.edit_message_text(
         final_text,
         room["chat_id"],
         room["msg_id"],
@@ -284,18 +276,18 @@ def register_game(router: Router, bot):
         try:
             bet = int(message.text.split()[1])
         except:
-            await message.answer("فرمت درست: سنگچی 100")
+            await message.reply("فرمت درست: سنگچی 100")
             return
 
         if bet < 2 or bet % 2 != 0:
-            await message.answer("عدد باید زوج و حداقل ۲ باشد ❌")
+            await message.reply("عدد باید زوج و حداقل ۲ باشد ❌")
             return
 
         uid = message.from_user.id
         user = get_user(uid)
 
         if user.get("coins", 0) < bet // 2:
-            await message.answer("سکه کافی نیست ❌")
+            await message.reply("سکه کافی نیست ❌")
             return
 
         remove_coins(uid, bet // 2)
@@ -385,7 +377,7 @@ def register_game(router: Router, bot):
     # Refund to creator
         add_coins(room["p1"], room["bet"] // 2)
 
-        await bot().edit_message_text(
+        await bot.edit_message_text(
         "❌ بازی توسط سازنده لغو شد و سکه بازگشت داده شد.",
         room["chat_id"],
         room["msg_id"]
@@ -443,7 +435,7 @@ def register_game(router: Router, bot):
             "◈ ━━━✦ RPS 𝑮𝑨𝑴𝑬 ✦━━━ ◈"
         )
 
-            await bot().edit_message_text(
+            await bot.edit_message_text(
             text,
             room["chat_id"],
             room["msg_id"],
