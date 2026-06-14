@@ -31,7 +31,7 @@ def register_game(dp, bot: Bot):
     BOT = bot
     dp.include_router(router)
 
-def get_bot() -> Bot:
+def bot() -> Bot:
     return BOT
 
 # ================= DB HELPERS =================
