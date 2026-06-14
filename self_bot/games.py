@@ -24,12 +24,7 @@ db = mongo["telegram_sessions"]
 users_col = db["users"]
 
 # ================= BOT HOLDER =================
-def register_game(dp, bot):
-    router.bot = bot
-    dp.include_router(router)
 
-def bot():
-    return router.bot
 
 # ================= DB HELPERS =================
 def ensure_user(user):
