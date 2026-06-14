@@ -16,9 +16,10 @@ from flask import request
 import threading
 import requests
 from pymongo import MongoClient
-from update1 import setup_panel
+from update1 import register_panel
 from update1 import router as panel_router
 from update1_2 import register_commands
+from games import register_game
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAEOPl9Z1IoHio-cZ2royEjHpbbtbzJXxNQ"
@@ -29,7 +30,7 @@ REFERRAL_REWARD = 6
 TRIAL_DURATION = 1  # روز
 HOURLY_DEDUCT = 2  # تعداد سکه‌ای که هر ساعت کم می‌کنه
 MIN_COINS_FOR_SESSION = 2 # حداقل سکه برای ادامه سشن
-BOT_USERNAME = "self_nix_bot"
+BOT_USERNAME = "tiam"
 COIN_PRICES = {
     50: 5000,
     100: 9000,
@@ -69,11 +70,14 @@ dp.include_router(panel_router)
 # بعد از dp.include_router(router)
 register_commands(router, bot)   # ← درست این شکلیه
 register_panel(router, bot)
+register_game(dp, bot)
 from core import bot_instance
 bot_instance.bot = bot
 # ==================== START BOT ====================
 async def main():
     print("🚀 Bot starting...")
+
+    
 #==================data =================
 user_state = {}
 temp_data = {}
@@ -194,21 +198,29 @@ def make_join_link(link):
 
     return f"https://t.me/{link}"
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 def get_membership_panel(missing_chats):
-    markup = types.InlineKeyboardMarkup()
+    buttons = []
 
     for chat in missing_chats:
-        markup.add(types.InlineKeyboardButton(
-            chat["button_name"],
-            url=chat["link"]
-        ))
+        buttons.append([
+            InlineKeyboardButton(
+                text=chat["button_name"],
+                url=chat["link"]
+            )
+        ])
 
-    markup.add(types.InlineKeyboardButton(
-        "✅ تایید عضویت",
-        callback_data="check_membership"
-    ))
+    # دکمه تایید عضویت
+    buttons.append([
+        InlineKeyboardButton(
+            text="✅ تایید عضویت",
+            callback_data="check_membership",
+            style="success"
+        )
+    ])
 
-    return markup
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 
@@ -373,8 +385,8 @@ def get_user_sessions_panel(uid):
         status_text = "🟢 ON" if power == "on" else "🔴 OFF"
 
         keyboard.append([
-            InlineKeyboardButton(text=f"📱 {name}", callback_data=f"session_info_{s['_id']}", style="success"),
-            InlineKeyboardButton(text=status_text, callback_data=f"toggle_session_{s['_id']}",style="danger")
+            InlineKeyboardButton(text=f"📱 {name}", callback_data=f"session_info_{s['_id']}", style="primary"),
+            InlineKeyboardButton(text=status_text, callback_data=f"toggle_session_{s['_id']}",style="success")
         ])
 
     keyboard.append([
@@ -1527,6 +1539,9 @@ async def main():
     # مهم: حذف webhook اگر قبلاً فعال بوده
     await bot.delete_webhook(drop_pending_updates=True)
 
+    # setup های خودت
+    register_commands(router, bot) 
+    register_panel(router, bot) 
     
 
     # شروع polling
