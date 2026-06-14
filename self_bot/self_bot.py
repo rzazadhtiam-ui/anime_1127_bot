@@ -19,7 +19,7 @@ from pymongo import MongoClient
 from update1 import register_panel
 from update1 import router as panel_router
 from update1_2 import register_commands
-from game import register_game
+from games import register_game
 # ================= CONFIG =================
 
 TOKEN = "8550709057:AAEOPl9Z1IoHio-cZ2royEjHpbbtbzJXxNQ"
