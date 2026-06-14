@@ -5,7 +5,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from datetime import datetime
 from pymongo import MongoClient
 from aiogram import Bot, Dispatcher, Router
-from core import bot
+from core import bot_instance as bot
 
 router = Router()
 stonechi_rooms = {}
